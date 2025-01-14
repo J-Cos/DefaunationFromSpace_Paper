@@ -55,7 +55,7 @@ plot(cor)
 
 mk_cor<-terra::app(cor, fun_kendall)
 mk_cor<- mask(x=mk_cor, mask=mk_cor$tau==1, maskvalues=1)
-plot(mk_cor)
+plot(mk_cor$tau)
 
 # get only those pixels that always have positive or negative correlations
 # this is a very strict criteria a looser critera: pos<-(mean(cor)>0) - gives 
@@ -76,7 +76,28 @@ plot(pos_trends)
 neg_trends<-mask(x=trends, mask=neg, maskvalues=0)
 plot(neg_trends)
 
-############################################################
+plotDat<-crop(trends, terra::project(basins[2], terra::crs(trends)), mask=TRUE) %>% trim()
+ggplot() +
+    geom_spatraster(data = plotDat) +
+   # geom_spatvector(data=crop(project(PAs, crs(trends)), ext(plotDat)), fill=NA ) +
+    scale_fill_gradient2(na.value = "transparent", mid="light grey")+
+    theme_classic()
+
+subbasins_congo<-crop(vect("Data/hybas_af_lev08_v1c"), basins[1])
+subbasins_amazon<-crop(vect("Data/hybas_sa_lev08_v1c"), basins[2])
+    vals<-terra::extract( mk_cor$tau, subbasins_amazon, weights=TRUE, ID=TRUE) %>%
+        filter(!is.na(tau)) %>%
+        filter(weight>0.99) %>%
+        group_by(ID) %>%
+        summarise(mean=mean(tau), n=n())
+        #mutate(mean=case_when(mean<0~0, .default =mean))
+    values(subbasins_amazon)[ vals$ID, "mean"]<-vals$mean
+    values(subbasins_amazon)[ vals$ID, "n"]<-vals$n
+
+ggplot() +
+    geom_spatvector(data=subbasins_amazon, aes(fill=mean))+
+    scale_fill_gradient2(na.value = "light grey", mid="light grey")
+
 
 
 ######
