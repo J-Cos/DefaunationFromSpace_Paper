@@ -42,11 +42,11 @@ PAsize<-terra::rasterize(x=project(PAs_merged, crs(cor)), y=cor, field="size", f
 
 
 
-model_rast<-c(cor, basin_rast, countries_rast, PA_binary_rast$protection_binary, PA_binary_rast$IUCN_number_factor, categories, PAsize)
+model_rast<-c(cor$correlation, basin_rast, countries_rast)#, PA_binary_rast$protection_binary, PA_binary_rast$IUCN_number_factor, categories, PAsize)
 model_rast_agg <- aggregate(model_rast, fact=15, fun="modal", na.rm=TRUE)
 model_rast_agg$correlation <- aggregate(model_rast$correlation, fact=15, fun="mean", na.rm=TRUE)
 
-model_df<-as.data.frame(model_rast_agg, xy=TRUE, na.rm=TRUE) %>% as_tibble()
+model_df<-as.data.frame(model_rast, xy=TRUE, na.rm=TRUE) %>% as_tibble()
 
 #model_df<-model_df[model_df$name %in% names(which(table(model_df$name)>90)),]
 

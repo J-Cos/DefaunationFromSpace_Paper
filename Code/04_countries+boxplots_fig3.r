@@ -111,13 +111,13 @@ LABELS <- generate_label_df(TukeyHSD(m) , "basin:id")
 df<-df %>% mutate(treatment=paste0(basin, ":", id)) %>% left_join(., LABELS)
 
 myPalette = c(
-    'abc' =  "#ADB6B6FF", 
-    'ac' = "#925E9FFF", 
-    'bc' = "#00468BFF",
-    'b' = "#42B540FF", 
-    'a' = "#AD002AFF", 
-    'bd' = "#ED0000FF",
-    'd' = "#FDAF91FF")
+    'abcd' =  "#ADB6B6FF", 
+    'abc' = "#925E9FFF", 
+    'd' = "#00468BFF",
+    'bc' = "#42B540FF", 
+    'ad' = "#AD002AFF", 
+    'abd' = "#ED0000FF",
+    'c' = "#FDAF91FF")
 
 
 fig3c<-ggplot(data=df, aes(y=reorder(id, mean), x=mean, fill=Letters))+

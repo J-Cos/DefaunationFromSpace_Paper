@@ -110,13 +110,13 @@ df<-df %>% left_join(., LABELS, by=join_by(id==treatment))
 
 
 myPalette = c(
-    'a' = "#42B540FF", 
-    'abc' = "#925E9FFF", 
-    'ac' = "#00468BFF",
-    'b' = "#ADB6B6FF", 
-    'bc' = "#AD002AFF", 
-    'bd' = "#ED0000FF",
-    'd' = "#FDAF91FF")
+    'bc' = "#42B540FF", 
+    'ad' = "#925E9FFF", 
+    'bd' = "#00468BFF",
+    'a' = "#ADB6B6FF", 
+    'b' = "#AD002AFF", 
+    'abcd' = "#ED0000FF",
+    'c' = "#FDAF91FF")
 
 
 fig7c<-ggplot(data=df, aes(y=reorder(id, mean), x=mean, fill=Letters))+

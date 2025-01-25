@@ -21,7 +21,7 @@ vals<-terra::extract( cor, subbasins_congo, weights=TRUE, ID=TRUE) %>%
     filter(weight>0.99) %>%
     group_by(ID) %>%
     summarise(mean=mean(correlation), n=n()) %>%
-    filter(n>10) #%>%
+    filter(n>5) #%>%
     #mutate(mean=case_when(mean<0~0, .default =mean))
 values(subbasins_congo)[ vals$ID, "mean"]<-vals$mean
 subbasins_congo<-crop(subbasins_congo, ext(project(c, crs(subbasins_congo))))
@@ -38,7 +38,7 @@ vals<-terra::extract( cor, subbasins_amazon, weights=TRUE, ID=TRUE) %>%
     filter(weight>0.99) %>%
     group_by(ID) %>%
     summarise(mean=mean(correlation), n=n()) %>%
-    filter(n>10) #%>%
+    filter(n>5) #%>%
     #mutate(mean=case_when(mean<0~0, .default =mean))
 values(subbasins_amazon)[ vals$ID, "mean"]<-vals$mean
 subbasins_amazon<-crop(subbasins_amazon, ext(project(a, crs(subbasins_amazon))))

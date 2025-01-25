@@ -113,15 +113,16 @@ LABELS <- generate_label_df(TukeyHSD(m) , "id")
 df<-df %>% left_join(., LABELS, by=join_by(id==treatment))
 
 myPalette = c(
-    'bcd' = "#42B540FF", 
-    'abcd' = "#925E9FFF", 
-    'ae' = "#00468BFF",
-    'ab' = "#ADB6B6FF", 
+    'acd' = "#42B540FF", 
+    'b' = "#925E9FFF", 
+    'ab' = "#00468BFF",
+    'cd' = "#ADB6B6FF", 
     'd' = "#AD002AFF", 
-    'abc' = "#ED0000FF",
-    'cd' = "#FDAF91FF", 
-    'e' = "#0099B4FF",
-    'a' = "orange")
+    'ac' = "#ED0000FF"#,
+    #'cd' = "#FDAF91FF", 
+    #'e' = "#0099B4FF",
+    #'a' = "orange"
+    )
 
 fig8c<-ggplot(data=df, aes(y=reorder(id, mean), x=mean, fill=Letters))+
     geom_boxplot(outliers=FALSE, color="black")+
