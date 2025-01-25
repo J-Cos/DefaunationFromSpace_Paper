@@ -37,7 +37,7 @@ generate_label_df <- function(TUKEY, variable){
      }
  
 # 0) set parameters
-aggregationFactor<-10
+aggregationFactor<-20
 
 # 1) load data 
 FRIP<-rast("Outputs/FRIP.tif") 
@@ -75,9 +75,12 @@ df<-as.data.frame(r, cells=TRUE, na.rm=TRUE)
 
 df<-df %>%
     as_tibble %>%
-    filter (name %in% names(which(table(df$name)>50))) %>%
+    filter (name %in% names(which(table(df$name)>5))) %>%
     mutate(protected=as.factor(protected))
 
+m<-aov(correlation~PFAF_ID+name+protected, df)
+TukeyHSD(m)
+summary(lm(correlation~0+PFAF_ID+name+protected, df))
 
 # 5) modelling basins
 # n.b. this is competed seperately due to nesting of country in basin making group compariosns non-estimable if modelled together
@@ -183,11 +186,11 @@ LABELS <- generate_label_df(TukeyHSD(m, "name") , "name")
 df<-df %>% mutate(treatment=name) %>% left_join(., LABELS)
 
 myPalette = c(
-    'a' =   "#AD002AFF",
+    'abc' =   "#AD002AFF",
     'ab' = "#925E9FFF", 
-    'bd' = "#ADB6B6FF", 
+    'a' = "#ADB6B6FF", 
     'c' = "#42B540FF", 
-    'cd' = "#00468BFF")#
+    'bc' = "#00468BFF")#
     #'abd' = "#ED0000FF",
     #'c' = "#FDAF91FF")
 
@@ -197,7 +200,7 @@ fig3c<-ggplot(data=df, aes(y=reorder(name, correlation), x=correlation, fill=Let
     geom_jitter(position = position_jitterdodge(jitter.width = 0.6), alpha=1, size=0.5)+
     theme_classic()+
     #guides(color="none")+
-    scale_fill_manual(values=myPalette)+
+    #scale_fill_manual(values=myPalette)+
     xlab("Flooding role in productivity")+ylab("")
 
 countriesForPlotting<-countries

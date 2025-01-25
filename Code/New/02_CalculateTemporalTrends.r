@@ -10,9 +10,9 @@ fun_kendall <- function(x){ return(unlist(Kendall::MannKendall(x)))
 FRIPchange<-rast("Outputs/FRIPchange.tif") 
 
 mk_results<-terra::app(FRIPchange, fun_kendall)
-trends<-mask(x=mk_results$tau, mask=mk_results$sl<0.05, maskvalues=0)
+trends<-mask(x=mk_results$tau, mask=mk_results$tau!=1, maskvalues=0)
 
-writeRaster(trends, "Outputs/FRIPtrend.tif")
+writeRaster(trends, "Outputs/FRIPtrend.tif", overwrite=TRUE)
 
 
 

@@ -94,6 +94,63 @@ MuMIn::model.sel(
 summary(m2)
 TukeyHSD(m2, "NAME")
 
+
+##########################
+
+# testing against 0
+# basin + protection
+m1<-lm(tau~0+NAME, df)
+m2<-lm(tau~0+NAME+I3, df) #
+m3<-lm(tau~0+NAME+I3+I5, df)
+m4<-lm(tau~0+NAME+I3+I5+I7, df)
+m5<-lm(tau~0+NAME+I3+I5+I7+I9, df)
+m6<-lm(tau~0+NAME+I3+I7, df)
+m7<-lm(tau~0+NAME+I3+I9, df)
+m8<-lm(tau~0+NAME+I9, df) #
+m9<-lm(tau~0+NAME+I3+I11, df)
+m10<-lm(tau~0+NAME+I11, df) #
+m11<-lm(tau~0+NAME+I7, df) #
+m12<-lm(tau~0+NAME+I5, df) #
+m13<-lm(tau~0+NAME+I3+I7+I9, df)
+m14<-lm(tau~0+NAME+I5+I7, df)
+
+
+m2<-lm(correlation~I3+I7, df) #
+df$resid<-m2$resid
+ggplot(df, aes(x=I3, y=tau, color=NAME)) +
+    geom_point()+
+    moderndive::geom_parallel_slopes(method="lm", se=FALSE)
+
+ggplot(df, aes(x=I3, y=correlation, color=NAME)) +
+    geom_point()+
+    geom_smooth(method="lm", se=FALSE)
+
+ggplot(df, aes(x=NAME, y=tau, color=NAME)) +
+    geom_boxplot()
+
+# basin* protection
+
+MuMIn::model.sel(
+    m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14)
+
+
+    n <- FRIPtrendagg
+
+    ac<-autocor( n, global=TRUE, method="moran")
+
+    m <- sapply(1:99, function(i) {
+        tempRast<-n
+        tempRast[!is.na(tempRast)]<- sample(n[!is.na(n)])
+        autocor( tempRast, global=TRUE, method="moran")
+    })
+    pval <- sum(m >= ac) / 100
+
+
+m2<-lm(tau~I3+NAME, df) #
+
+
+anova(m6)
+summary(m6)
 # 7) plot model results for PAs
 m<-m2
 # country wise plot
@@ -102,15 +159,15 @@ LABELS <- generate_label_df(TukeyHSD(m, "NAME") , "NAME")
 df_wLetters<-df %>% mutate(treatment=NAME) %>% left_join(., LABELS) %>% mutate(NAME = str_replace_all(NAME, "-", ":"))
 
 myPalette =c(
-    'e' =   "#AD002AFF",
-    'abe' = "#925E9FFF", 
-    'abd' = "#ADB6B6FF", 
-    'c' = "#42B540FF", 
-    'cd' = "#00468BFF",
-    'ae' = "#ED0000FF",
-    'bd' = "#FDAF91FF",
-    'abcde' = "orange",
-    'bcd' ="cyan")
+    'd' =   "#AD002AFF",
+    'abcd' = "#925E9FFF", 
+    'bc' = "#ADB6B6FF", 
+    'abd' = "#42B540FF", 
+    'c' = "#00468BFF",
+    'abc' = "#ED0000FF",
+    'ad' = "#FDAF91FF")#,
+  #  'abcde' = "orange",
+   # 'bcd' ="cyan")
 
 fig3c<-ggplot(data=df_wLetters, aes(y=reorder(NAME, tau), x=tau, fill=Letters))+
     geom_vline(xintercept=0, linetype=2, alpha=0.5)+

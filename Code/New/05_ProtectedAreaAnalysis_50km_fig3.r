@@ -115,13 +115,13 @@ myPalette = c(
     'ac' = "orange",
     'bcd' ="cyan")
 
-fig3c<-ggplot(data=df_wLetters, aes(y=reorder(NAME, correlation), x=correlation, fill=Letters))+
+fig3c<-ggplot(data=df_wLetters, aes(y=reorder(NAME, correlation,"median"), x=correlation, fill=Letters))+
     geom_vline(xintercept=0, linetype=2, alpha=0.5)+
     geom_boxplot(outliers=FALSE, color="black")+
     geom_jitter(position = position_jitterdodge(jitter.width = 0.6), alpha=1, size=0.5)+
     theme_classic()+
     #guides(color="none")+
-    scale_fill_manual(values=myPalette)+
+    #scale_fill_manual(values=myPalette)+
     xlab("Flooding role in productivity")+ylab("")
 
 PAsForPlotting<-PAs_Focal
