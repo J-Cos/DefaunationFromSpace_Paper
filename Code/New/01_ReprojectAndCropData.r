@@ -41,16 +41,32 @@ PAs_amazon<-rawPAs%>%
     crop(FRIP_l[[2]])
 PAs<-vect(c(PAs_congo, PAs_amazon))
 
+
 # 6) Convert FRIP list into raster and crop FRIPchange
 FRIPchange <-merge(
     crop(rawFRIPchange, basins[1], mask=TRUE) %>% trim,
     crop(rawFRIPchange, basins[2], mask=TRUE) %>% trim)
 FRIP <- merge(FRIP_l[[1]], FRIP_l[[2]])
 
-# 7) Save all outputs
+# 6) collate existing metrics
+access<-rast("Data/accessibility.tif")  %>% crop(ext(FRIP))
+ext(access)<-ext(FRIP)
+
+DI<-rast("Data/DefInd.tif") %>% crop(ext(FRIP))
+crs(DI)<-"+proj=moll"
+DI<-project(DI, crs(FRIP))
+DI_reprojected <- exactextractr::exact_resample(DI, FRIP, 'mean')
+ext(DI_reprojected)<-ext(FRIP)
+names(DI_reprojected)<-"DI"
+
+existingMetrics<-c(access, DI_reprojected)
+
+# 8) Save all outputs
 writeVector(basins, "Outputs/Basins", overwrite=TRUE)
 writeVector(countries, "Outputs/BasinCountries", overwrite=TRUE)
 writeVector(PAs, "Outputs/BasinPAs", overwrite=TRUE)
+
+writeRaster(existingMetrics, "Outputs/existingMetrics.tif", overwrite=TRUE)
 
 writeRaster(FRIP, "Outputs/FRIP.tif", overwrite=TRUE)
 writeRaster(FRIPchange, "Outputs/FRIPchange.tif", overwrite=TRUE)
