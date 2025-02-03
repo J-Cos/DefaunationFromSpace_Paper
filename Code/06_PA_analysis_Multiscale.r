@@ -122,17 +122,24 @@ MaxAggFactorOfFinding<-which(!filter(Restrend_df, NAME== "Rio Negro" )$signif)[1
 
 # 5) get dataframe for main figure ----------------------------------------------------------------------------
 
-LABELS <- generate_label_df(TukeyHSD(mods_list[[10]], "name") , "NAME")
+LABELS <- generate_label_df(TukeyHSD(mods_list[[10]]) , "NAME")
 df<-df_list[[10]] %>% mutate(treatment=NAME) %>% left_join(., LABELS)
 
-trendSignif_df<-as.data.frame(summary(modstrend_list[[10]])$coef[,4]<0.05) %>%
+trendSignif_df<-as.data.frame(summary(modstrend_list[[10]])$coef[,c(1,4)]) %>%
     rownames_to_column("NAME") %>%
-    mutate(NAME=str_replace_all(NAME, "NAME", ""))
-names(trendSignif_df)[2]<-"TrendSignif"
+    mutate(
+        NAME=str_replace_all(NAME, "NAME", ""),
+        signif=`Pr(>|t|)`<0.05) %>%
+    mutate(change = case_when(
+        !signif ~ "None",
+        signif & Estimate>0     ~ "Increasing",
+        signif & Estimate<0     ~ "Decreasing"
+  )) %>%
+  select(NAME, change)
 
 df_wTrendSignifs <-left_join(df, trendSignif_df)
 
-saveRDS(df, "Outputs/PlottingData_PAs.RDS")
+saveRDS(df_wTrendSignifs, "Outputs/PlottingData_PAs.RDS")
 
 # 6) make supplementary figure ------------------------------------------------------
 meanLines<- Res_df %>%
