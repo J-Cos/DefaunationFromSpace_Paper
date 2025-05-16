@@ -3,7 +3,7 @@ library(tidyverse)
 library(tidyterra)
 
 # 1) load data --------------------------------------------------
-FRIP<-rast("Outputs/FRIP.tif") 
+FRIP<-lapply(list.files("Outputs/FRIP", full.names=TRUE), function(x){rast(x)$correlation})[[1]]
 basins<-vect("Outputs/Basins")
 countries<-vect("Outputs/BasinCountries")
 PAs<-vect("Outputs/BasinPAs")
@@ -36,11 +36,13 @@ unique(df$Letters) %>% sort
 colorRampPalette(c("grey", scales::muted("red")))(5)
 group_by(df, Letters) %>% summarise(mean=mean(correlation)) %>% arrange(mean)
 myPalette = c(
-    'acd' =   "#BEBEBE",
-    'cd' = "#AF9797", 
-    'abc' = "#A07171", 
-    'ab' = "#914A4A", 
-    'b' = "#832424")
+    'b' =   "#BEBEBE",
+    'bc' = "#B4A4A4", 
+    'abc' = "#AA8A8A", 
+    'a' = "#A07171", 
+    'x' = "#965757",
+    'de' = "#8C3D3D", 
+    'e' = "#832424")
 
 fig_c1<-ggplot(data=df, aes(y=reorder(name, correlation, "median"), x=correlation, color=Letters))+
     geom_vline(xintercept=0, linetype=2, alpha=0.5)+
@@ -77,19 +79,21 @@ fig_c3<-ggplot() +
 
 # 4) plot PAS FRIP -------------------------------------------
 
-df<-PAs_df %>% filter(NAME %in% names(which(table(PAs_df$NAME)>2)))
- 
+df<-PAs_df %>% filter(NAME %in% names(which(table(PAs_df$NAME)>2)))  %>% 
+  mutate(across('NAME', str_replace,  "Área De Proteção Ambiental Do Arquipélago Do Marajó", "Área De Proteção Ambiental\nDo Arquipélago Do Marajó"))
+
+
 unique(df$Letters) %>% sort
 colorRampPalette(c("grey", scales::muted("red")))(7)
 group_by(df, Letters) %>% summarise(mean=mean(correlation)) %>% arrange(mean)
 myPalette = c(
-    'cd' =   "#BEBEBE",
-    'c' = "#B4A4A4", 
-    'acd' = "#AA8A8A", 
-    'ad' = "#A07171", 
-    'a' = "#965757",
-    'b' = "#8C3D3D", 
-    'ab' = "#832424")
+    'd' =   "#BEBEBE",
+    'ad' = "#B4A4A4", 
+    'abd' = "#AA8A8A", 
+    'abcd' = "#A07171", 
+    'bc' = "#965757",
+    'c' = "#8C3D3D", 
+    'abc' = "#832424")
 
 
 fig_pa1<-ggplot(data=df, aes(y=reorder(NAME, correlation, "median"), x=correlation, color=Letters))+
@@ -127,7 +131,10 @@ fig_pa3<-ggplot() +
 
 # 4) plot PAS FRIP trends-------------------------------------------
 
-df<-PAs_df %>% filter(NAME %in% names(which(table(PAs_df$NAME)>2)))
+df<-PAs_df %>% filter(NAME %in% names(which(table(PAs_df$NAME)>2))) %>% 
+  mutate(across('NAME', str_replace,  "Área De Proteção Ambiental Do Arquipélago Do Marajó", "Área De Proteção Ambiental\nDo Arquipélago Do Marajó"))
+
+
  
 myPalette = c(
     'Decreasing' =   scales::muted("green"),
@@ -171,6 +178,6 @@ cowplot::plot_grid(
     fig_c2, fig_c3, fig_c1, fig_pa2, fig_pa3, fig_pa1, fig_trend2, fig_trend3, fig_trend1, 
     labels = c("A", "B",'C', "D", "E", "F", "G", "H", "I"), 
     label_size = 12, ncol=3, rel_widths = c(1, 1, 1.5))
-ggsave("Figures/Figure3.png", height=9, width=13, bg="white")
+ggsave("Figures/Figure4.png", height=10, width=14, bg="white")
 
 
