@@ -40,3 +40,16 @@ figures/
 
 # Legacy Codebase (ignore entire directory)
 legacy/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Virtual Environments
+.venv*/
+.virtual_documents/
+
+# GEE & geemap
+.geemap/
+credentials.json
