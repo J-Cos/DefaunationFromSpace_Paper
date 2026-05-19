@@ -10,7 +10,7 @@ Two independent satellite signals of tropical forest defaunation, Congo and Amaz
 | Signal | Metric | Dataset | Causal chain |
 |---|---|---|---|
 | **Structural** | Understory Openness Index (UOI) | GEDI L2B PAVD | Short: fauna → physical structure |
-| **Functional** | Flood-Referenced Integrated Productivity (FRIP) | MODIS NPP × JRC GLOFAS | Longer: fauna → nutrient pump → productivity pattern |
+| **Functional** | Flooding Role in Productivity (FRIP) | MODIS NPP × JRC GLOFAS | Longer: fauna → nutrient pump → productivity pattern |
 
 ### Principled Hypotheses
 *Based on the theoretical premise that the Amazon is more heavily depleted of large megaherbivores than the Congo (which retains forest elephants).*
