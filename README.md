@@ -107,7 +107,7 @@ projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_Annual_{scale}
 
 **Compute**: GEE Python Colab | **Exports**: GEE Assets only
 
-**UOI** = `1 − (pavd_z0 / pai)`. Quality filters: TMF class 10 (≥95% intact at 500m, harmonized with NB1), elevation < 1000m, slope < 10°. No covariate values exported — all labelling in NB3.
+**UOI** = `1 − (pavd_z0 / pai)`. Quality filters: TMF class 10 (≥95% intact at 500m, harmonized with NB1), elevation < 1000m, slope < 10°. Exported at 1km resolution; multi-scale aggregation is deferred to NB3.
 
 | Dataset | GEE ID | Role |
 |---|---|---|
@@ -115,9 +115,9 @@ projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_Annual_{scale}
 | JRC TMF | `projects/JRC/TMF/v1_2024/TransitionMap_MainClasses` | Forest filter |
 | SRTM | `USGS/SRTMGL1_003` | Quality filter only |
 
-**Assets exported** (two-band rasters: UOI + footprint count N):
+**Assets exported** (single two-band raster at 1km: UOI + footprint count N):
 ```
-projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/GEDI_{scale}   (20 assets, bands: UOI_mean, N)
+projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/Openness_raw/GEDI_1km   (bands: UOI_mean, N)
 ```
 
 ---
