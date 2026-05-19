@@ -52,7 +52,7 @@ The two signals operate on different temporal spans:
 **Run order**: 1 → 2 (parallel) → 3 → 4 → 5
 
 ### Design Principles
-- **NB1 + NB2**: Raw signal production. To apply the 95% forest cover filter correctly, the binary 30m TMF mask is aggregated via `reduceResolution` to the target scale (5–100km), and *then* filtered to `fraction >= 0.95`.
+- **NB1 + NB2**: Raw signal production. Both notebooks share a unified **500m Pristine Forest Mask**: the 30m JRC TMF binary mask is aggregated to 500m (MODIS native resolution) via `reduceResolution(ee.Reducer.mean())`, then thresholded at `>=0.95`. This ensures (a) MODIS NPP pixels are not contaminated by non-forest land cover, and (b) GEDI footprints are only retained from deep core forest, not edge-effect zones. The 30m→500m aggregation requires only ~277 input pixels, safely under Earth Engine's 65,535 `maxPixels` limit.
 - **NB3**: Data assembly. Computes predictor stack, exports stacked GeoTIFFs. We accept the heavy compute load to generate Mann-Kendall τ at all 20 scales.
 - **NB4 (R)**: All hypothesis testing and visualisation, including spatial maps of the raw signals. Computes statistical covariate models.
 - **NB5**: Downstream utility. Only if hypothesis tests deem it useful, NB5 applies the covariate coefficients to produce a "denoised" product and its corresponding map.
@@ -73,7 +73,7 @@ SCALES       = list(range(5000, 105000, 5000))
 WORKING_SCALE = 25000
 PROTECTED_IUCN = ['Ia', 'Ib', 'II', 'III', 'IV']
 GEE_PROJECT  = 'quantum-bonus-434714-t2'
-ASSET_ROOT   = 'users/JakeWilliams844/DefaunationFromSpace'
+ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 ```
 
 > **Bounding boxes**: Simpler and transparent. TMF mask excludes non-forest. Sub-basin HYBAS labels added in NB3 via local shapefiles for ANOVA blocking.
@@ -86,19 +86,19 @@ ASSET_ROOT   = 'users/JakeWilliams844/DefaunationFromSpace'
 
 **Compute**: GEE Python Colab | **Exports**: GEE Assets only
 
-**FRIP** = pixel-level Spearman correlation between JRC GLOFAS flood depth (7 return periods summed) and MODIS annual NPP (2001–2023). Forest pixels only (TMF class 10, ≥95% per pixel).
+**FRIP** = pixel-level Spearman correlation between JRC GLOFAS flood depth (7 return periods summed: RP10–RP500) and MODIS annual NPP (2001–2023). Forest pixels only (TMF class 10, ≥95% intact at 500m MODIS resolution).
 
 | Dataset | GEE ID |
 |---|---|
 | MODIS NPP | `MODIS/061/MOD17A3HGF` |
-| JRC GLOFAS | `JRC/CEMS_GLOFAS/FloodHazard/v1` |
+| JRC GLOFAS | `JRC/CEMS_GLOFAS/FloodHazard/v2_1` |
 | JRC TMF | `projects/JRC/TMF/v1_2024/TransitionMap_MainClasses` |
 | MERIT Hydro | `MERIT/Hydro/v1_0_1` (HND > 0 mask) |
 
 **Assets exported**:
 ```
-users/JakeWilliams844/DefaunationFromSpace/FRIP_{scale}         (20 — Spearman r)
-users/JakeWilliams844/DefaunationFromSpace/FRIP_Annual_{scale}  (20 — 23-band annual)
+projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_{scale}         (20 — Spearman r)
+projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_Annual_{scale}  (20 — 23-band annual)
 ```
 
 ---
@@ -107,7 +107,7 @@ users/JakeWilliams844/DefaunationFromSpace/FRIP_Annual_{scale}  (20 — 23-band 
 
 **Compute**: GEE Python Colab | **Exports**: GEE Assets only
 
-**UOI** = `1 − (pavd_z0 / pai)`. Quality filters: TMF class 10, elevation < 1000m, slope < 10°. No covariate values exported — all labelling in NB3.
+**UOI** = `1 − (pavd_z0 / pai)`. Quality filters: TMF class 10 (≥95% intact at 500m, harmonized with NB1), elevation < 1000m, slope < 10°. No covariate values exported — all labelling in NB3.
 
 | Dataset | GEE ID | Role |
 |---|---|---|
@@ -117,7 +117,7 @@ users/JakeWilliams844/DefaunationFromSpace/FRIP_Annual_{scale}  (20 — 23-band 
 
 **Assets exported** (two-band rasters: UOI + footprint count N):
 ```
-users/JakeWilliams844/DefaunationFromSpace/GEDI_{scale}   (20 assets, bands: UOI_mean, N)
+projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/GEDI_{scale}   (20 assets, bands: UOI_mean, N)
 ```
 
 ---
@@ -241,8 +241,8 @@ DefaunationSynthesis/
 
 | Component | Status |
 |---|---|
-| `01_FRIP_GEE.ipynb` | 🔲 To build |
-| `02_GEDI_GEE.ipynb` | 🔲 To build |
+| `01_FRIP_GEE.ipynb` | ✅ Built — unit tests passing, exports configured |
+| `02_GEDI_GEE.ipynb` | ✅ Built — unit tests passing, exports configured |
 | `03_Build_Analysis_Dataset.ipynb` | 🔲 To build |
 | `04_Analysis/` (R scripts) | 🔲 To build |
 | `05_Denoising_Maps.ipynb` | 🔲 To build |
