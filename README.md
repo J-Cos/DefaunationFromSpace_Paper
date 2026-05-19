@@ -32,30 +32,37 @@ The two signals operate on different temporal spans:
 
 ---
 
-## Five-Notebook Architecture
+## Pipeline Architecture
 
 ```
-01_FRIP_GEE.ipynb              GEE — raw FRIP signal → GEE Assets
-02_GEDI_GEE.ipynb              GEE — raw GEDI UOI signal → GEE Assets
-         │            │
-         └─────┬───────┘
-               ▼  (load Assets)
-03_Build_Analysis_Dataset.ipynb  GEE — predictor stack + join → Drive (GeoTIFFs)
-               │
-               ▼  analysis_stack_{scale}.tif
+01_BaseStack_GEE.ipynb          GEE — 34-band base stack at ~463m → GEE Assets
+         │
+         ▼  (load Assets)
+02_Signals_GEE.ipynb            GEE — FRIP at 20 scales + masked GEDI → GEE Assets
+         │
+         ▼  (load Assets)
+03_Build_Analysis_Dataset.ipynb  GEE/local — join signals + labels → GeoTIFFs
+         │
+         ▼  analysis_stack_{scale}.tif
 04_Analysis/  (R scripts)        local R — H1–H4 tests + figures → covariate_models.json
-               │
-               ▼
+         │
+         ▼
 05_Denoising_Maps.ipynb          GEE — apply model coefficients → adjusted rasters + maps
 ```
 
-**Run order**: 1 → 2 (parallel) → 3 → 4 → 5
+**Run order**: 1 → 2 → 3 → 4 → 5
 
 ### Design Principles
-- **NB1 + NB2**: Raw signal production. Both notebooks share a unified **500m Pristine Forest Mask**: the 30m JRC TMF binary mask is aggregated to 500m (MODIS native resolution) via `reduceResolution(ee.Reducer.mean())`, then thresholded at `>=0.95`. This ensures (a) MODIS NPP pixels are not contaminated by non-forest land cover, and (b) GEDI footprints are only retained from deep core forest, not edge-effect zones. The 30m→500m aggregation requires only ~277 input pixels, safely under Earth Engine's 65,535 `maxPixels` limit.
-- **NB3**: Data assembly. Computes predictor stack, exports stacked GeoTIFFs. We accept the heavy compute load to generate Mann-Kendall τ at all 20 scales.
-- **NB4 (R)**: All hypothesis testing and visualisation, including spatial maps of the raw signals. Computes statistical covariate models.
-- **NB5**: Downstream utility. Only if hypothesis tests deem it useful, NB5 applies the covariate coefficients to produce a "denoised" product and its corresponding map.
+
+**NB1 + NB2 resolve all "Reprojection output too large" errors via three key strategies:**
+
+1. **Independent `reduceResolution` chains**: Each fine-resolution dataset (25m GEDI, 30m JRC, 30m SRTM, 90m MERIT) is aggregated to MODIS resolution independently. No cross-dataset dependencies — the computation that caused errors (e.g., applying a 30m mask to 25m GEDI within one `reduceResolution`) is eliminated.
+
+2. **No `reproject()` in NB1**: Following [GEE best practices](https://developers.google.com/earth-engine/guides/best_practices), `reproject` is avoided entirely in the base stack export. The export's `scale`/`crs` parameters define the output grid. `reproject` is only used in NB2 where the input is already a ~463m asset and the output is 5–100km (trivially small).
+
+3. **Per-basin exports**: Congo and Amazon exported separately to avoid bounding boxes spanning the Atlantic.
+
+4. **Masking deferred**: `forest_fraction`, `elevation`, `slope` exported as continuous bands. Threshold masks applied only when loading the pre-computed asset in NB2/NB3 — never during a `reduceResolution` chain.
 
 ---
 
@@ -70,54 +77,64 @@ FOREST_MASK  = 'projects/JRC/TMF/v1_2024/TransitionMap_MainClasses'
 FOREST_CLASS = 10   # continuously undisturbed since ~1982
 FOREST_COVER_THRESHOLD = 0.95
 SCALES       = list(range(5000, 105000, 5000))
-WORKING_SCALE = 25000
-PROTECTED_IUCN = ['Ia', 'Ib', 'II', 'III', 'IV']
 GEE_PROJECT  = 'quantum-bonus-434714-t2'
 ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 ```
 
-> **Bounding boxes**: Simpler and transparent. TMF mask excludes non-forest. Sub-basin HYBAS labels added in NB3 via local shapefiles for ANOVA blocking.
-> **TMF class 10**: Continuously undisturbed across the full archive — ensures FRIP (2001–2023) and GEDI (2020–2023) operate on stable intact forest.
-> **WDPA I–IV**: Maximises protected vs unprotected contrast for hypothesis testing.
-
 ---
 
-## NB1: FRIP Signal (`01_FRIP_GEE.ipynb`)
+## NB1: Base Stack Export (`01_BaseStack_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Exports**: GEE Assets only
+**Compute**: GEE Python Colab | **Exports**: GEE Assets (2 tasks — one per basin)
 
-**FRIP** = pixel-level Spearman correlation between JRC GLOFAS flood depth (7 return periods summed: RP10–RP500) and MODIS annual NPP (2001–2023). Forest pixels only (TMF class 10, ≥95% intact at 500m MODIS resolution).
+Exports a single 34-band raster per basin at MODIS sinusoidal resolution (~463m). Contains ALL variables needed for downstream FRIP and GEDI analysis.
 
-| Dataset | GEE ID |
-|---|---|
-| MODIS NPP | `MODIS/061/MOD17A3HGF` |
-| JRC GLOFAS | `JRC/CEMS_GLOFAS/FloodHazard/v2_1` |
-| JRC TMF | `projects/JRC/TMF/v1_2024/TransitionMap_MainClasses` |
-| MERIT Hydro | `MERIT/Hydro/v1_0_1` (HND > 0 mask) |
+### Base Stack Bands (34 total)
+
+| # | Band | Source | Native res → 463m |
+|---|---|---|---|
+| 1 | `Npp_median` | MODIS MOD17A3HGF | native |
+| 2–24 | `NPP_2001` – `NPP_2023` | MODIS MOD17A3HGF | native |
+| 25 | `flood_freq` | JRC GLOFAS v1 (binary ≥0, summed across 7 return periods) + MERIT HND mask | ~4km/90m → 463m |
+| 26 | `forest_fraction` | JRC TMF v1_2024 class 10 | 30m → 463m |
+| 27 | `elevation` | SRTM | 30m → 463m |
+| 28 | `slope` | SRTM-derived | 30m → 463m |
+| 29 | `hnd` | MERIT Hydro | 90m → 463m |
+| 30 | `GEDI_UOI` | GEDI L2B: 1 − (pavd_z0/pai) | 25m → 463m |
+| 31 | `GEDI_N` | GEDI L2B footprint count | 25m → 463m |
+| 32 | `GEDI_rh98` | GEDI L2B canopy height | 25m → 463m |
+| 33 | `precip` | CHIRPS daily → annual mean | ~5km → 463m |
+| 34 | `clay` | OpenLandMap SoilGrids clay fraction | 250m → 463m |
 
 **Assets exported**:
 ```
-projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_{scale}         (20 — Spearman r)
-projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/FRIP_Annual_{scale}  (20 — 23-band annual)
+projects/.../DefaunationFromSpace/BaseStack_Congo
+projects/.../DefaunationFromSpace/BaseStack_Amazon
 ```
 
 ---
 
-## NB2: GEDI Signal (`02_GEDI_GEE.ipynb`)
+## NB2: Signal Exports (`02_Signals_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Exports**: GEE Assets only
+**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: GEE Assets
 
-**UOI** = `1 − (pavd_z0 / pai)`. Quality filters: TMF class 10 (≥95% intact at 500m, harmonized with NB1), elevation < 1000m, slope < 10°. Exported at 1km resolution; multi-scale aggregation is deferred to NB3.
+### FRIP Exports (80 tasks)
 
-| Dataset | GEE ID | Role |
-|---|---|---|
-| GEDI L2B | `LARSE/GEDI/GEDI02_B_002_MONTHLY` | Signal |
-| JRC TMF | `projects/JRC/TMF/v1_2024/TransitionMap_MainClasses` | Forest filter |
-| SRTM | `USGS/SRTMGL1_003` | Quality filter only |
+Cross-sectional + annual FRIP at 20 scales (5–100km) × 2 basins. Applies `forest_fraction >= 0.95` mask before computing Spearman correlation between `flood_freq` and `Npp_median`.
 
-**Assets exported** (single two-band raster at 1km: UOI + footprint count N):
 ```
-projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/Openness_raw/GEDI_1km   (bands: UOI_mean, N)
+projects/.../DefaunationFromSpace/FRIP/FRIP_{scale}_{basin}
+projects/.../DefaunationFromSpace/FRIP/FRIP_Annual_{scale}_{basin}
+```
+
+### GEDI Exports (2 tasks)
+
+Masked GEDI + covariates at MODIS resolution. Applies `forest_fraction >= 0.95`, `elevation < 1000m`, `slope < 10°`.
+
+Bands: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98`, `elevation`, `slope`, `hnd`, `precip`, `clay`, `forest_fraction`.
+
+```
+projects/.../DefaunationFromSpace/GEDI/GEDI_masked_{basin}
 ```
 
 ---
@@ -126,34 +143,17 @@ projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace/Openness_raw/GEDI_1
 
 **Compute**: GEE Python Colab | **Loads**: GEE Assets from NB1 + NB2 | **Exports**: Drive GeoTIFFs
 
-Computes predictor stack at matching resolutions, joins all signals pixel-by-pixel, pre-computes Mann-Kendall τ per pixel. Exports stacked multi-band GeoTIFFs — R/terra loads these directly.
-
-**Predictor stack + labels (all computed in GEE)**:
+Joins FRIP + GEDI signals with spatial labels (basin, country, protection status). Exports multi-band GeoTIFFs for R.
 
 | Band / Label | Source | Use |
 |---|---|---|
-| ndvi_mean, ndvi_var | MODIS MOD09A1 | FRIP covariate adjustment |
-| hand_mean, hand_var | MERIT Hydro | FRIP covariate adjustment |
-| elev_mean, slope_mean | SRTM | GEDI covariate adjustment |
-| flood_prob | JRC GLOFAS | Additional covariate |
-| forest_cover | JRC TMF | Coverage QC |
+| FRIP correlation | NB2 FRIP assets | H2 signal |
+| GEDI_UOI | NB2 GEDI assets | H1 signal |
+| Covariates | NB1 base stack | Adjustment models |
 | protection | `WCMC/WDPA/current/polygons` IUCN I–IV | Protected / unprotected flag |
-| basin, sub_basin | `WWF/HydroSHEDS/v1/Basins/hybas_2` | Congo / Amazon + PFAF_ID for ANOVA |
+| basin, sub_basin | `WWF/HydroSHEDS/v1/Basins/hybas_2` | ANOVA blocking |
 | country | GAUL boundaries | Country-level grouping |
-| PA_ID | WDPA (focal PAs only) | Numeric ID (with separate CSV lookup) |
-| mk_tau | Annual FRIP Asset | Mann-Kendall τ (computed for all 20 scales) |
-
-**Exported to Drive** (`DefaunationSynthesis/AnalysisStack/`):
-```text
-analysis_stack_5000.tif … analysis_stack_100000.tif
-  Multi-band raster for spatial mapping and statistical modelling. 
-  All bands above + frip + uoi.
-
-pa_id_lookup.csv
-  Mapping of numeric PA_ID to string PA_name.
-```
-
-> **Why GeoTIFF?** R/terra handles multi-band rasters natively. Spatial structure is preserved for map figures (H3/H4) and spatial autocorrelation tests, while tabular stats (H1/H2) can be run quickly by casting the rasters to data.frames (`terra::as.data.frame()`).
+| mk_tau | Annual FRIP | Mann-Kendall τ |
 
 ---
 
@@ -161,39 +161,21 @@ pa_id_lookup.csv
 
 **Compute**: Local R scripts | **Input**: `analysis_stack_{scale}.tif` + local DI rasters
 
-R is chosen for its statistical depth (lme4, spdep, MuMIn) and publication-quality spatial visualisation (terra, tidyterra, ggplot2) — matching the existing FRIP R pipeline.
-
-### Scripts
-
 | Script | Purpose |
 |---|---|
-| `Functions.r` | Shared helpers (label_df, CI extraction, Tukey labelling) |
-| `01_Load_and_Join.r` | Load stacks, join DI rasters (Benítez-López + Bogoni) locally |
-| `02_H1_GEDI_Structural.r` | Regional t-test + protection ANOVA on raw UOI; multi-scale CI |
-| `03_H2_FRIP_Functional.r` | Same structure on raw FRIP; DI validation models |
-| `04_H3_Convergence.r` | PA-scale + pixel-scale Spearman r between UOI and FRIP |
-| `05_H4_Temporal_Trends.r` | mk_tau maps, PA time series, trend distribution |
-| `06_Figures.r` | All manuscript figures (Fig 2–5) |
-
-### Model output
-Scripts export `covariate_models.json` — OLS coefficients from the covariate adjustment models (fitted as part of H1/H2 testing). This JSON contains dictionaries for **all 20 scales**. These coefficients are consumed by NB5 **only if** the metrics are confirmed useful.
-
-> Models in NB4 are **statistical testing models**, not denoising models. They test whether covariates (NDVI, HAND, elevation, slope) explain variation in the signals. The coefficients happen to be reusable for downstream raster-level adjustment in NB5.
+| `Functions.r` | Shared helpers |
+| `01_Load_and_Join.r` | Load stacks, join DI rasters locally |
+| `02_H1_GEDI_Structural.r` | Regional t-test + protection ANOVA on UOI |
+| `03_H2_FRIP_Functional.r` | Same structure on FRIP; DI validation |
+| `04_H3_Convergence.r` | PA-scale + pixel-scale UOI–FRIP correlation |
+| `05_H4_Temporal_Trends.r` | mk_tau maps, trend distributions |
+| `06_Figures.r` | Manuscript figures |
 
 ---
 
 ## NB5: Covariate Adjustment Maps (`05_Denoising_Maps.ipynb`)
 
-**Compute**: GEE Python Colab | **Inputs**: Raw signal Assets + `covariate_models.json`
-
-If the raw signals are validated in NB4, NB5 applies the multi-scale OLS adjustment coefficients as raster band math. Exports adjusted rasters and a final "denoised" spatial map product.
-
-**Outputs → Drive** (`DefaunationSynthesis/AdjustedSignals/`):
-```
-frip_adjusted_25000.tif
-uoi_adjusted_25000.tif
-figures/fig_denoised_product.png
-```
+Applies OLS adjustment coefficients from NB4 to produce "denoised" signal maps. Only run if raw signals are validated.
 
 ---
 
@@ -202,8 +184,8 @@ figures/fig_denoised_product.png
 ```
 DefaunationSynthesis/
 ├── README.md
-├── 01_FRIP_GEE.ipynb
-├── 02_GEDI_GEE.ipynb
+├── 01_BaseStack_GEE.ipynb         ← NEW: 34-band base stack export
+├── 02_Signals_GEE.ipynb           ← NEW: FRIP + GEDI signal exports
 ├── 03_Build_Analysis_Dataset.ipynb
 ├── 04_Analysis/
 │   ├── Functions.r
@@ -214,17 +196,15 @@ DefaunationSynthesis/
 │   ├── 05_H4_Temporal_Trends.r
 │   └── 06_Figures.r
 ├── 05_Denoising_Maps.ipynb
-├── covariate_models.json          ← produced by NB4, consumed by NB5
+├── covariate_models.json
 ├── data/
-│   ├── processed/                 ← Drive outputs (analysis_stack_*.tif, adjusted_*.tif)
+│   ├── processed/
 │   └── local/
-│       └── DefInd/                ← Benítéz-López + Bogoni DI rasters (not in GEE)
+│       └── DefInd/
 ├── figures/
-│   ├── statistical/               ← from NB4 R scripts
-│   └── spatial/                   ← from NB5
 └── legacy/
-    ├── DefaunationFromSpace_Paper/ ← original FRIP R pipeline (reference)
-    └── GEDI_openness/              ← original GEDI Python pipeline (reference)
+    ├── DefaunationFromSpace_Paper/
+    └── GEDI_openness/
 ```
 
 ---
@@ -241,8 +221,8 @@ DefaunationSynthesis/
 
 | Component | Status |
 |---|---|
-| `01_FRIP_GEE.ipynb` | ✅ Built — unit tests passing, exports configured |
-| `02_GEDI_GEE.ipynb` | ✅ Built — unit tests passing, exports configured |
+| `01_BaseStack_GEE.ipynb` | ✅ Built — unit tests configured |
+| `02_Signals_GEE.ipynb` | ✅ Built — unit tests configured |
 | `03_Build_Analysis_Dataset.ipynb` | 🔲 To build |
 | `04_Analysis/` (R scripts) | 🔲 To build |
 | `05_Denoising_Maps.ipynb` | 🔲 To build |
