@@ -95,7 +95,7 @@ Exports a single 34-band raster per basin at MODIS sinusoidal resolution (~463m)
 |---|---|---|---|
 | 1 | `Npp_median` | MODIS MOD17A3HGF | native |
 | 2–24 | `NPP_2001` – `NPP_2023` | MODIS MOD17A3HGF | native |
-| 25 | `flood_freq` | JRC GLOFAS v1 (binary ≥0, summed across 7 return periods) + MERIT HND mask | ~4km/90m → 463m |
+| 25 | `flood_freq` | JRC GLOFAS v2_1 (binary depth ≥0, summed across 7 return periods) + MERIT HND mask | ~4km/90m → 463m |
 | 26 | `forest_fraction` | JRC TMF v1_2024 class 10 | 30m → 463m |
 | 27 | `elevation` | SRTM | 30m → 463m |
 | 28 | `slope` | SRTM-derived | 30m → 463m |
