@@ -34,22 +34,25 @@ The two signals operate on different temporal spans:
 
 ## Two-Notebook Pipeline Architecture
 
-The entire GEE analysis data production is decoupled into a robust, two-stage architecture that resolves all computational bottlenecks:
+The GEE analysis data production is decoupled into a robust, two-notebook architecture that resolves all computational bottlenecks:
 
 ```
 01_BaseStack_GEE.ipynb          GEE — 34-band base stack at ~463m → GEE Assets
          │
          ▼  (load Assets)
-02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, stacks 33 bands → Drive (GeoTIFFs)
+02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, exports 42 GeoTIFFs → Drive
          │
-         ▼  analysis_stack_{scale}_{basin}.tif
+         ├──► 40 Multi-scale Stacks (5km to 100km, 11 bands)
+         ├──► 2 Native-scale Stacks (~463m, 10 bands)
+         │
+         ▼  analysis_stack_*.tif
 04_Analysis/  (R scripts)        local R — H1–H4 tests + figures → covariate_models.json
          │
          ▼
 05_Denoising_Maps.ipynb          GEE — apply model coefficients → adjusted rasters + maps
 ```
 
-**Run order**: 1 → 2 → R Analysis → 5
+**Run order**: 1 ➔ 2 ➔ R Analysis ➔ 5
 
 ### Design Principles
 
@@ -57,8 +60,9 @@ The entire GEE analysis data production is decoupled into a robust, two-stage ar
 
 1. **Independent `reduceResolution` chains (NB1)**: Each fine-resolution dataset (25m GEDI, 30m JRC, 30m SRTM, 90m MERIT) is aggregated to MODIS resolution independently. No cross-dataset dependencies are evaluated during the Stage 1 reduction.
 2. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing the Stage 1 base stack exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
-3. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 computes FRIP (cross-sectional + annual) in memory from the materialized Stage 1 asset, aggregates covariates, and writes the final **33-band stack** directly to Google Drive as a GeoTIFF.
-4. **Deferred Vector Masking**: All vector layers (HydroSHEDS basins, WDPA protected areas, countries) are rasterized and masked *locally in R* onto the exported GeoTIFF grids. This keeps GEE fully raster-based and extremely fast.
+3. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 computes FRIP (cross-sectional + annual) in memory from the materialized Stage 1 asset, aggregates covariates, and writes the final **42 GeoTIFFs** directly to Google Drive.
+4. **GEE-based Mann-Kendall Trend (mk_tau)**: We compute the Mann-Kendall trend τ of annual FRIP across 2001–2023 directly in Earth Engine. This compresses 23 annual bands into a single highly informative `frip_mk_tau` band, saving 70% in export file size.
+5. **Deferred Vector Masking**: All vector layers (HydroSHEDS basins, WDPA protected areas, countries) are rasterized and masked *locally in R* onto the exported GeoTIFF grids. This keeps GEE fully raster-based and extremely fast.
 
 ---
 
@@ -111,37 +115,45 @@ projects/.../DefaunationFromSpace/BaseStack_Amazon
 
 ## NB2: Signals and Drive Exports (`02_Signals_And_Exports_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: Drive GeoTIFFs (40 tasks)
+**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: Drive GeoTIFFs (42 tasks)
 
-Computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into a unified 33-band GeoTIFF per scale and basin.
+Computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin:
 
-### Stacked Bands (33 total)
+### 1. Multi-scale Stacks (40 total — 20 scales × 2 basins)
+Contains **11 bands** for multi-scale analysis:
+*   **`frip`** (1 band): Cross-sectional Spearman correlation
+*   **`frip_mk_tau`** (1 band): Mann-Kendall trend τ of annual FRIP across 2001–2023
+*   **`uoi`**, **`rh98`**, **`gedi_n`** (3 GEDI bands): Openness, height, footprint count
+*   **`elevation`**, **`slope`**, **`hnd`**, **`precip`**, **`clay`**, **`forest_fraction`** (6 covariate bands)
 
-- **`frip`** (1 band): Cross-sectional Spearman correlation
-- **`FRIP_2001` ... `FRIP_2023`** (23 bands): Annual Spearman correlations
-- **`uoi`**, **`rh98`**, **`gedi_n`** (3 GEDI bands): Openness, height, footprint count
-- **`elevation`**, **`slope`**, **`hnd`**, **`precip`**, **`clay`**, **`forest_fraction`** (6 covariate bands)
+### 2. Native-scale Stacks (2 total — 1 per basin)
+Contains **10 bands** at native MODIS resolution (~463m) for high-resolution spatial modeling *without* FRIP:
+*   **`uoi`**, **`rh98`**, **`gedi_n`** (3 GEDI bands)
+*   **`elevation`**, **`slope`**, **`hnd`**, **`precip`**, **`clay`**, **`forest_fraction`** (6 covariate bands)
+*   **`Npp_median`** (1 NPP productivity band)
 
 **Exported to Drive** (`DefaunationSynthesis/AnalysisStack/`):
 ```text
 analysis_stack_5000_Congo.tif … analysis_stack_100000_Congo.tif
+analysis_stack_native_Congo.tif
 analysis_stack_5000_Amazon.tif … analysis_stack_100000_Amazon.tif
+analysis_stack_native_Amazon.tif
 ```
 
 ---
 
 ## NB4: Hypothesis Testing (`04_Analysis/`)
 
-**Compute**: Local R scripts | **Input**: `analysis_stack_{scale}_{basin}.tif` + local DI rasters
+**Compute**: Local R scripts | **Input**: `analysis_stack_*.tif` + local vector layers
 
 | Script | Purpose |
 |---|---|
-| `Functions.r` | Shared helpers |
-| `01_Load_and_Join.r` | Load stacks, join DI rasters locally |
-| `02_H1_GEDI_Structural.r` | Regional t-test + protection ANOVA on UOI |
-| `03_H2_FRIP_Functional.r` | Same structure on FRIP; DI validation |
+| `Functions.r` | Shared helpers (including `rasteriseAndMask` cover >= 0.99) |
+| `01_Load_and_Join.r` | Load multi-scale and native stacks, join vector layers locally |
+| `02_H1_GEDI_Structural.r` | Regional t-test + protection ANOVA on UOI (both native & multi-scale) |
+| `03_H2_FRIP_Functional.r` | Same structure on FRIP; temporal DI validation |
 | `04_H3_Convergence.r` | PA-scale + pixel-scale UOI–FRIP correlation |
-| `05_H4_Temporal_Trends.r` | mk_tau maps, trend distributions |
+| `05_H4_Temporal_Trends.r` | Analysis of GEE pre-computed `frip_mk_tau` trends |
 | `06_Figures.r` | Manuscript figures |
 
 ---
@@ -165,7 +177,7 @@ Applies OLS adjustment coefficients from NB4 to produce "denoised" signal maps. 
 | Component | Status |
 |---|---|
 | `01_BaseStack_GEE.ipynb` | ✅ Built — running server-side (WGS84) |
-| `02_Signals_And_Exports_GEE.ipynb` | ✅ Built — verified, ready to run |
+| `02_Signals_And_Exports_GEE.ipynb` | ✅ Built — verified, updated to 42 TIFFs + GEE Mann-Kendall |
 | `04_Analysis/` (R scripts) | 🔲 To build |
 | `05_Denoising_Maps.ipynb` | 🔲 To build |
 | Legacy FRIP R pipeline | ✅ Reference |
