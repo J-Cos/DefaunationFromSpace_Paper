@@ -32,44 +32,39 @@ The two signals operate on different temporal spans:
 
 ---
 
-## Pipeline Architecture
+## Two-Notebook Pipeline Architecture
+
+The entire GEE analysis data production is decoupled into a robust, two-stage architecture that resolves all computational bottlenecks:
 
 ```
 01_BaseStack_GEE.ipynb          GEE — 34-band base stack at ~463m → GEE Assets
          │
          ▼  (load Assets)
-02_Signals_GEE.ipynb            GEE — FRIP at 20 scales + masked GEDI → GEE Assets
+02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, stacks 33 bands → Drive (GeoTIFFs)
          │
-         ▼  (load Assets)
-03_Build_Analysis_Dataset.ipynb  GEE/local — join signals + labels → GeoTIFFs
-         │
-         ▼  analysis_stack_{scale}.tif
+         ▼  analysis_stack_{scale}_{basin}.tif
 04_Analysis/  (R scripts)        local R — H1–H4 tests + figures → covariate_models.json
          │
          ▼
 05_Denoising_Maps.ipynb          GEE — apply model coefficients → adjusted rasters + maps
 ```
 
-**Run order**: 1 → 2 → 3 → 4 → 5
+**Run order**: 1 → 2 → R Analysis → 5
 
 ### Design Principles
 
-**NB1 + NB2 resolve all "Reprojection output too large" errors via three key strategies:**
+**This architecture resolves all GEE "Reprojection output too large" and projection limits via three key strategies:**
 
-1. **Independent `reduceResolution` chains**: Each fine-resolution dataset (25m GEDI, 30m JRC, 30m SRTM, 90m MERIT) is aggregated to MODIS resolution independently. No cross-dataset dependencies — the computation that caused errors (e.g., applying a 30m mask to 25m GEDI within one `reduceResolution`) is eliminated.
-
-2. **No `reproject()` in NB1**: Following [GEE best practices](https://developers.google.com/earth-engine/guides/best_practices), `reproject` is avoided entirely in the base stack export. The export's `scale`/`crs` parameters define the output grid. `reproject` is only used in NB2 where the input is already a ~463m asset and the output is 5–100km (trivially small).
-
-3. **Per-basin exports**: Congo and Amazon exported separately to avoid bounding boxes spanning the Atlantic.
-
-4. **Masking deferred**: `forest_fraction`, `elevation`, `slope` exported as continuous bands. Threshold masks applied only when loading the pre-computed asset in NB2/NB3 — never during a `reduceResolution` chain.
+1. **Independent `reduceResolution` chains (NB1)**: Each fine-resolution dataset (25m GEDI, 30m JRC, 30m SRTM, 90m MERIT) is aggregated to MODIS resolution independently. No cross-dataset dependencies are evaluated during the Stage 1 reduction.
+2. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing the Stage 1 base stack exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
+3. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 computes FRIP (cross-sectional + annual) in memory from the materialized Stage 1 asset, aggregates covariates, and writes the final **33-band stack** directly to Google Drive as a GeoTIFF.
+4. **Deferred Vector Masking**: All vector layers (HydroSHEDS basins, WDPA protected areas, countries) are rasterized and masked *locally in R* onto the exported GeoTIFF grids. This keeps GEE fully raster-based and extremely fast.
 
 ---
 
 ## Shared Spatial Parameters
 
 ```python
-# Bounding boxes — forest mask handles ecological precision
 CONGO_BBOX  = ee.Geometry.Rectangle([8,  -12, 35,  8])
 AMAZON_BBOX = ee.Geometry.Rectangle([-73, -18, -44, 8])
 
@@ -87,7 +82,7 @@ ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 
 **Compute**: GEE Python Colab | **Exports**: GEE Assets (2 tasks — one per basin)
 
-Exports a single 34-band raster per basin at MODIS sinusoidal resolution (~463m). Contains ALL variables needed for downstream FRIP and GEDI analysis.
+Exports a single 34-band raster per basin at MODIS WGS84 resolution (~463m equivalent). Contains ALL variables needed for downstream FRIP and GEDI analysis.
 
 ### Base Stack Bands (34 total)
 
@@ -102,7 +97,7 @@ Exports a single 34-band raster per basin at MODIS sinusoidal resolution (~463m)
 | 29 | `hnd` | MERIT Hydro | 90m → 463m |
 | 30 | `GEDI_UOI` | GEDI L2B: 1 − (pavd_z0/pai) | 25m → 463m |
 | 31 | `GEDI_N` | GEDI L2B footprint count | 25m → 463m |
-| 32 | `GEDI_rh98` | GEDI L2B canopy height | 25m → 463m |
+| 32 | `GEDI_rh98` | GEDI L2A canopy height | 25m → 463m |
 | 33 | `precip` | CHIRPS daily → annual mean | ~5km → 463m |
 | 34 | `clay` | OpenLandMap SoilGrids clay fraction | 250m → 463m |
 
@@ -114,52 +109,30 @@ projects/.../DefaunationFromSpace/BaseStack_Amazon
 
 ---
 
-## NB2: Signal Exports (`02_Signals_GEE.ipynb`)
+## NB2: Signals and Drive Exports (`02_Signals_And_Exports_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: GEE Assets
+**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: Drive GeoTIFFs (40 tasks)
 
-### FRIP Exports (80 tasks)
+Computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into a unified 33-band GeoTIFF per scale and basin.
 
-Cross-sectional + annual FRIP at 20 scales (5–100km) × 2 basins. Applies `forest_fraction >= 0.95` mask before computing Spearman correlation between `flood_freq` and `Npp_median`.
+### Stacked Bands (33 total)
 
+- **`frip`** (1 band): Cross-sectional Spearman correlation
+- **`FRIP_2001` ... `FRIP_2023`** (23 bands): Annual Spearman correlations
+- **`uoi`**, **`rh98`**, **`gedi_n`** (3 GEDI bands): Openness, height, footprint count
+- **`elevation`**, **`slope`**, **`hnd`**, **`precip`**, **`clay`**, **`forest_fraction`** (6 covariate bands)
+
+**Exported to Drive** (`DefaunationSynthesis/AnalysisStack/`):
+```text
+analysis_stack_5000_Congo.tif … analysis_stack_100000_Congo.tif
+analysis_stack_5000_Amazon.tif … analysis_stack_100000_Amazon.tif
 ```
-projects/.../DefaunationFromSpace/FRIP/FRIP_{scale}_{basin}
-projects/.../DefaunationFromSpace/FRIP/FRIP_Annual_{scale}_{basin}
-```
-
-### GEDI Exports (2 tasks)
-
-Masked GEDI + covariates at MODIS resolution. Applies `forest_fraction >= 0.95`, `elevation < 1000m`, `slope < 10°`.
-
-Bands: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98`, `elevation`, `slope`, `hnd`, `precip`, `clay`, `forest_fraction`.
-
-```
-projects/.../DefaunationFromSpace/GEDI/GEDI_masked_{basin}
-```
-
----
-
-## NB3: Analysis Dataset (`03_Build_Analysis_Dataset.ipynb`)
-
-**Compute**: GEE Python Colab | **Loads**: GEE Assets from NB1 + NB2 | **Exports**: Drive GeoTIFFs
-
-Joins FRIP + GEDI signals with spatial labels (basin, country, protection status). Exports multi-band GeoTIFFs for R.
-
-| Band / Label | Source | Use |
-|---|---|---|
-| FRIP correlation | NB2 FRIP assets | H2 signal |
-| GEDI_UOI | NB2 GEDI assets | H1 signal |
-| Covariates | NB1 base stack | Adjustment models |
-| protection | `WCMC/WDPA/current/polygons` IUCN I–IV | Protected / unprotected flag |
-| basin, sub_basin | `WWF/HydroSHEDS/v1/Basins/hybas_2` | ANOVA blocking |
-| country | GAUL boundaries | Country-level grouping |
-| mk_tau | Annual FRIP | Mann-Kendall τ |
 
 ---
 
 ## NB4: Hypothesis Testing (`04_Analysis/`)
 
-**Compute**: Local R scripts | **Input**: `analysis_stack_{scale}.tif` + local DI rasters
+**Compute**: Local R scripts | **Input**: `analysis_stack_{scale}_{basin}.tif` + local DI rasters
 
 | Script | Purpose |
 |---|---|
@@ -179,39 +152,9 @@ Applies OLS adjustment coefficients from NB4 to produce "denoised" signal maps. 
 
 ---
 
-## Directory Structure
-
-```
-DefaunationSynthesis/
-├── README.md
-├── 01_BaseStack_GEE.ipynb         ← NEW: 34-band base stack export
-├── 02_Signals_GEE.ipynb           ← NEW: FRIP + GEDI signal exports
-├── 03_Build_Analysis_Dataset.ipynb
-├── 04_Analysis/
-│   ├── Functions.r
-│   ├── 01_Load_and_Join.r
-│   ├── 02_H1_GEDI_Structural.r
-│   ├── 03_H2_FRIP_Functional.r
-│   ├── 04_H3_Convergence.r
-│   ├── 05_H4_Temporal_Trends.r
-│   └── 06_Figures.r
-├── 05_Denoising_Maps.ipynb
-├── covariate_models.json
-├── data/
-│   ├── processed/
-│   └── local/
-│       └── DefInd/
-├── figures/
-└── legacy/
-    ├── DefaunationFromSpace_Paper/
-    └── GEDI_openness/
-```
-
----
-
 ## Requirements
 
-**NB1, NB2, NB3, NB5** (GEE Colabs): `earthengine-api`, `geemap`, `numpy`, `pandas`
+**NB1, NB2, NB5** (GEE Colabs): `earthengine-api`, `geemap`, `numpy`, `pandas`
 
 **NB4** (R): `terra`, `tidyterra`, `tidyverse`, `ggplot2`, `lme4`, `MuMIn`, `spdep`, `multcompView`
 
@@ -221,9 +164,8 @@ DefaunationSynthesis/
 
 | Component | Status |
 |---|---|
-| `01_BaseStack_GEE.ipynb` | ✅ Built — unit tests configured |
-| `02_Signals_GEE.ipynb` | ✅ Built — unit tests configured |
-| `03_Build_Analysis_Dataset.ipynb` | 🔲 To build |
+| `01_BaseStack_GEE.ipynb` | ✅ Built — running server-side (WGS84) |
+| `02_Signals_And_Exports_GEE.ipynb` | ✅ Built — verified, ready to run |
 | `04_Analysis/` (R scripts) | 🔲 To build |
 | `05_Denoising_Maps.ipynb` | 🔲 To build |
 | Legacy FRIP R pipeline | ✅ Reference |
