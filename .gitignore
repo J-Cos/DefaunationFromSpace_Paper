@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.env
+venv/
+env/
+
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# MacOS
+.DS_Store
+
+# Data and Outputs
+data/processed/
+data/local/
+figures/
+*.tif
+*.RDS
+
+# GIS files
+*.shp
+*.shx
+*.dbf
+*.prj
+*.xml
+*.cpg
+*.tfw
+*.zip
+
+# Documents
+*.docx
+*.odt
+*.pdf
+
+# Legacy Codebase (ignore entire directory)
+legacy/
