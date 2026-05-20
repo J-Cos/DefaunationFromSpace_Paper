@@ -37,9 +37,9 @@ The two signals operate on different temporal spans:
 The GEE analysis data production is decoupled into a robust, two-notebook architecture that resolves all computational bottlenecks:
 
 ```
-01_BaseStack_GEE.ipynb          GEE — 34-band base stack at ~463m → GEE Assets
-         │
-         ▼  (load Assets)
+01_BaseStack_GEE.ipynb          GEE — 6 modular base stacks at ~463m → GEE Assets
+         │                        (NppStack [24b], GediStack [3b], CovStack [7b] per basin)
+         ▼  (load & concatenate)
 02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, exports 42 GeoTIFFs → Drive
          │
          ├──► 40 Multi-scale Stacks (5km to 100km, 11 bands)
@@ -56,13 +56,17 @@ The GEE analysis data production is decoupled into a robust, two-notebook archit
 
 ### Design Principles
 
-**This architecture resolves all GEE "Reprojection output too large" and projection limits via three key strategies:**
+**This architecture resolves all GEE "User memory limit exceeded" and "Reprojection output too large" errors via four key strategies:**
 
-1. **Independent `reduceResolution` chains (NB1)**: Each fine-resolution dataset (25m GEDI, 30m JRC, 30m SRTM, 90m MERIT) is aggregated to MODIS resolution independently. No cross-dataset dependencies are evaluated during the Stage 1 reduction.
-2. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing the Stage 1 base stack exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
-3. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 computes FRIP (cross-sectional + annual) in memory from the materialized Stage 1 asset, aggregates covariates, and writes the final **42 GeoTIFFs** directly to Google Drive.
-4. **GEE-based Mann-Kendall Trend (mk_tau)**: We compute the Mann-Kendall trend τ of annual FRIP across 2001–2023 directly in Earth Engine. This compresses 23 annual bands into a single highly informative `frip_mk_tau` band, saving 70% in export file size.
-5. **Deferred Vector Masking**: All vector layers (HydroSHEDS basins, WDPA protected areas, countries) are rasterized and masked *locally in R* onto the exported GeoTIFF grids. This keeps GEE fully raster-based and extremely fast.
+1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **three lightweight modular assets** exported in parallel.
+   * *NppStack (24 bands)*: Already at MODIS scale; zero `reduceResolution` memory overhead.
+   * *GediStack (3 bands)*: Only 3 active `reduceResolution` chains in memory.
+   * *CovStack (7 bands)*: Only 7 active `reduceResolution` chains in memory.
+2. **Basin-Specific Geometry Clipping**: Every high-resolution dataset (SRTM, GLOFAS, JRC TMF, MERIT Hydro, SoilGrids, GEDI) is explicitly clipped to the target basin bounding box (`basin_geom`) *before* executing `reduceResolution`. This bounds the reprojection grid and keeps the pixel grid well below the ~300M pixel limit.
+3. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing all GEE exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
+4. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 loads the materialized static modular assets, concatenates them instantly in one millisecond (`ee.Image.cat`), and writes the final **42 GeoTIFFs** directly to Google Drive.
+5. **GEE-based Mann-Kendall Trend (mk_tau)**: We compute the Mann-Kendall trend τ of annual FRIP across 2001–2023 directly in Earth Engine. This compresses 23 annual bands into a single highly informative `frip_mk_tau` band, saving 70% in export file size.
+6. **Deferred Vector Masking**: All vector layers (HydroSHEDS basins, WDPA protected areas, countries) are rasterized and masked *locally in R* onto the exported GeoTIFF grids. This keeps GEE fully raster-based and extremely fast.
 
 ---
 
@@ -82,42 +86,31 @@ ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 
 ---
 
-## NB1: Base Stack Export (`01_BaseStack_GEE.ipynb`)
+## NB1: Base Stack Exports (`01_BaseStack_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Exports**: GEE Assets (2 tasks — one per basin)
+**Compute**: GEE Python Colab | **Exports**: GEE Assets (6 parallel tasks — 3 per basin)
 
-Exports a single 34-band raster per basin at MODIS WGS84 resolution (~463m equivalent). Contains ALL variables needed for downstream FRIP and GEDI analysis.
+Exports three modular assets per basin at MODIS WGS84 resolution (~463m equivalent) to bypass the memory ceiling:
 
-### Base Stack Bands (34 total)
+### 1. `NppStack_{basin}` (24 bands)
+*   **Bands**: `Npp_median`, `NPP_2001` – `NPP_2023` (MODIS MOD17A3HGF)
+*   **Resolution**: Native MODIS scale (0 aggregation overhead).
 
-| # | Band | Source | Native res → 463m |
-|---|---|---|---|
-| 1 | `Npp_median` | MODIS MOD17A3HGF | native |
-| 2–24 | `NPP_2001` – `NPP_2023` | MODIS MOD17A3HGF | native |
-| 25 | `flood_freq` | JRC GLOFAS v2_1 (binary depth ≥0, summed across 7 return periods) + MERIT HND mask | ~4km/90m → 463m |
-| 26 | `forest_fraction` | JRC TMF v1_2024 class 10 | 30m → 463m |
-| 27 | `elevation` | SRTM | 30m → 463m |
-| 28 | `slope` | SRTM-derived | 30m → 463m |
-| 29 | `hnd` | MERIT Hydro | 90m → 463m |
-| 30 | `GEDI_UOI` | GEDI L2B: 1 − (pavd_z0/pai) | 25m → 463m |
-| 31 | `GEDI_N` | GEDI L2B footprint count | 25m → 463m |
-| 32 | `GEDI_rh98` | GEDI L2A canopy height | 25m → 463m |
-| 33 | `precip` | CHIRPS daily → annual mean | ~5km → 463m |
-| 34 | `clay` | OpenLandMap SoilGrids clay fraction | 250m → 463m |
+### 2. `GediStack_{basin}` (3 bands)
+*   **Bands**: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98`
+*   **Resolution**: Aggregated from 25m GEDI L2A/L2B (only 3 `reduceResolution` memory chains).
 
-**Assets exported**:
-```
-projects/.../DefaunationFromSpace/BaseStack_Congo
-projects/.../DefaunationFromSpace/BaseStack_Amazon
-```
+### 3. `CovStack_{basin}` (7 bands)
+*   **Bands**: `flood_freq` (GLOFAS + HND mask), `forest_fraction` (JRC TMF), `elevation` (SRTM), `slope` (SRTM slope), `hnd` (MERIT Hydro), `precip` (CHIRPS), `clay` (SoilGrids)
+*   **Resolution**: Aggregated from native high-res datasets (only 7 `reduceResolution` memory chains).
 
 ---
 
 ## NB2: Signals and Drive Exports (`02_Signals_And_Exports_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Loads**: Base stack assets from NB1 | **Exports**: Drive GeoTIFFs (42 tasks)
+**Compute**: GEE Python Colab | **Loads**: Modular assets from NB1 | **Exports**: Drive GeoTIFFs (42 tasks)
 
-Computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin:
+Loads `NppStack`, `GediStack`, and `CovStack`, concatenates them instantly (`ee.Image.cat([npp, gedi, covs])`), computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin:
 
 ### 1. Multi-scale Stacks (40 total — 20 scales × 2 basins)
 Contains **11 bands** for multi-scale analysis:
@@ -176,8 +169,8 @@ Applies OLS adjustment coefficients from NB4 to produce "denoised" signal maps. 
 
 | Component | Status |
 |---|---|
-| `01_BaseStack_GEE.ipynb` | ✅ Built — running server-side (WGS84) |
-| `02_Signals_And_Exports_GEE.ipynb` | ✅ Built — verified, updated to 42 TIFFs + GEE Mann-Kendall |
+| `01_BaseStack_GEE.ipynb` | ✅ Built — modular stacks ready to run |
+| `02_Signals_And_Exports_GEE.ipynb` | ✅ Built — verified, updated to load modular stacks |
 | `04_Analysis/` (R scripts) | 🔲 To build |
 | `05_Denoising_Maps.ipynb` | 🔲 To build |
 | Legacy FRIP R pipeline | ✅ Reference |
