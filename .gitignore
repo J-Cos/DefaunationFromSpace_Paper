@@ -53,3 +53,6 @@ legacy/
 # GEE & geemap
 .geemap/
 credentials.json
+
+# Scratch scripts
+scratch/
