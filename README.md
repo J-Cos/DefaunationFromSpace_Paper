@@ -37,8 +37,8 @@ The two signals operate on different temporal spans:
 The GEE analysis data production is decoupled into a robust, two-notebook architecture that resolves all computational bottlenecks:
 
 ```
-01_BaseStack_GEE.ipynb          GEE — 6 modular base stacks at ~463m → GEE Assets
-         │                        (NppStack [24b], GediStack [3b], CovStack [7b] per basin)
+01_BaseStack_GEE.ipynb          GEE — 10 modular base stacks at ~463m → GEE Assets
+         │                        (NppStack [24b], 3× GEDI [1b each], CovStack [7b] per basin)
          ▼  (load & concatenate)
 02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, exports 42 GeoTIFFs → Drive
          │
@@ -58,10 +58,10 @@ The GEE analysis data production is decoupled into a robust, two-notebook archit
 
 **This architecture resolves all GEE "User memory limit exceeded" and "Reprojection output too large" errors via four key strategies:**
 
-1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **three lightweight modular assets** exported in parallel.
+1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **five lightweight modular assets** exported in parallel.
    * *NppStack (24 bands)*: Already at MODIS scale; zero `reduceResolution` memory overhead.
-   * *GediStack (3 bands)*: Only 3 active `reduceResolution` chains in memory.
-   * *CovStack (7 bands)*: Only 7 active `reduceResolution` chains in memory.
+   * *GediUOI, GediN, GediRh98 (1 band each)*: Exported **individually** to avoid OOM from concurrent temporal-compositing + spatial-reduction chains. Each GEDI band involves reducing ~48 monthly images at 25m to 463m — exporting them separately cuts peak memory by ~3×.
+   * *CovStack (7 bands)*: Only 7 active `reduceResolution` chains from static datasets.
 2. **Basin-Specific Geometry Clipping**: Every high-resolution dataset (SRTM, GLOFAS, JRC TMF, MERIT Hydro, SoilGrids, GEDI) is explicitly clipped to the target basin bounding box (`basin_geom`) *before* executing `reduceResolution`. This bounds the reprojection grid and keeps the pixel grid well below the ~300M pixel limit.
 3. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing all GEE exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
 4. **Decoupled Drive Exports (NB2)**: Rather than exporting temporary GEE assets, NB2 loads the materialized static modular assets, concatenates them instantly in one millisecond (`ee.Image.cat`), and writes the final **42 GeoTIFFs** directly to Google Drive.
@@ -88,19 +88,20 @@ ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 
 ## NB1: Base Stack Exports (`01_BaseStack_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Exports**: GEE Assets (6 parallel tasks — 3 per basin)
+**Compute**: GEE Python Colab | **Exports**: GEE Assets (10 parallel tasks — 5 per basin)
 
-Exports three modular assets per basin at MODIS WGS84 resolution (~463m equivalent) to bypass the memory ceiling:
+Exports five modular assets per basin at MODIS WGS84 resolution (~463m equivalent) to bypass the memory ceiling:
 
 ### 1. `NppStack_{basin}` (24 bands)
 *   **Bands**: `Npp_median`, `NPP_2001` – `NPP_2023` (MODIS MOD17A3HGF)
 *   **Resolution**: Native MODIS scale (0 aggregation overhead).
 
-### 2. `GediStack_{basin}` (3 bands)
-*   **Bands**: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98`
-*   **Resolution**: Aggregated from 25m GEDI L2A/L2B (only 3 `reduceResolution` memory chains).
+### 2–4. `GediUOI_{basin}`, `GediN_{basin}`, `GediRh98_{basin}` (1 band each)
+*   **Bands**: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98` (exported individually)
+*   **Resolution**: Aggregated from 25m GEDI L2A/L2B. Exported as separate single-band assets to avoid OOM from concurrent temporal-compositing chains (~48 monthly images per pixel).
+*   **Projection**: Default projection set to `EPSG:4326` at 25m to avoid cross-zone UTM reprojection overhead.
 
-### 3. `CovStack_{basin}` (7 bands)
+### 5. `CovStack_{basin}` (7 bands)
 *   **Bands**: `flood_freq` (GLOFAS + HND mask), `forest_fraction` (JRC TMF), `elevation` (SRTM), `slope` (SRTM slope), `hnd` (MERIT Hydro), `precip` (CHIRPS), `clay` (SoilGrids)
 *   **Resolution**: Aggregated from native high-res datasets (only 7 `reduceResolution` memory chains).
 
