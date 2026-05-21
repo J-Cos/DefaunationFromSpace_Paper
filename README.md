@@ -60,7 +60,7 @@ The GEE analysis data production is decoupled into a robust, two-notebook archit
 
 1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **five lightweight modular assets** exported in parallel.
    * *NppStack (24 bands)*: Already at MODIS scale; zero `reduceResolution` memory overhead.
-   * *GediUOI, GediN, GediRh98 (1 band each)*: Exported **individually** to avoid OOM from concurrent temporal-compositing + spatial-reduction chains. Each GEDI band involves reducing ~48 monthly images at 25m to 463m — exporting them separately cuts peak memory by ~3×.
+   * *GediUOI, GediN, GediRh98 (1 band each)*: Exported **individually at their native 25m resolution** (Option 2). By removing `reduceResolution` from the temporal-averaging steps in Stage 1 and exporting them as 25m static rasters, we completely eliminate server-side "User memory limit exceeded" errors.
    * *CovStack (7 bands)*: Only 7 active `reduceResolution` chains from static datasets.
 2. **Basin-Specific Geometry Clipping**: Every high-resolution dataset (SRTM, GLOFAS, JRC TMF, MERIT Hydro, SoilGrids, GEDI) is explicitly clipped to the target basin bounding box (`basin_geom`) *before* executing `reduceResolution`. This bounds the reprojection grid and keeps the pixel grid well below the ~300M pixel limit.
 3. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing all GEE exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
@@ -98,7 +98,7 @@ Exports five modular assets per basin at MODIS WGS84 resolution (~463m equivalen
 
 ### 2–4. `GediUOI_{basin}`, `GediN_{basin}`, `GediRh98_{basin}` (1 band each)
 *   **Bands**: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98` (exported individually)
-*   **Resolution**: Aggregated from 25m GEDI L2A/L2B. Exported as separate single-band assets to avoid OOM from concurrent temporal-compositing chains (~48 monthly images per pixel).
+*   **Resolution**: **Native 25m resolution** (when `EXPORT_NATIVE_GEDI = True` is set in NB1). Bypasses server-side spatial reduction during temporal aggregation, completely resolving GEE OOM limits.
 *   **Projection**: Default projection set to `EPSG:4326` at 25m to avoid cross-zone UTM reprojection overhead.
 
 ### 5. `CovStack_{basin}` (7 bands)
@@ -111,7 +111,11 @@ Exports five modular assets per basin at MODIS WGS84 resolution (~463m equivalen
 
 **Compute**: GEE Python Colab | **Loads**: Modular assets from NB1 | **Exports**: Drive GeoTIFFs (42 tasks)
 
-Loads `NppStack`, `GediStack`, and `CovStack`, concatenates them instantly (`ee.Image.cat([npp, gedi, covs])`), computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin:
+Loads `NppStack`, `GediStack`, and `CovStack`, concatenates them instantly (`ee.Image.cat([npp, gedi, covs])`), computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin.
+
+**Dynamic Native-Scale GEDI Handling (Option 2)**:
+* NB2 dynamically detects whether the GEDI assets are in native 25m format (`IS_NATIVE_GEDI = True`). 
+* If native, it applies undisturbed forest and topographic masks at high-precision native 25m resolution, and then performs the area-weighted spatial reduction (`reduceResolution`) directly on the static single-band 25m rasters to aggregate them to MODIS and other analysis scales. This is computationally fast, lightweight, and scientifically precise.
 
 ### 1. Multi-scale Stacks (40 total — 20 scales × 2 basins)
 Contains **11 bands** for multi-scale analysis:
