@@ -37,8 +37,8 @@ The two signals operate on different temporal spans:
 The GEE analysis data production is decoupled into a robust, two-notebook architecture that resolves all computational bottlenecks:
 
 ```
-01_BaseStack_GEE.ipynb          GEE — 10 modular base stacks at ~463m → GEE Assets
-         │                        (NppStack [24b], 3× GEDI [1b each], CovStack [7b] per basin)
+01_BaseStack_GEE.ipynb          GEE — 22 modular base stacks → GEE Assets
+         │                        (NppStack [24b], CovStack [7b] at ~463m; 9× GediStack grids [3b each] at 25m per basin)
          ▼  (load & concatenate)
 02_Signals_And_Exports_GEE.ipynb GEE — computes FRIP & GEDI, exports 42 GeoTIFFs → Drive
          │
@@ -58,9 +58,9 @@ The GEE analysis data production is decoupled into a robust, two-notebook archit
 
 **This architecture resolves all GEE "User memory limit exceeded" and "Reprojection output too large" errors via four key strategies:**
 
-1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **five lightweight modular assets** exported in parallel.
+1. **Modular Parallel Base Stacks (NB1)**: To bypass GEE's memory ceiling, we split the 34-band composite into **three lightweight modular assets** per basin exported in parallel.
    * *NppStack (24 bands)*: Already at MODIS scale; zero `reduceResolution` memory overhead.
-   * *GediUOI, GediN, GediRh98 (1 band each)*: Exported **individually at their native 25m resolution** (Option 2). By removing `reduceResolution` from the temporal-averaging steps in Stage 1 and exporting them as 25m static rasters, we completely eliminate server-side "User memory limit exceeded" errors.
+   * *GediStack (3 bands, 9 spatial grids)*: Stacks the GEDI L2B Understory Openness Index (UOI), footprint count (N), and L2A height (rh98) into a unified 3-band asset exported at native 25m resolution. Stacking these bands and gridding them into a 3x3 layout bypasses Earth Engine's spatial boundaries and memory limits, completely eliminating server-side "User memory limit exceeded" errors.
    * *CovStack (7 bands)*: Only 7 active `reduceResolution` chains from static datasets.
 2. **Basin-Specific Geometry Clipping**: Every high-resolution dataset (SRTM, GLOFAS, JRC TMF, MERIT Hydro, SoilGrids, GEDI) is explicitly clipped to the target basin bounding box (`basin_geom`) *before* executing `reduceResolution`. This bounds the reprojection grid and keeps the pixel grid well below the ~300M pixel limit.
 3. **Standard Geographic Projection (`EPSG:4326`)**: Standardizing all GEE exports to standard geographic WGS84 coordinates avoids sinusoidal projection boundary limits (`Can't transform` coordinate error) at the edges of the Amazon basin.
@@ -88,20 +88,21 @@ ASSET_ROOT   = 'projects/quantum-bonus-434714-t2/assets/DefaunationFromSpace'
 
 ## NB1: Base Stack Exports (`01_BaseStack_GEE.ipynb`)
 
-**Compute**: GEE Python Colab | **Exports**: GEE Assets (10 parallel tasks — 5 per basin)
+**Compute**: GEE Python Colab | **Exports**: GEE Assets (22 parallel tasks — 11 per basin)
 
-Exports five modular assets per basin at MODIS WGS84 resolution (~463m equivalent) to bypass the memory ceiling:
+Exports three modular assets per basin (with the high-resolution GEDI stack spatially gridded) to bypass Earth Engine's memory ceiling:
 
 ### 1. `NppStack_{basin}` (24 bands)
 *   **Bands**: `Npp_median`, `NPP_2001` – `NPP_2023` (MODIS MOD17A3HGF)
 *   **Resolution**: Native MODIS scale (0 aggregation overhead).
 
-### 2–4. `GediUOI_{basin}`, `GediN_{basin}`, `GediRh98_{basin}` (1 band each)
-*   **Bands**: `GEDI_UOI`, `GEDI_N`, `GEDI_rh98` (exported individually)
-*   **Resolution**: **Native 25m resolution** (when `EXPORT_NATIVE_GEDI = True` is set in NB1). Bypasses server-side spatial reduction during temporal aggregation, completely resolving GEE OOM limits.
+### 2. `GediStack_{basin}_{gi}` (3 bands, 9 grids per basin)
+*   **Bands**: `GEDI_UOI` (Understory Openness Index), `GEDI_N` (footprint count), `GEDI_rh98` (height)
+*   **Resolution**: **Native 25m resolution**
+*   **Grid Partition**: Split into a 3x3 spatial grid (`gi` from 0 to 8) to circumvent Earth Engine size limits for exporting high-density native 25m layers.
 *   **Projection**: Default projection set to `EPSG:4326` at 25m to avoid cross-zone UTM reprojection overhead.
 
-### 5. `CovStack_{basin}` (7 bands)
+### 3. `CovStack_{basin}` (7 bands)
 *   **Bands**: `flood_freq` (GLOFAS + HND mask), `forest_fraction` (JRC TMF), `elevation` (SRTM), `slope` (SRTM slope), `hnd` (MERIT Hydro), `precip` (CHIRPS), `clay` (SoilGrids)
 *   **Resolution**: Aggregated from native high-res datasets (only 7 `reduceResolution` memory chains).
 
@@ -111,11 +112,12 @@ Exports five modular assets per basin at MODIS WGS84 resolution (~463m equivalen
 
 **Compute**: GEE Python Colab | **Loads**: Modular assets from NB1 | **Exports**: Drive GeoTIFFs (42 tasks)
 
-Loads `NppStack`, `GediStack`, and `CovStack`, concatenates them instantly (`ee.Image.cat([npp, gedi, covs])`), computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin.
+Loads `NppStack`, `GediStack` (mosaicking the 9 grids back together), and `CovStack`, concatenates them instantly (`ee.Image.cat([npp, gedi, covs])`), computes FRIP and GEDI structural indicators in memory, aggregates environmental covariates, and compiles them directly into 42 unified GeoTIFFs per scale and basin.
 
-**Dynamic Native-Scale GEDI Handling (Option 2)**:
-* NB2 dynamically detects whether the GEDI assets are in native 25m format (`IS_NATIVE_GEDI = True`). 
-* If native, it applies undisturbed forest and topographic masks at high-precision native 25m resolution, and then performs the area-weighted spatial reduction (`reduceResolution`) directly on the static single-band 25m rasters to aggregate them to MODIS and other analysis scales. This is computationally fast, lightweight, and scientifically precise.
+**High-Fidelity Native-Scale GEDI Aggregation**:
+* GEDI inputs are loaded as a native 25m multi-band mosaic.
+* High-precision undisturbed forest cover and topographic masks are applied directly at the 25m native resolution, preventing spatial leakage or edge contamination.
+* Performs the area-weighted spatial reduction (`reduceResolution`) directly on the masked 25m GEDI stack to aggregate UOI, rh98, and footprint count to MODIS and multi-scale targets (5km to 100km). This approach is computationally clean, resource-efficient, and scientifically precise.
 
 ### 1. Multi-scale Stacks (40 total — 20 scales × 2 basins)
 Contains **11 bands** for multi-scale analysis:
