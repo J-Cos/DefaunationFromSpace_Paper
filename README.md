@@ -68,6 +68,8 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
     A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, temporal weighting, regression modeling, and spatial projection mapping modules.
 7.  **[code/06_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Integration_Tests.R):**  
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `04`) on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, CSV tables, and manuscript figures.
+8.  **[code/07_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Pipeline_Visualization.R):**  
+    Generates premium, PNAS-style multipanel manuscript Figures 1 and 2, which visually synthesize GEDI orbital shot density distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
 
 ### **Core Biophysical Functions Module**
 
