@@ -2,14 +2,15 @@
 # 08h_25km_Multipanel_Synthesis.R
 #
 # Generates a premium, publication-quality multipanel figure for the 25km scale:
-#   - Panel A: Scatterplot of empirical data, fitted weight-normalized Tweedie GLM,
-#              and extrapolation up to UOI = 1.0.
+#   - Panel A: Scatterplot of empirical data, fitted weight-normalized Sigmoid model,
+#              and robust bootstrapped extrapolation up to UOI = 1.0.
 #   - Panel B: Boxplots of GEDI UOI pixels inside each buffered MCP polygon with
 #              individual pixel jitter overlaid, ordered by cluster biomass index
 #              and colored by continent.
 #   - Panel C: Spatial maps for each continent:
-#              - GEDI UOI (25km)
-#              - Predicted Biomass Index (25km) from Tweedie GLM
+#              - GEDI UOI (25km) with highly informative viridis palette (0.91 - 0.97)
+#              - Predicted Biomass Index (25km) from Sigmoid model with winsorized
+#                inferno palette (0 - 2000)
 #
 # Saves figure to:
 #   - outputs/congo_ct_gee_25km_multipanel_synthesis.png
@@ -126,37 +127,90 @@ joined_data <- joined_data %>%
 # Weight normalization (mean = 1)
 joined_data$w_uoi_norm <- joined_data$w_uoi / mean(joined_data$w_uoi)
 
-# --- 4. Fit Weight-Normalized Tweedie GLM (25 km) ----------------------------
-tw_model <- gam(
-  B_H_index ~ uoi,
-  family = tw(),
-  weights = w_uoi_norm,
-  data = joined_data,
-  method = "REML"
+# --- 4. Fit Weight-Normalized Sigmoid Model (25 km) --------------------------
+# Define Sigmoid (3-parameter logistic) function
+sigmoid <- function(x, L, k, x0) {
+  L / (1 + exp(-k * (x - x0)))
+}
+
+# Weighted Least Squares Objective Function
+wls_obj <- function(params, x_val, y_val, w_val) {
+  L <- params[1]
+  k <- params[2]
+  x0 <- params[3]
+  pred <- sigmoid(x_val, L, k, x0)
+  sum(w_val * (y_val - pred)^2)
+}
+
+init_params <- c(L = 4000, k = 100, x0 = 0.94)
+res_opt <- optim(
+  init_params, wls_obj,
+  x_val = joined_data$uoi,
+  y_val = joined_data$B_H_index,
+  w_val = joined_data$w_uoi_norm,
+  method = "L-BFGS-B",
+  lower = c(100, 10, 0.85),
+  upper = c(10000, 500, 1.0)
 )
 
-s_tw <- summary(tw_model)
-p_val <- s_tw$p.pv["uoi"]
-dev_expl <- s_tw$dev.expl * 100
-p_text <- if (p_val < 0.001) "p < 0.001" else sprintf("p = %.4f", p_val)
+L_fit <- res_opt$par[1]
+k_fit <- res_opt$par[2]
+x0_fit <- res_opt$par[3]
 
-cat(sprintf("✓ Tweedie GLM (25 km) fitted: DevExpl = %.2f%%, %s\n", dev_expl, p_text))
+# Compute R-squared and Weighted R-squared
+mean_y <- mean(joined_data$B_H_index)
+w_mean_y <- sum(joined_data$w_uoi_norm * joined_data$B_H_index) / sum(joined_data$w_uoi_norm)
+
+tss <- sum((joined_data$B_H_index - mean_y)^2)
+rss <- sum((joined_data$B_H_index - sigmoid(joined_data$uoi, L_fit, k_fit, x0_fit))^2)
+r2_val <- 1 - rss/tss
+
+wtss <- sum(joined_data$w_uoi_norm * (joined_data$B_H_index - w_mean_y)^2)
+wrss <- sum(joined_data$w_uoi_norm * (joined_data$B_H_index - sigmoid(joined_data$uoi, L_fit, k_fit, x0_fit))^2)
+wr2_val <- 1 - wrss/wtss
+
+cat(sprintf("✓ Sigmoid Model (25 km) fitted: Weighted R2 = %.2f%%, Unweighted R2 = %.2f%%\n", wr2_val * 100, r2_val * 100))
+cat(sprintf("  Asymptote (L) = %.2f, Growth Rate (k) = %.2f, Midpoint (x0) = %.4f\n", L_fit, k_fit, x0_fit))
 
 # --- 5. PANEL A: Scatter Plot and Model Extrapolation ------------------------
-cat("  Generating Panel A (Scatterplot with extrapolation to UOI=1.0)...\n")
+cat("  Generating Panel A (Scatterplot with sigmoid extrapolation to UOI=1.0)...\n")
 
-# Extend the sequence up to UOI = 1.00
+# Bootstrap 500 times for robust non-linear confidence intervals
+set.seed(42)
+n_boot <- 500
 uoi_seq <- seq(0.91, 1.00, length.out = 300)
-pred_df <- data.frame(uoi = uoi_seq)
-pred <- predict(tw_model, newdata = pred_df, type = "link", se.fit = TRUE)
+boot_preds <- matrix(NA, nrow = n_boot, ncol = length(uoi_seq))
 
-pred_df$fit <- exp(pred$fit)
-pred_df$lower <- exp(pred$fit - 1.96 * pred$se.fit)
-pred_df$upper <- exp(pred$fit + 1.96 * pred$se.fit)
+cat("  Bootstrapping sigmoid curve for 95% confidence ribbon...\n")
+for (b in 1:n_boot) {
+  boot_idx <- sample(1:nrow(joined_data), replace = TRUE)
+  x_b <- joined_data$uoi[boot_idx]
+  y_b <- joined_data$B_H_index[boot_idx]
+  w_b <- joined_data$w_uoi_norm[boot_idx]
+  w_b_norm <- w_b / mean(w_b)
+  
+  res_b <- tryCatch({
+    optim(init_params, wls_obj, x_val = x_b, y_val = y_b, w_val = w_b_norm, method = "L-BFGS-B",
+          lower = c(100, 10, 0.85), upper = c(10000, 500, 1.0))
+  }, error = function(e) NULL)
+  
+  if (!is.null(res_b) && res_b$convergence == 0) {
+    boot_preds[b, ] <- sigmoid(uoi_seq, res_b$par[1], res_b$par[2], res_b$par[3])
+  } else {
+    boot_preds[b, ] <- sigmoid(uoi_seq, L_fit, k_fit, x0_fit)
+  }
+}
+
+pred_df <- data.frame(
+  uoi = uoi_seq,
+  fit = sigmoid(uoi_seq, L_fit, k_fit, x0_fit),
+  lower = apply(boot_preds, 2, function(col) quantile(col, 0.025, na.rm = TRUE)),
+  upper = apply(boot_preds, 2, function(col) quantile(col, 0.975, na.rm = TRUE))
+)
 
 stat_label <- sprintf(
-  "Tweedie GLM (25 km)\nDeviance expl. = %.1f%%\n%s\nN = %d clusters",
-  dev_expl, p_text, nrow(joined_data)
+  "Weighted Sigmoid (25 km)\nWeighted R² = %.1f%%\nN = %d clusters",
+  wr2_val * 100, nrow(joined_data)
 )
 
 p_scatter <- ggplot() +
@@ -222,7 +276,7 @@ p_scatter <- ggplot() +
     legend.margin = margin(t = -5, r = 0, b = 0, l = 0, unit = "pt")
   ) +
   labs(
-    title = "A. Tweedie Model Fit & Extrapolation (25 km)",
+    title = "A. Sigmoid Model Fit & Extrapolation (25 km)",
     x = "GEDI Understory Openness Index (UOI)",
     y = "Total Mammal Biomass Index"
   )
@@ -283,8 +337,7 @@ r_congo_cropped <- crop(r_congo, study_extent_congo)
 congo_cells <- as.data.frame(r_congo_cropped[["uoi"]], cells = TRUE, xy = TRUE, na.rm = TRUE)
 names(congo_cells)[names(congo_cells) == "uoi"] <- "uoi"
 
-pred_congo <- predict(tw_model, newdata = congo_cells, type = "link", se.fit = TRUE)
-congo_cells$pred <- exp(pred_congo$fit)
+congo_cells$pred <- sigmoid(congo_cells$uoi, L_fit, k_fit, x0_fit)
 
 r_pred_congo <- rast(r_congo_cropped[["uoi"]])
 names(r_pred_congo) <- "pred"
@@ -297,8 +350,7 @@ r_amazon_cropped <- crop(r_amazon, study_extent_amazon)
 amazon_cells <- as.data.frame(r_amazon_cropped[["uoi"]], cells = TRUE, xy = TRUE, na.rm = TRUE)
 names(amazon_cells)[names(amazon_cells) == "uoi"] <- "uoi"
 
-pred_amazon <- predict(tw_model, newdata = amazon_cells, type = "link", se.fit = TRUE)
-amazon_cells$pred <- exp(pred_amazon$fit)
+amazon_cells$pred <- sigmoid(amazon_cells$uoi, L_fit, k_fit, x0_fit)
 
 r_pred_amazon <- rast(r_amazon_cropped[["uoi"]])
 names(r_pred_amazon) <- "pred"
@@ -358,11 +410,17 @@ make_map_panel <- function(r_data, mcps_vector, palette_option, title, legend_ti
   return(p)
 }
 
-# Generate Map Sub-panels (UOI using viridis, Predictions using inferno clamped at 5000)
-p_congo_uoi  <- make_map_panel(r_congo_cropped[["uoi"]], mcps_congo, "viridis", "C.1 Congo GEDI UOI (25 km)", "UOI", limits = c(0.91, 1.00))
-p_congo_pred <- make_map_panel(r_pred_congo,             mcps_congo, "inferno", "C.2 Congo Predicted Biomass (25 km)", "Biomass", limits = c(0, 5000), winsorize = TRUE)
-p_amazon_uoi  <- make_map_panel(r_amazon_cropped[["uoi"]], mcps_amazon, "viridis", "C.3 Amazon GEDI UOI (25 km)", "UOI", limits = c(0.91, 1.00))
-p_amazon_pred <- make_map_panel(r_pred_amazon,             mcps_amazon, "inferno", "C.4 Amazon Predicted Biomass (25 km)", "Biomass", limits = c(0, 5000), winsorize = TRUE)
+# Generate Map Sub-panels (UOI using viridis, Predictions using inferno)
+# Optimized dynamic ranges based on empirical raster percentiles to maximize contrast:
+# GEDI UOI is bounded between 0.91 and 0.97.
+# Predicted Biomass spans 0 to 3311, with 99% of pixels below 1400.
+uoi_lims <- c(0.91, 0.97)
+pred_lims <- c(0, 2000)
+
+p_congo_uoi  <- make_map_panel(r_congo_cropped[["uoi"]], mcps_congo, "viridis", "C.1 Congo GEDI UOI (25 km)", "UOI", limits = uoi_lims, winsorize = TRUE)
+p_congo_pred <- make_map_panel(r_pred_congo,             mcps_congo, "inferno", "C.2 Congo Predicted Biomass (25 km)", "Biomass", limits = pred_lims, winsorize = TRUE)
+p_amazon_uoi  <- make_map_panel(r_amazon_cropped[["uoi"]], mcps_amazon, "viridis", "C.3 Amazon GEDI UOI (25 km)", "UOI", limits = uoi_lims, winsorize = TRUE)
+p_amazon_pred <- make_map_panel(r_pred_amazon,             mcps_amazon, "inferno", "C.4 Amazon Predicted Biomass (25 km)", "Biomass", limits = pred_lims, winsorize = TRUE)
 
 # Lay out Panel C as a 2x2 grid
 fig_maps <- cowplot::plot_grid(
