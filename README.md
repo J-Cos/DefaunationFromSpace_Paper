@@ -206,6 +206,20 @@ A polarity unit test [5/5] verifies the mask logic using synthetic constant imag
 
 ---
 
+## Joint Camera Trapping & Biophysical Scaling Analysis
+
+To empirically ground the remote-sensing structural (GEDI) and functional (FRIP) hypotheses, the repository includes a Python-based camera trap community and biophysical scaling pipeline (`code/process_camera_traps.py` and `code/visualise_camera_traps.py`). This pipeline ingests raw Wildlife Insights data packages from the Amazon and Congo basins, collapses image series using a 30-minute independence window, matches species to EltonTraits database masses (`MamFuncDat.txt` & `BirdFuncDat.txt`), corrects relative abundance indices (RAI) for allometric day-range scaling, and estimates landscape cluster-level biophysical metrics (richness $S$, standing Biomass Index $B_H$, and Metabolism Index $M_H$).
+
+### ⚠️ Sampling Effort Bias & Robustness Thresholds
+As shown by the diagnostic bias checks (**Figure 4**), camera trap community metrics are highly sensitive to cumulative sampling effort at the cluster scale:
+* Taxon richness ($S$) is extremely sensitive to effort ($r_S = 0.733, P < 0.0001$), reflecting standard species-accumulation behaviors.
+* Standing biomass ($B_H$) and megafaunal biomass indices ($B_{H, >50}, B_{H, >100}$) show moderate to high positive correlations with cumulative effort ($r_S = 0.40 \text{ to } 0.52$).
+
+> [!IMPORTANT]
+> **Robustness Filtering Rule**: For future downstream linkages between camera trap biophysical indices and remote sensing covariates (GEDI/MODIS), **clusters with $\le 100$ cumulative trap-days must be excluded**. Clusters below this threshold are severely under-sampled, resulting in highly biased richness and biomass estimates that confound ecological scaling relationships.
+
+---
+
 ## Repository Structure
 
 ```
