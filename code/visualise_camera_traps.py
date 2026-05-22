@@ -529,7 +529,7 @@ def make_figure3(det: pd.DataFrame, metrics: pd.DataFrame, fig_dir: Path):
             ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
                     ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
         
-    ax.set_ylabel("Biomass Index for animals >50 kg ($B_{H,>50}$)")
+    ax.set_ylabel("Biomass Index for animals >50 kg ($B_{H,>50}$, relative units)")
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
@@ -570,7 +570,7 @@ def make_figure3(det: pd.DataFrame, metrics: pd.DataFrame, fig_dir: Path):
             ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
                     ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
         
-    ax.set_ylabel("Biomass Index for megafauna >100 kg ($B_{H,>100}$)")
+    ax.set_ylabel("Biomass Index for megafauna >100 kg ($B_{H,>100}$, relative units)")
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
