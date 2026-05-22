@@ -17,11 +17,12 @@ env/
 .DS_Store
 
 # Data and Outputs
-data/processed/
-data/local/
+data/
+outputs/
 figures/
 *.tif
 *.RDS
+*.csv
 
 # GIS files
 *.shp
