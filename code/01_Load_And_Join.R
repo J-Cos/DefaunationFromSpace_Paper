@@ -40,7 +40,7 @@ cat("=== 01: Load and Join ===\n\n")
 
 # --- Configuration -----------------------------------------------------------
 
-STACK_DIR  <- file.path("outputs", "synthetic_EOdata")
+STACK_DIR  <- resolve_data_dir()
 RDS_DIR    <- file.path("outputs", "rds")
 dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
 

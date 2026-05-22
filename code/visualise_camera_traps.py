@@ -253,6 +253,19 @@ def aggregate_to_clusters(det, cluster_map):
     return cluster_metrics, clustered_det
 
 
+def _compute_region_extent(det: pd.DataFrame, region: str, pad: float = 1.0) -> list:
+    """Dynamically compute [xmin, xmax, ymin, ymax] map extent from deployment coords."""
+    sub = det[det["region"] == region]
+    if sub.empty:
+        return [0, 1, 0, 1]
+    return [
+        sub["longitude"].min() - pad,
+        sub["longitude"].max() + pad,
+        sub["latitude"].min() - pad,
+        sub["latitude"].max() + pad
+    ]
+
+
 # ── Figure 1: Camera Trap Detections & Diversity ───────────────────────────
 
 def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: pd.DataFrame, fig_dir: Path):
@@ -288,8 +301,8 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     gs_maps = gs[0, :].subgridspec(1, 2, wspace=0.15)
     
     regions_info = [
-        {"name": "Congo", "extent": [9.0, 17.5, -2.5, 5.5], "gs": gs_maps[0]},
-        {"name": "Amazon", "extent": [-63.5, -45.5, -8.5, 3.5], "gs": gs_maps[1]}
+        {"name": "Congo", "extent": _compute_region_extent(det, "Congo"), "gs": gs_maps[0]},
+        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]}
     ]
 
     # Shared log-scaled effort normalization across all clusters globally
@@ -651,8 +664,8 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     gs_maps = gs[0, :].subgridspec(1, 2, wspace=0.15)
     
     regions_info = [
-        {"name": "Congo", "extent": [9.0, 17.5, -2.5, 5.5], "gs": gs_maps[0]},
-        {"name": "Amazon", "extent": [-63.5, -45.5, -8.5, 3.5], "gs": gs_maps[1]}
+        {"name": "Congo", "extent": _compute_region_extent(det, "Congo"), "gs": gs_maps[0]},
+        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]}
     ]
 
     # Shared log-scaled biomass normalization across all clusters globally
@@ -1081,12 +1094,82 @@ def main():
     cluster_metrics.to_csv(cluster_metrics_path, index=False)
     print(f"Saved aggregated cluster-level metrics to {cluster_metrics_path}")
 
-    # Apply robustness filter: keep only clusters with trap_days > 100
-    print("\nApplying robustness filter (trap_days > 100)...")
-    robust_cluster_metrics = cluster_metrics[cluster_metrics["trap_days"] > 100.0].copy()
+    # Apply robustness filter: keep only clusters with trap_days > 0 (i.e. keep all clusters)
+    print("\nApplying robustness filter (trap_days > 0.0) to keep all clusters...")
+    robust_cluster_metrics = cluster_metrics[cluster_metrics["trap_days"] > 0.0].copy()
     robust_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics_robust.csv"
     robust_cluster_metrics.to_csv(robust_metrics_path, index=False)
-    print(f"Saved robust cluster-level metrics (>100 trap-days) to {robust_metrics_path}")
+    print(f"Saved robust cluster-level metrics to {robust_metrics_path}")
+
+    # Generate and save robust cluster buffered MCPs as GeoJSON for R/terra linkage
+    print("Generating and saving robust cluster buffered MCPs as GeoJSON...")
+    import json
+    from shapely.geometry import mapping
+
+    # Map deployments to cluster ids
+    det_copy = det.copy()
+    det_copy['cluster_id'] = det_copy.apply(
+        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+        axis=1
+    )
+    # Keep only deployments in robust clusters
+    robust_det_for_geojson = det_copy[det_copy['cluster_id'].isin(robust_cluster_metrics['cluster_id'])].copy()
+
+    # Group to unique deployment locations
+    deps_unique = (robust_det_for_geojson.groupby(["region", "cluster_id", "project_name", "deployment_id"])
+                   .agg(lon=("longitude", "first"),
+                        lat=("latitude", "first"),
+                        trap_days=("trap_days", "first"))
+                   .reset_index())
+
+    features = []
+    for c_id in robust_cluster_metrics['cluster_id'].unique():
+        c_deps = deps_unique[deps_unique["cluster_id"] == c_id]
+        if len(c_deps) == 0:
+            continue
+        points = list(zip(c_deps["lon"], c_deps["lat"]))
+
+        # Calculate MCP and buffer by 0.05 degrees (approx 5.5 km)
+        mp = MultiPoint(points)
+        hull = mp.convex_hull
+        # If there are fewer than 3 unique points, convex_hull might return a Point or LineString,
+        # but buffer(0.05) works perfectly on all shapely geometries to yield a Polygon.
+        buffered = hull.buffer(0.05)
+
+        # Get properties from robust_cluster_metrics for this cluster
+        c_info = robust_cluster_metrics[robust_cluster_metrics['cluster_id'] == c_id].iloc[0]
+
+        properties = {
+            "cluster_id": str(c_id),
+            "region": str(c_info["region"]),
+            "trap_days": float(c_info["trap_days"]),
+            "n_species": int(c_info["n_species"]),
+            "B_H_index": float(c_info["B_H_index"]),
+            "M_H_index": float(c_info["M_H_index"]),
+            "B_H_gt50": float(c_info["B_H_gt50"]),
+            "B_H_gt100": float(c_info["B_H_gt100"]),
+            "megafauna_fraction": float(c_info["megafauna_fraction"])
+        }
+
+        # Convert geometry to GeoJSON dict
+        geom_dict = mapping(buffered)
+
+        feature = {
+            "type": "Feature",
+            "geometry": geom_dict,
+            "properties": properties
+        }
+        features.append(feature)
+
+    geojson = {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
+    geojson_path = OUTPUT_DIR / "camera_traps_robust_buffered_mcps.geojson"
+    with open(geojson_path, "w") as f:
+        json.dump(geojson, f, indent=2)
+    print(f"Saved robust cluster buffered MCPs to {geojson_path}")
 
     # Map deployments in det to filter det to only keep deployments in robust clusters
     det_copy = det.copy()

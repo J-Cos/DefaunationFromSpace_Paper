@@ -54,6 +54,8 @@ theme_pnas <- function(base_size = 8) {
     theme(
       line = element_line(colour = "black", linewidth = 0.25, linetype = 1, lineend = "butt"),
       rect = element_rect(fill = "white", colour = "black", linewidth = 0.25, linetype = 1),
+      panel.background = element_rect(fill = "white", colour = NA),
+      plot.background = element_rect(fill = "white", colour = NA),
       text = element_text(family = base_family, face = "plain", colour = "black", size = base_size, lineheight = 0.9, hjust = 0.5, vjust = 0.5, angle = 0, margin = margin(), debug = FALSE),
       axis.line = element_line(colour = "black", linewidth = 0.25),
       axis.ticks = element_line(colour = "black", linewidth = 0.25),
@@ -233,6 +235,7 @@ save_pnas <- function(plot, filename, type = c("single", "double"),
     width = w_in,
     height = h_in,
     dpi = PNAS_DPI,
+    bg = "white",
     ...
   )
   

@@ -17,9 +17,74 @@ library(stringr)
 # PATH & SCALE CONSTANTS
 # =============================================================================
 
+#' Automatically resolves the path to the analysis stack directory
+#' @details Checks environment variables, standard local sync folders, and GVFS mounts.
+#' @export
+resolve_data_dir <- function(default_dir = file.path("outputs", "synthetic_EOdata")) {
+  # 1. Environment variable override
+  env_dir <- Sys.getenv("GEE_DRIVE_DIR")
+  if (env_dir != "") {
+    if (dir.exists(env_dir)) {
+      message(sprintf("Using data directory from GEE_DRIVE_DIR: %s", env_dir))
+      return(env_dir)
+    } else {
+      warning(sprintf("GEE_DRIVE_DIR is set to %s, but directory does not exist.", env_dir))
+    }
+  }
+
+  # 2. Local sync directory candidates
+  home_dir <- Sys.getenv("HOME")
+  candidates <- c(
+    file.path(home_dir, "GoogleDrive", "DefaunationSynthesis", "AnalysisStack"),
+    file.path(home_dir, "Google Drive", "DefaunationSynthesis", "AnalysisStack"),
+    file.path(home_dir, "gdrive", "DefaunationSynthesis", "AnalysisStack"),
+    file.path(home_dir, "GoogleDrive-MyDrive", "DefaunationSynthesis", "AnalysisStack")
+  )
+  
+  # 3. GVFS google-drive mount detection (Linux Gnome Online Accounts)
+  run_dir <- "/run/user"
+  if (dir.exists(run_dir)) {
+    uids <- list.files(run_dir)
+    for (uid in uids) {
+      gvfs_dir <- file.path(run_dir, uid, "gvfs")
+      if (dir.exists(gvfs_dir)) {
+        mounts <- list.files(gvfs_dir, pattern = "^google-drive")
+        for (m in mounts) {
+          path_with_my_drive <- file.path(gvfs_dir, m, "My Drive", "DefaunationSynthesis", "AnalysisStack")
+          path_without_my_drive <- file.path(gvfs_dir, m, "DefaunationSynthesis", "AnalysisStack")
+          candidates <- c(candidates, path_with_my_drive, path_without_my_drive)
+        }
+      }
+    }
+  }
+  
+  # 4. Standard Mac and Windows Google Drive paths
+  candidates <- c(candidates,
+    file.path("G:", "My Drive", "DefaunationSynthesis", "AnalysisStack"),
+    file.path("/Volumes", "GoogleDrive", "My Drive", "DefaunationSynthesis", "AnalysisStack")
+  )
+
+  # Standardize and filter candidates
+  candidates <- unique(path.expand(candidates))
+  
+  for (cand in candidates) {
+    if (dir.exists(cand)) {
+      test_files <- list.files(cand, pattern = "^analysis_stack_.*\\.tif$")
+      if (length(test_files) > 0) {
+        message(sprintf("✓ Automatically detected Google Drive folder with analysis stacks: %s", cand))
+        return(cand)
+      }
+    }
+  }
+
+  # 5. Fallback to default
+  message(sprintf("Using default data directory: %s", default_dir))
+  return(default_dir)
+}
+
 #' Root directory for analysis-ready rasters (GEE exports or synthetic data)
 #' @export
-DATA_DIR <- file.path("outputs", "synthetic_EOdata")
+DATA_DIR <- resolve_data_dir()
 
 #' Root directory for legacy FRIP-era data (DefaunationFromSpace_Paper)
 #' @export
@@ -71,13 +136,47 @@ PA_MIN_AREA_CONGO_KM2 <- 20000
 load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
   stacks <- list()
   for (scale in SCALES) {
-    filename <- file.path(data_dir, sprintf("analysis_stack_%d_%s.tif", scale, basin))
-    if (!file.exists(filename)) {
-      stop("File does not exist: ", filename)
+    basename <- sprintf("analysis_stack_%d_%s.tif", scale, basin)
+    
+    # Path checking order:
+    # 1. Real GEE exports directory (outputs/EOdata)
+    # 2. Directly in passed data_dir
+    # 3. Synthetic fallback directory (outputs/synthetic_EOdata)
+    candidates <- c(
+      file.path("outputs", "EOdata", basename),
+      file.path(data_dir, basename),
+      file.path("outputs", "synthetic_EOdata", basename)
+    )
+    
+    filename <- NULL
+    for (cand in candidates) {
+      if (file.exists(cand)) {
+        filename <- cand
+        break
+      }
     }
+    
+    if (is.null(filename)) {
+      stop("File does not exist in any candidate location: ", basename)
+    }
+    
+    # Notify if loading real GEE export
+    if (grepl("outputs/EOdata", filename, fixed = TRUE)) {
+      message(sprintf("✓ Loading real GEE GeoTIFF stack: %s", filename))
+    }
+    
     r <- rast(filename)
-    names(r) <- c("frip", "frip_mk_tau", "uoi", "rh98", "gedi_n",
-                  "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+    num_layers <- nlyr(r)
+    if (num_layers == 12) {
+      names(r) <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
+                    "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+    } else if (num_layers == 11) {
+      names(r) <- c("frip", "frip_mk_tau", "uoi", "rh98", "gedi_n",
+                    "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+    } else {
+      stop(sprintf("Unexpected number of bands (%d) in multiscale stack: %s", num_layers, filename))
+    }
+    
     stacks[[as.character(scale)]] <- r
   }
   return(stacks)
@@ -97,13 +196,47 @@ load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
 #'
 #' @export
 load_native_stack <- function(data_dir = DATA_DIR, basin) {
-  filename <- file.path(data_dir, sprintf("analysis_stack_native_%s.tif", basin))
-  if (!file.exists(filename)) {
-    stop("File does not exist: ", filename)
+  basename <- sprintf("analysis_stack_native_%s.tif", basin)
+  
+  # Path checking order:
+  # 1. Real GEE exports directory (outputs/EOdata)
+  # 2. Directly in passed data_dir
+  # 3. Synthetic fallback directory (outputs/synthetic_EOdata)
+  candidates <- c(
+    file.path("outputs", "EOdata", basename),
+    file.path(data_dir, basename),
+    file.path("outputs", "synthetic_EOdata", basename)
+  )
+  
+  filename <- NULL
+  for (cand in candidates) {
+    if (file.exists(cand)) {
+      filename <- cand
+      break
+    }
   }
+  
+  if (is.null(filename)) {
+    stop("File does not exist in any candidate location: ", basename)
+  }
+  
+  # Notify if loading real GEE export
+  if (grepl("outputs/EOdata", filename, fixed = TRUE)) {
+    message(sprintf("✓ Loading real native GeoTIFF stack: %s", filename))
+  }
+  
   r <- rast(filename)
-  names(r) <- c("uoi", "rh98", "gedi_n", "elevation", "slope", "hnd",
-                "precip", "clay", "forest_fraction", "Npp_median")
+  num_layers <- nlyr(r)
+  if (num_layers == 11) {
+    names(r) <- c("uoi", "uoi_sd", "rh98", "gedi_n", "elevation", "slope", "hnd",
+                  "precip", "clay", "forest_fraction", "Npp_median")
+  } else if (num_layers == 10) {
+    names(r) <- c("uoi", "rh98", "gedi_n", "elevation", "slope", "hnd",
+                  "precip", "clay", "forest_fraction", "Npp_median")
+  } else {
+    stop(sprintf("Unexpected number of bands (%d) in native stack: %s", num_layers, filename))
+  }
+  
   return(r)
 }
 
