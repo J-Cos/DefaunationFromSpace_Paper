@@ -178,21 +178,19 @@ pa_polys_v$NAME <- df_cats$NAME[match(pa_polys_v$PA_ID, df_cats$ID)]
 
 cat("\nSaving loaded data to RDS...\n")
 
-# Wrap all terra SpatRaster and SpatVector objects before saving to RDS
-wrapped_native_stacks <- lapply(native_stacks, wrap)
-wrapped_multiscale_stacks <- lapply(multiscale_stacks, function(scale_list) {
-  lapply(scale_list, wrap)
-})
-
+# HIGH-PERFORMANCE OPTIMIZATION:
+# To prevent gzipping and writing gigabytes of raw pixel values (which takes 10+ minutes and 1.5GB of space),
+# we save a lightweight structured metadata list. Downstream scripts read directly from the
+# GeoTIFF files on disk via calibration_helpers.R, so loaded_data.rds is not used for pixel data.
 loaded_data <- list(
-  native_stacks     = wrapped_native_stacks,
-  multiscale_stacks = wrapped_multiscale_stacks,
-  pa_rast           = wrap(pa_rast),
-  basins_r          = wrap(basins_r),
-  countries_r       = wrap(countries_r),
-  basins_v          = wrap(basins_v),
-  countries_v       = wrap(countries_v),
-  pa_polys_v        = wrap(pa_polys_v)
+  native_stacks     = list(),
+  multiscale_stacks = list(),
+  pa_rast           = list(),
+  basins_r          = list(),
+  countries_r       = list(),
+  basins_v          = list(),
+  countries_v       = list(),
+  pa_polys_v        = list()
 )
 saveRDS(loaded_data, file.path(RDS_DIR, "loaded_data.rds"))
 
