@@ -1,5 +1,5 @@
 # =============================================================================
-# code/framework2_integrated_analysis.R
+# code/03_Framework2_Analysis.R
 #
 # Performs covariate model selection for Framework 2 (Spaceborne Biomass Prediction)
 # using Tweedie GLMs (via mgcv::gam) across 10 candidate models, evaluates them via AIC,
@@ -24,163 +24,13 @@ library(cowplot)
 
 cat("=== Starting Integrated Framework 2 Model Selection & Plotting ===\n\n")
 
-# --- 1. Load Protected Area / MCP Polygons and Raster Stacks -----------------
-geojson_path <- "outputs/camera_traps_robust_buffered_mcps.geojson"
-r_congo_path <- "outputs/EOdata/analysis_stack_5000_Congo.tif"
-r_amazon_path <- "outputs/EOdata/analysis_stack_5000_Amazon.tif"
+# --- 1. Ingest and Calibrate Scale-Specific Cluster Data ---------------------
+source("code/functions/calibration_helpers.R")
+joined_data <- extract_scale_data(5000)
 
-if (!file.exists(geojson_path)) {
-  stop("Camera trap buffered MCPs missing. Please run code/visualise_camera_traps.py first.")
-}
+cat("✓ Merged and calibrated data successfully. N =", nrow(joined_data), "clusters.\n")
 
-mcps <- terra::vect(geojson_path)
-mcps_congo <- mcps[mcps$region == "Congo", ]
-mcps_amazon <- mcps[mcps$region == "Amazon", ]
-
-r_congo <- rast(r_congo_path)
-r_amazon <- rast(r_amazon_path)
-
-names(r_congo) <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
-                    "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
-names(r_amazon) <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
-                     "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
-
-# --- 2. Extract Raster Pixel Values inside MCP Polygons ---------------------
-cat("Extracting raster pixel values within buffered MCPs (5 km scales)...\n")
-extracted_congo <- terra::extract(r_congo, mcps_congo, df = TRUE)
-mcp_congo_df <- as.data.frame(mcps_congo)
-mcp_congo_df$ID <- 1:nrow(mcp_congo_df)
-pixel_congo <- merge(extracted_congo, mcp_congo_df, by = "ID") %>%
-  filter(!is.na(uoi) & !is.na(frip)) %>%
-  select(-ID) %>%
-  mutate(basin = "Congo")
-
-extracted_amazon <- terra::extract(r_amazon, mcps_amazon, df = TRUE)
-mcp_amazon_df <- as.data.frame(mcps_amazon)
-mcp_amazon_df$ID <- 1:nrow(mcp_amazon_df)
-pixel_amazon <- merge(extracted_amazon, mcp_amazon_df, by = "ID") %>%
-  filter(!is.na(uoi) & !is.na(frip)) %>%
-  select(-ID) %>%
-  mutate(basin = "Amazon")
-
-pixel_data <- rbind(pixel_congo, pixel_amazon)
-
-# Aggregate to cluster level
-joined_data <- pixel_data %>%
-  group_by(cluster_id, region, basin, trap_days, n_species, B_H_index, M_H_index, B_H_gt50, B_H_gt100, megafauna_fraction) %>%
-  summarise(
-    n_pixels = n(),
-    uoi_sd = ifelse(is.na(sd(uoi, na.rm = TRUE)), 0, sd(uoi, na.rm = TRUE)),
-    uoi = mean(uoi, na.rm = TRUE),
-    elevation = mean(elevation, na.rm = TRUE),
-    slope = mean(slope, na.rm = TRUE),
-    hnd = mean(hnd, na.rm = TRUE),
-    precip = mean(precip, na.rm = TRUE),
-    clay = mean(clay, na.rm = TRUE),
-    forest_fraction = mean(forest_fraction, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% filter(trap_days >= 10)
-
-# --- 3. Compute Temporal Weights per Cluster --------------------------------
-cat("Loading camera trap detections database to compute temporal weights...\n")
-det_all <- read_csv("outputs/camera_traps_joint_detections.csv", show_col_types = FALSE)
-
-# Safe date parsing
-det_all$start_date <- as.Date(det_all$start_date)
-det_all$end_date <- as.Date(det_all$end_date)
-
-# Haversine distance single-linkage clustering to map deployments to spatial clusters
-haversine_dist <- function(lon1, lat1, lon2, lat2) {
-  r <- 6371.0
-  rad <- pi / 180
-  dlon <- (lon2 - lon1) * rad
-  dlat <- (lat2 - lat1) * rad
-  lat1 <- lat1 * rad
-  lat2 <- lat2 * rad
-  a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
-  c <- 2 * asin(sqrt(a))
-  return(r * c)
-}
-
-coords_df <- det_all %>% 
-  select(region, longitude, latitude) %>% 
-  distinct() %>% 
-  mutate(cluster_id_geo = "")
-
-for (reg in unique(coords_df$region)) {
-  sub_indices <- which(coords_df$region == reg)
-  sub <- coords_df[sub_indices, ]
-  n <- nrow(sub)
-  if (n == 0) next
-  if (n > 1) {
-    dist_mat <- matrix(0, nrow=n, ncol=n)
-    for (i in 1:n) {
-      for (j in 1:n) {
-        dist_mat[i,j] <- haversine_dist(sub$longitude[i], sub$latitude[i], sub$longitude[j], sub$latitude[j])
-      }
-    }
-    hc <- hclust(as.dist(dist_mat), method="single")
-    labels <- cutree(hc, h=11.1)
-  } else {
-    labels <- 1
-  }
-  coords_df$cluster_id_geo[sub_indices] <- paste0(reg, "_", sprintf("%02d", labels))
-}
-
-det_all <- det_all %>%
-  left_join(coords_df, by = c("region", "longitude", "latitude"))
-
-# Deployments dates and sampling effort
-deployments <- det_all %>%
-  select(region, cluster_id_geo, deployment_id, start_date, end_date, trap_days) %>%
-  distinct()
-
-# GEDI Launch baseline (April 17, 2019)
-gedi_start <- as.Date("2019-04-17")
-
-# Compute deployment temporal weights
-deployments <- deployments %>%
-  mutate(
-    years_before_gedi = as.numeric(gedi_start - start_date) / 365.25,
-    w_temp = case_when(
-      years_before_gedi <= 1.0  ~ 1.0,
-      years_before_gedi <= 6.0  ~ 0.5,
-      years_before_gedi <= 11.0 ~ 0.25,
-      TRUE                      ~ 0.1
-    )
-  )
-
-# Aggregate to cluster level
-cluster_temp_metrics <- deployments %>%
-  group_by(cluster_id_geo) %>%
-  summarise(
-    w_temp_cluster = sum(trap_days * w_temp) / sum(trap_days),
-    .groups = "drop"
-  )
-
-# Join temporal weights back to spatial dataset (matching names)
-joined_data <- joined_data %>%
-  left_join(cluster_temp_metrics, by = c("cluster_id" = "cluster_id_geo"))
-
-# Fallback: if any NAs, set to median (or 1.0)
-joined_data$w_temp_cluster[is.na(joined_data$w_temp_cluster)] <- median(joined_data$w_temp_cluster, na.rm = TRUE)
-
-# Weights formulation
-joined_data$uoi_se <- joined_data$uoi_sd / sqrt(joined_data$n_pixels)
-reg_uoi <- median(joined_data$uoi_se[joined_data$uoi_se > 0])
-if (is.na(reg_uoi) || reg_uoi == 0) reg_uoi <- 1e-4
-
-joined_data$w_uoi <- log10(joined_data$trap_days) / (joined_data$uoi_se + reg_uoi)
-joined_data$w_uoi_norm <- joined_data$w_uoi / mean(joined_data$w_uoi)
-joined_data$basin <- factor(joined_data$basin, levels = c("Amazon", "Congo"))
-
-# Spatial Homogeneity definition (inverse of standard error, normalized to 0-1)
-raw_homo <- 1 / (joined_data$uoi_se + reg_uoi)
-joined_data$homogeneity <- (raw_homo - min(raw_homo)) / (max(raw_homo) - min(raw_homo))
-
-cat("✓ Merged data successfully. N =", nrow(joined_data), "clusters.\n")
-
-# --- 4. Tweedie GLM Model Selection (10 Candidate Covariate Models) -----------
+# --- 2. Tweedie GLM Model Selection (10 Candidate Covariate Models) -----------
 cat("\nRunning Tweedie GLM Model Selection across 10 formulations...\n")
 
 models_list <- list(
@@ -209,7 +59,6 @@ results_df <- data.frame(
     non_intercept_rows <- which(rownames(p_table) != "(Intercept)")
     if (length(non_intercept_rows) == 0) return(FALSE)
     p_vals <- p_table[non_intercept_rows, ncol(p_table), drop = TRUE]
-    # At least one non-intercept term must be significant at alpha = 0.05
     any(p_vals < 0.05)
   }),
   stringsAsFactors = FALSE
@@ -228,11 +77,15 @@ best_model_name <- results_df$Model[1]
 best_model <- models_list[[best_model_name]]
 cat(sprintf("\n★ Selected Best-Fitting Model: %s (AIC: %.2f, d_AIC: 0.00)\n\n", best_model_name, AIC(best_model)))
 
-# --- 5. Generate Panels for Figure 3 -----------------------------------------
+# Save best model RDS objects
+saveRDS(formula(best_model), "outputs/framework2_best_formula.RDS")
+saveRDS(best_model, "outputs/framework2_best_model.RDS")
+
+# --- 3. Generate Panels for Figure 3 -----------------------------------------
 cat("Generating PNAS-styled figure panels...\n")
 source("code/functions/theme_pnas.R")
 
-pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20") # Sleek Orange & Dark Green
+pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20")
 
 uoi_seq <- seq(from = 0.918, to = 0.970, length.out = 300)
 
@@ -240,7 +93,6 @@ uoi_seq <- seq(from = 0.918, to = 0.970, length.out = 300)
 pred_df_amazon <- data.frame(uoi = uoi_seq, basin = factor("Amazon", levels = c("Amazon", "Congo")))
 pred_df_congo <- data.frame(uoi = uoi_seq, basin = factor("Congo", levels = c("Amazon", "Congo")))
 
-# Populate environmental covariates with median values if present in best model formula
 covs_to_fill <- c("elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
 for (cv in covs_to_fill) {
   pred_df_amazon[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
@@ -327,7 +179,7 @@ plot_sel_df <- results_df %>%
     CleanName = factor(CleanName, levels = rev(CleanName))
   )
 
-# Programmatically build plotmath labels (bold for significant formulations, plain otherwise)
+# Programmatically build plotmath labels
 y_levels <- levels(plot_sel_df$CleanName)
 matched_sig <- plot_sel_df$IsSignificant[match(y_levels, plot_sel_df$CleanName)]
 math_labels <- ifelse(matched_sig,
@@ -362,7 +214,7 @@ p_c <- ggplot(plot_sel_df, aes(x = dev_expl * 100, y = CleanName, fill = delta_A
     plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
   )
 
-# --- 6. Construct Clean Shared Legend ---
+# --- 4. Construct Clean Shared Legend ---
 p_legend_obj <- ggplot(joined_data) +
   geom_point(aes(x = uoi, y = B_H_index, fill = w_temp_cluster, size = trap_days, alpha = homogeneity, shape = basin), color = "black", stroke = 0.3) +
   scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21), name = "Basin:") +
@@ -384,10 +236,9 @@ p_legend_obj <- ggplot(joined_data) +
 
 shared_legend <- cowplot::get_legend(p_legend_obj)
 
-# --- 7. Assemble and Save Multipanel Figure ---
+# --- 5. Assemble and Save Multipanel Figure ---
 cat("Assembling panels into 3-panel PNAS-style layout...\n")
 
-# Row 1: A and B side-by-side
 row1 <- cowplot::plot_grid(
   p_a, p_b,
   ncol = 2,
@@ -396,18 +247,14 @@ row1 <- cowplot::plot_grid(
   rel_widths = c(1.0, 1.0)
 )
 
-# Row 2: C at full width
-row2 <- p_c
-
 fig_final <- cowplot::plot_grid(
   row1,
-  row2,
+  p_c,
   shared_legend,
   ncol = 1,
   rel_heights = c(1.0, 0.9, 0.12)
 )
 
-# Save as PNAS double-column figure (17.8 cm wide) with a height of 12.5 cm
 save_pnas(
   plot = fig_final,
   filename = "outputs/framework2_integrated_pnas_figure.png",
@@ -425,4 +272,4 @@ if (file.exists(brain_artifact_dir)) {
 }
 
 cat("✓ Saved figure to outputs/framework2_integrated_pnas_figure.png\n")
-cat("=== Integrated Framework 2 Analysis Completed Successfully ===\n")
+cat("=== Framework 2 Integrated Analysis Completed Successfully ===\n")
