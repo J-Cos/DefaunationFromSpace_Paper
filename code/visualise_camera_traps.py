@@ -487,70 +487,94 @@ def make_figure3(det: pd.DataFrame, metrics: pd.DataFrame, fig_dir: Path):
 
     # Filter usable metrics (where total biomass index > 0)
     valid_metrics = metrics[metrics["B_H_index"] > 0].copy()
-    colors = [PAL["Congo"], PAL["Amazon"]]
+    congo = valid_metrics[valid_metrics["region"] == "Congo"]
+    amazon = valid_metrics[valid_metrics["region"] == "Amazon"]
+    
+    # 4-group color scheme: Congo (Blue), Congo desaturated, Amazon (Red), Amazon desaturated
+    colors_4 = [PAL["Congo"], "#B2D2EC", PAL["Amazon"], "#F4A582"]
 
     # ── (A) Biomass Index > 50 kg ───────────────────────────────────────────
     ax = axes[0, 0]
-    box_data_50 = [
-        valid_metrics[valid_metrics["region"] == "Congo"]["B_H_gt50"].values,
-        valid_metrics[valid_metrics["region"] == "Amazon"]["B_H_gt50"].values
-    ]
-    bp_50 = ax.boxplot(box_data_50, tick_labels=["Congo", "Amazon"], patch_artist=True,
-                       widths=0.45, showfliers=False, zorder=2)
+    congo_pres = congo[congo["B_H_gt50"] > 0]["B_H_gt50"].values
+    congo_abs = congo[congo["B_H_gt50"] == 0]["B_H_gt50"].values
+    amazon_pres = amazon[amazon["B_H_gt50"] > 0]["B_H_gt50"].values
+    amazon_abs = amazon[amazon["B_H_gt50"] == 0]["B_H_gt50"].values
     
-    for patch, color in zip(bp_50["boxes"], colors):
+    box_data_50 = [congo_pres, congo_abs, amazon_pres, amazon_abs]
+    labels_50 = [
+        f"Congo\nPresent\n(n={len(congo_pres)})",
+        f"Congo\nAbsent\n(n={len(congo_abs)})",
+        f"Amazon\nPresent\n(n={len(amazon_pres)})",
+        f"Amazon\nAbsent\n(n={len(amazon_abs)})"
+    ]
+    
+    bp_50 = ax.boxplot(box_data_50, tick_labels=labels_50, patch_artist=True,
+                       widths=0.5, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_50["boxes"], colors_4):
         patch.set_facecolor(color)
-        patch.set_alpha(0.6)
+        patch.set_alpha(0.65)
         patch.set_edgecolor("black")
-        patch.set_linewidth(0.6)
+        patch.set_linewidth(0.5)
     for element in ["whiskers", "caps", "medians"]:
-        plt.setp(bp_50[element], color="black", lw=0.6)
+        plt.setp(bp_50[element], color="black", lw=0.5)
         
     # Jitter points
-    for i, reg in enumerate(["Congo", "Amazon"]):
-        vals = box_data_50[i]
-        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
-        # Median label
-        med_val = np.median(vals)
-        ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
-                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+    for i, vals in enumerate(box_data_50):
+        if len(vals) > 0:
+            x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+            ax.scatter(x_jitter, vals, color=colors_4[i], s=2.5, alpha=0.25, edgecolors="none", zorder=3)
+            # Median label
+            med_val = np.median(vals)
+            ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
+                    ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
         
     ax.set_ylabel("Biomass Index for animals >50 kg ($B_{H,>50}$)")
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    ax.tick_params(axis='x', labelsize=5.0)
     panel_label(ax, "A")
 
     # ── (B) Biomass Index > 100 kg ──────────────────────────────────────────
     ax = axes[0, 1]
-    box_data_100 = [
-        valid_metrics[valid_metrics["region"] == "Congo"]["B_H_gt100"].values,
-        valid_metrics[valid_metrics["region"] == "Amazon"]["B_H_gt100"].values
-    ]
-    bp_100 = ax.boxplot(box_data_100, tick_labels=["Congo", "Amazon"], patch_artist=True,
-                        widths=0.45, showfliers=False, zorder=2)
+    congo_pres_100 = congo[congo["B_H_gt100"] > 0]["B_H_gt100"].values
+    congo_abs_100 = congo[congo["B_H_gt100"] == 0]["B_H_gt100"].values
+    amazon_pres_100 = amazon[amazon["B_H_gt100"] > 0]["B_H_gt100"].values
+    amazon_abs_100 = amazon[amazon["B_H_gt100"] == 0]["B_H_gt100"].values
     
-    for patch, color in zip(bp_100["boxes"], colors):
+    box_data_100 = [congo_pres_100, congo_abs_100, amazon_pres_100, amazon_abs_100]
+    labels_100 = [
+        f"Congo\nPresent\n(n={len(congo_pres_100)})",
+        f"Congo\nAbsent\n(n={len(congo_abs_100)})",
+        f"Amazon\nPresent\n(n={len(amazon_pres_100)})",
+        f"Amazon\nAbsent\n(n={len(amazon_abs_100)})"
+    ]
+    
+    bp_100 = ax.boxplot(box_data_100, tick_labels=labels_100, patch_artist=True,
+                        widths=0.5, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_100["boxes"], colors_4):
         patch.set_facecolor(color)
-        patch.set_alpha(0.6)
+        patch.set_alpha(0.65)
         patch.set_edgecolor("black")
-        patch.set_linewidth(0.6)
+        patch.set_linewidth(0.5)
     for element in ["whiskers", "caps", "medians"]:
-        plt.setp(bp_100[element], color="black", lw=0.6)
+        plt.setp(bp_100[element], color="black", lw=0.5)
         
-    for i, reg in enumerate(["Congo", "Amazon"]):
-        vals = box_data_100[i]
-        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
-        med_val = np.median(vals)
-        ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
-                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+    for i, vals in enumerate(box_data_100):
+        if len(vals) > 0:
+            x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+            ax.scatter(x_jitter, vals, color=colors_4[i], s=2.5, alpha=0.25, edgecolors="none", zorder=3)
+            med_val = np.median(vals)
+            ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
+                    ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
         
     ax.set_ylabel("Biomass Index for megafauna >100 kg ($B_{H,>100}$)")
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    ax.tick_params(axis='x', labelsize=5.0)
     panel_label(ax, "B")
 
     # ── (C) Individual Body Mass Density ────────────────────────────────────
@@ -590,34 +614,44 @@ def make_figure3(det: pd.DataFrame, metrics: pd.DataFrame, fig_dir: Path):
 
     # ── (D) Megafauna Biomass Fraction ──────────────────────────────────────
     ax = axes[1, 1]
-    box_data_frac = [
-        valid_metrics[valid_metrics["region"] == "Congo"]["megafauna_fraction"].values,
-        valid_metrics[valid_metrics["region"] == "Amazon"]["megafauna_fraction"].values
-    ]
-    bp_frac = ax.boxplot(box_data_frac, tick_labels=["Congo", "Amazon"], patch_artist=True,
-                         widths=0.45, showfliers=False, zorder=2)
+    congo_pres_frac = congo[congo["B_H_gt50"] > 0]["megafauna_fraction"].values
+    congo_abs_frac = congo[congo["B_H_gt50"] == 0]["megafauna_fraction"].values
+    amazon_pres_frac = amazon[amazon["B_H_gt50"] > 0]["megafauna_fraction"].values
+    amazon_abs_frac = amazon[amazon["B_H_gt50"] == 0]["megafauna_fraction"].values
     
-    for patch, color in zip(bp_frac["boxes"], colors):
+    box_data_frac = [congo_pres_frac, congo_abs_frac, amazon_pres_frac, amazon_abs_frac]
+    labels_frac = [
+        f"Congo\nPresent\n(n={len(congo_pres_frac)})",
+        f"Congo\nAbsent\n(n={len(congo_abs_frac)})",
+        f"Amazon\nPresent\n(n={len(amazon_pres_frac)})",
+        f"Amazon\nAbsent\n(n={len(amazon_abs_frac)})"
+    ]
+    
+    bp_frac = ax.boxplot(box_data_frac, tick_labels=labels_frac, patch_artist=True,
+                         widths=0.5, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_frac["boxes"], colors_4):
         patch.set_facecolor(color)
-        patch.set_alpha(0.6)
+        patch.set_alpha(0.65)
         patch.set_edgecolor("black")
-        patch.set_linewidth(0.6)
+        patch.set_linewidth(0.5)
     for element in ["whiskers", "caps", "medians"]:
-        plt.setp(bp_frac[element], color="black", lw=0.6)
+        plt.setp(bp_frac[element], color="black", lw=0.5)
         
-    for i, reg in enumerate(["Congo", "Amazon"]):
-        vals = box_data_frac[i]
-        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
-        
-        # Mean label
-        mean_val = np.mean(vals)
-        ax.text(i + 1, mean_val + 2 if mean_val > 0 else 2, f"mean={mean_val:.1f}%",
-                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+    for i, vals in enumerate(box_data_frac):
+        if len(vals) > 0:
+            x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+            ax.scatter(x_jitter, vals, color=colors_4[i], s=2.5, alpha=0.25, edgecolors="none", zorder=3)
+            
+            # Mean label
+            mean_val = np.mean(vals)
+            ax.text(i + 1, mean_val + 2 if mean_val > 0 else 2, f"mean={mean_val:.1f}%",
+                    ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
         
     ax.set_ylabel("Megafaunal Biomass Fraction (%)")
     ax.set_ylim(-2, 105)
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    ax.tick_params(axis='x', labelsize=5.0)
     panel_label(ax, "D")
 
     # ── Save Figures ────────────────────────────────────────────────────────
