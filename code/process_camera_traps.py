@@ -188,15 +188,16 @@ def _collapse_to_independent_events(
     events = []
 
     if len(with_seq) > 0:
-        # Collapse using sequence_id
+        # Collapse using sequence_id, grouping by taxon to preserve separate species/families inside the sequence
+        grp_cols_seq = ["project_id", "deployment_id", "sequence_id"]
+        for c in ["class", "order", "family", "genus", "species"]:
+            if c in with_seq.columns:
+                grp_cols_seq.append(c)
+
         seq_events = (with_seq
-                      .groupby(["project_id", "deployment_id", "sequence_id"])
+                      .groupby(grp_cols_seq, dropna=False)
                       .agg(
-                          genus=("genus", "first"),
-                          species=("species", "first"),
                           common_name=("common_name", "first"),
-                          **{c: (c, "first") for c in ["class", "order", "family"]
-                             if c in with_seq.columns},
                           number_of_objects=("number_of_objects", "max"),
                           timestamp=("timestamp", "first"),
                       )
@@ -208,30 +209,31 @@ def _collapse_to_independent_events(
         # Collapse using temporal threshold
         without_seq["_ts"] = _parse_wi_timestamp(without_seq["timestamp"])
         
-        # Sort and group by deployment x species
-        grp_cols = ["project_id", "deployment_id", "genus", "species"]
+        # Sort and group by deployment x taxon hierarchy to keep different families/genera separate
+        grp_cols = ["project_id", "deployment_id"]
+        for c in ["class", "order", "family", "genus", "species"]:
+            if c in without_seq.columns:
+                grp_cols.append(c)
+                
         without_seq = without_seq.sort_values(grp_cols + ["_ts"])
         
         without_seq["_gap"] = (
-            without_seq.groupby(grp_cols)["_ts"]
+            without_seq.groupby(grp_cols, dropna=False)["_ts"]
             .diff()
             .dt.total_seconds()
             .fillna(threshold_minutes * 60 + 1)
         )
         without_seq["_new_event"] = without_seq["_gap"] > (threshold_minutes * 60)
-        without_seq["_event_id"] = without_seq.groupby(grp_cols)["_new_event"].cumsum()
+        without_seq["_event_id"] = without_seq.groupby(grp_cols, dropna=False)["_new_event"].cumsum()
 
         agg_dict = {
             "common_name": ("common_name", "first"),
             "number_of_objects": ("number_of_objects", "max"),
             "timestamp": ("timestamp", "first"),
         }
-        for c in ["class", "order", "family"]:
-            if c in without_seq.columns:
-                agg_dict[c] = (c, "first")
 
         temporal_events = (without_seq
-                           .groupby(grp_cols + ["_event_id"])
+                           .groupby(grp_cols + ["_event_id"], dropna=False)
                            .agg(**agg_dict)
                            .reset_index()
                            .drop(columns=["_event_id"]))
@@ -298,28 +300,53 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
         raise FileNotFoundError(f"No images.csv or sequences.csv in {package_dir}")
 
 
+def safe_str(val) -> str:
+    """Helper to cleanly stringify dataframe elements, replacing float NaN with empty string."""
+    if pd.isna(val):
+        return ""
+    return str(val).strip()
+
+
 def assign_taxon_quality(row: pd.Series) -> str:
     """Classify taxonomic resolution quality and flag domestic/human/blanks."""
-    cn = str(row.get("common_name", "")).strip()
-    genus = str(row.get("genus", "")).strip()
-    species = str(row.get("species", "")).strip()
-    family = str(row.get("family", "")).strip()
+    cn = safe_str(row.get("common_name", ""))
+    genus = safe_str(row.get("genus", ""))
+    species = safe_str(row.get("species", ""))
+    family = safe_str(row.get("family", ""))
 
-    if cn in EXCLUDE_COMMON_NAMES or cn == "" or genus.lower() in ["setup", "unknown", "vehicle"]:
-        if cn in {"Human", "Homo Species"}:
-            return "human"
+    cn_lower = cn.lower()
+    genus_lower = genus.lower()
+    family_lower = family.lower()
+
+    # Check for human detections
+    is_human = (
+        genus_lower == "homo" or
+        "human" in cn_lower or
+        "trapper" in cn_lower or
+        "researcher" in cn_lower or
+        "hunter" in cn_lower or
+        "pedestrian" in cn_lower or
+        "rider" in cn_lower or
+        "biker" in cn_lower or
+        "maintenance" in cn_lower
+    )
+    if is_human:
+        return "human"
+
+    if cn in EXCLUDE_COMMON_NAMES or cn == "" or genus_lower in ["setup", "unknown", "vehicle"]:
         return "blank"
 
     if (genus, species) in DOMESTIC_SPECIES:
         return "domestic"
 
-    if genus and species and genus != "" and species != "" and species.lower() != "sp" and species.lower() != "sp.":
+    if genus and species and genus != "" and species != "" and species.lower() not in ("sp", "sp."):
         return "species"
-    if genus and genus != "" and genus.lower() != "unknown":
+    if genus and genus != "" and genus_lower != "unknown":
         return "genus"
-    if family and family != "" and family.lower() != "unknown":
+    if family and family != "" and family_lower != "unknown":
         return "family"
     return "higher"
+
 
 
 def compute_detection_rates(deployments: pd.DataFrame,
@@ -328,16 +355,16 @@ def compute_detection_rates(deployments: pd.DataFrame,
     images["taxon_quality"] = images.apply(assign_taxon_quality, axis=1)
 
     images["taxon_key"] = images.apply(
-        lambda r: f"{r.get('genus', '')}_{r.get('species', '')}"
+        lambda r: f"{safe_str(r.get('genus'))}_{safe_str(r.get('species'))}"
         if r["taxon_quality"] in ("species", "genus")
-        else f"{r.get('family', '')}_{r.get('common_name', '')}",
+        else f"{safe_str(r.get('family'))}_{safe_str(r.get('common_name'))}",
         axis=1
     )
 
     det = (images
            .groupby(["project_id", "deployment_id", "taxon_key",
                      "class", "order", "family", "genus", "species",
-                     "taxon_quality"])
+                     "taxon_quality"], dropna=False)
            .agg(n_detections=("number_of_objects", "sum"),
                 common_name=("common_name", "first"))
            .reset_index())
@@ -413,9 +440,9 @@ def match_body_mass(det: pd.DataFrame, traits: pd.DataFrame) -> pd.DataFrame:
         genus_mass = {}
 
     for idx, row in det.iterrows():
-        g = str(row.get("genus", "")).strip()
-        s = str(row.get("species", "")).strip()
-        fam = str(row.get("family", "")).strip()
+        g = safe_str(row.get("genus", ""))
+        s = safe_str(row.get("species", ""))
+        fam = safe_str(row.get("family", ""))
 
         # 1. Exact species match
         if g and s and (g, s) in species_mass:
@@ -455,11 +482,17 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
     usable["biomass_contrib"] = usable["corrected_RAI"] * usable["body_mass_kg"]
     usable["metabolism_contrib"] = usable["corrected_RAI"] * FMR_COEFF * (usable["body_mass_kg"] ** FMR_EXP)
 
+    # Large mammal contributions
+    usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
+    usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
+
     agg_dict = {
         "n_species": ("taxon_key", "nunique"),
         "n_detections_total": ("n_detections", "sum"),
         "B_H_index": ("biomass_contrib", "sum"),
         "M_H_index": ("metabolism_contrib", "sum"),
+        "B_H_gt50": ("biomass_contrib_gt50", "sum"),
+        "B_H_gt100": ("biomass_contrib_gt100", "sum"),
         "dominant_species": ("common_name", lambda x: str(x.dropna().mode().iloc[0]) if len(x.dropna().mode()) > 0 else ""),
         "species_list": ("common_name", lambda x: "; ".join(sorted(x.dropna().astype(str).unique()))),
     }
@@ -468,6 +501,9 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
             .groupby(["project_id", "deployment_id"])
             .agg(**agg_dict)
             .reset_index())
+
+    # Calculate fraction
+    site["megafauna_fraction"] = np.where(site["B_H_index"] > 0, (site["B_H_gt50"] / site["B_H_index"]) * 100, 0.0)
 
     # Retain all deployments (even those with zero wild species)
     meta_cols = ["project_id", "deployment_id", "longitude", "latitude", "trap_days"]
@@ -481,6 +517,9 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
     site["n_detections_total"] = site["n_detections_total"].fillna(0).astype(int)
     site["B_H_index"] = site["B_H_index"].fillna(0.0)
     site["M_H_index"] = site["M_H_index"].fillna(0.0)
+    site["B_H_gt50"] = site["B_H_gt50"].fillna(0.0)
+    site["B_H_gt100"] = site["B_H_gt100"].fillna(0.0)
+    site["megafauna_fraction"] = site["megafauna_fraction"].fillna(0.0)
     site["dominant_species"] = site["dominant_species"].fillna("")
     site["species_list"] = site["species_list"].fillna("")
 
@@ -603,6 +642,9 @@ def main():
         print(f"  Mean species/site:      {sub['n_species'].mean():.1f}")
         print(f"  Biomass Index range:    {sub['B_H_index'].min():.2f} – {sub['B_H_index'].max():.2f}")
         print(f"  Metabolism Index range: {sub['M_H_index'].min():.2f} – {sub['M_H_index'].max():.2f}")
+        print(f"  Median Biomass >50kg:   {sub['B_H_gt50'].median():.2f}")
+        print(f"  Median Biomass >100kg:  {sub['B_H_gt100'].median():.2f}")
+        print(f"  Mean Megafauna %:       {sub['megafauna_fraction'].mean():.1f}%")
     print(f"{'='*60}")
 
 

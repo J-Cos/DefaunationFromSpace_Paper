@@ -475,6 +475,158 @@ def make_figure2(sites: pd.DataFrame, fig_dir: Path):
     print(f"Saved camera_traps_fig02_biophysical.pdf/png in PNAS format.")
 
 
+def make_figure3(det: pd.DataFrame, metrics: pd.DataFrame, fig_dir: Path):
+    """
+    4-panel body size and megafaunal comparison.
+    (A) Biomass Index of wild animals > 50 kg per site
+    (B) Biomass Index of megafauna > 100 kg per site
+    (C) Log body mass probability density curves of detected independent events
+    (D) Megafauna biomass fraction (%) of total standing biomass
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(DOUBLE_COL, DOUBLE_COL * 0.85), constrained_layout=True)
+
+    # Filter usable metrics (where total biomass index > 0)
+    valid_metrics = metrics[metrics["B_H_index"] > 0].copy()
+    colors = [PAL["Congo"], PAL["Amazon"]]
+
+    # ── (A) Biomass Index > 50 kg ───────────────────────────────────────────
+    ax = axes[0, 0]
+    box_data_50 = [
+        valid_metrics[valid_metrics["region"] == "Congo"]["B_H_gt50"].values,
+        valid_metrics[valid_metrics["region"] == "Amazon"]["B_H_gt50"].values
+    ]
+    bp_50 = ax.boxplot(box_data_50, tick_labels=["Congo", "Amazon"], patch_artist=True,
+                       widths=0.45, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_50["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(0.6)
+    for element in ["whiskers", "caps", "medians"]:
+        plt.setp(bp_50[element], color="black", lw=0.6)
+        
+    # Jitter points
+    for i, reg in enumerate(["Congo", "Amazon"]):
+        vals = box_data_50[i]
+        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
+        # Median label
+        med_val = np.median(vals)
+        ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
+                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+        
+    ax.set_ylabel("Biomass Index for animals >50 kg ($B_{H,>50}$)")
+    ax.set_yscale("symlog", linthresh=1.0)
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
+    ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    panel_label(ax, "A")
+
+    # ── (B) Biomass Index > 100 kg ──────────────────────────────────────────
+    ax = axes[0, 1]
+    box_data_100 = [
+        valid_metrics[valid_metrics["region"] == "Congo"]["B_H_gt100"].values,
+        valid_metrics[valid_metrics["region"] == "Amazon"]["B_H_gt100"].values
+    ]
+    bp_100 = ax.boxplot(box_data_100, tick_labels=["Congo", "Amazon"], patch_artist=True,
+                        widths=0.45, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_100["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(0.6)
+    for element in ["whiskers", "caps", "medians"]:
+        plt.setp(bp_100[element], color="black", lw=0.6)
+        
+    for i, reg in enumerate(["Congo", "Amazon"]):
+        vals = box_data_100[i]
+        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
+        med_val = np.median(vals)
+        ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
+                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+        
+    ax.set_ylabel("Biomass Index for megafauna >100 kg ($B_{H,>100}$)")
+    ax.set_yscale("symlog", linthresh=1.0)
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
+    ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    panel_label(ax, "B")
+
+    # ── (C) Individual Body Mass Density ────────────────────────────────────
+    ax = axes[1, 0]
+    from scipy.stats import gaussian_kde
+    
+    usable_det = det[
+        (det["taxon_quality"].isin(["species", "genus", "family"])) &
+        (~det["taxon_quality"].isin(["blank", "human", "domestic"])) &
+        (det["body_mass_kg"].notna()) &
+        (det["body_mass_kg"] > 0)
+    ].copy()
+    
+    for reg in ["Congo", "Amazon"]:
+        sub_det = usable_det[usable_det["region"] == reg]
+        log_masses = np.log10(sub_det["body_mass_kg"])
+        
+        # Kernel density estimate
+        kde = gaussian_kde(log_masses)
+        x_vals = np.linspace(log_masses.min() - 0.5, log_masses.max() + 0.5, 200)
+        y_vals = kde(x_vals)
+        
+        ax.plot(x_vals, y_vals, color=PAL[reg], lw=1.2, label=f"{reg} (n={len(sub_det)})")
+        ax.fill_between(x_vals, 0, y_vals, color=PAL[reg], alpha=0.15)
+        
+        # Add median line
+        med_m = np.median(sub_det["body_mass_kg"])
+        ax.axvline(np.log10(med_m), color=PAL[reg], ls="--", lw=0.8, alpha=0.7)
+        ax.text(np.log10(med_m), ax.get_ylim()[1] * 0.9, f" {med_m:.1f} kg",
+                color=PAL[reg], fontsize=5.5, fontweight="bold", ha="left" if reg=="Congo" else "right")
+        
+    ax.set_xlabel("log₁₀ species body mass (kg)")
+    ax.set_ylabel("Probability density")
+    ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5)
+    ax.legend(frameon=False, loc="upper right")
+    panel_label(ax, "C")
+
+    # ── (D) Megafauna Biomass Fraction ──────────────────────────────────────
+    ax = axes[1, 1]
+    box_data_frac = [
+        valid_metrics[valid_metrics["region"] == "Congo"]["megafauna_fraction"].values,
+        valid_metrics[valid_metrics["region"] == "Amazon"]["megafauna_fraction"].values
+    ]
+    bp_frac = ax.boxplot(box_data_frac, tick_labels=["Congo", "Amazon"], patch_artist=True,
+                         widths=0.45, showfliers=False, zorder=2)
+    
+    for patch, color in zip(bp_frac["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor("black")
+        patch.set_linewidth(0.6)
+    for element in ["whiskers", "caps", "medians"]:
+        plt.setp(bp_frac[element], color="black", lw=0.6)
+        
+    for i, reg in enumerate(["Congo", "Amazon"]):
+        vals = box_data_frac[i]
+        x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
+        ax.scatter(x_jitter, vals, color=colors[i], s=4, alpha=0.25, edgecolors="none", zorder=3)
+        
+        # Mean label
+        mean_val = np.mean(vals)
+        ax.text(i + 1, mean_val + 2 if mean_val > 0 else 2, f"mean={mean_val:.1f}%",
+                ha="center", va="bottom", fontsize=5.5, color="black", fontweight="bold")
+        
+    ax.set_ylabel("Megafaunal Biomass Fraction (%)")
+    ax.set_ylim(-2, 105)
+    ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
+    panel_label(ax, "D")
+
+    # ── Save Figures ────────────────────────────────────────────────────────
+    for ext in ["pdf", "png"]:
+        fig.savefig(fig_dir / f"camera_traps_fig03_bodysize.{ext}", dpi=300)
+    plt.close(fig)
+    print(f"Saved camera_traps_fig03_bodysize.pdf/png in PNAS format.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate PNAS-style publication-quality multi-panel figures comparing Amazon and Congo camera trap data."
@@ -496,6 +648,9 @@ def main():
 
     print("\nGenerating Figure 2: Biophysical Scaling & Energetics Comparison...")
     make_figure2(metrics, args.fig_dir)
+
+    print("\nGenerating Figure 3: Vertebrate Body Size & Megafauna Comparison...")
+    make_figure3(det, metrics, args.fig_dir)
 
     print(f"\nAll camera trap figures successfully generated and saved to {args.fig_dir}/")
 
