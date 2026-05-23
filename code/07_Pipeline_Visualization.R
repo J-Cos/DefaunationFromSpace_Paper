@@ -329,9 +329,9 @@ p2_b <- ggplot() +
   geom_spatvector(data = countries_c, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
   # Draw circles representing the 11.1km clustering radius around centroids
   geom_point(data = congo_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
-  # Plot camera deployments colored by cluster number
+  # Plot camera deployments colored by cluster number using a custom green ramp
   geom_point(data = congo_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
-  scale_fill_viridis_d(option = "turbo", guide = "none") +
+  scale_fill_manual(values = colorRampPalette(c("#81C784", "#1B5E20"))(length(unique(congo_c_info$deps$cluster_num))), guide = "none") +
   labs(
     title = "B. Congo Spatial Clustering (11.1 km)",
     x = "Longitude (°E)", y = "Latitude (°N)"
@@ -345,7 +345,7 @@ p2_c <- ggplot() +
   geom_spatvector(data = countries_a, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
   geom_point(data = amazon_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
   geom_point(data = amazon_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
-  scale_fill_viridis_d(option = "turbo", guide = "none") +
+  scale_fill_manual(values = colorRampPalette(c("#FFB74D", "#E65100"))(length(unique(amazon_c_info$deps$cluster_num))), guide = "none") +
   labs(
     title = "C. Amazon Spatial Clustering (11.1 km)",
     x = "Longitude (°E)", y = "Latitude (°N)"
@@ -387,12 +387,9 @@ cluster_spans <- cluster_temporal_spans %>%
 p2_d <- ggplot(cluster_spans) +
   geom_vline(xintercept = gedi_start, linetype = "solid", color = "#D32F2F", linewidth = 0.75) +
   annotate("text", x = gedi_start + 180, y = 5, label = "GEDI Launch\n(April 2019)", color = "#D32F2F", size = 2.0, fontface = "bold", hjust = 0) +
-  geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = w_temp_cluster), linewidth = 1.5, alpha = 0.8) +
-  scale_color_gradientn(
-    colors = c("#D32F2F", "#F57C00", "#FBC02D", "#388E3C"),
-    name = "Temporal Weight",
-    breaks = c(0.1, 0.25, 0.5, 1.0)
-  ) +
+  geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = region, alpha = w_temp_cluster), linewidth = 1.5) +
+  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_alpha_continuous(name = "Temporal Weight", range = c(0.35, 1.0), breaks = c(0.1, 0.25, 0.5, 1.0)) +
   scale_x_date(date_breaks = "4 years", date_labels = "%Y", limits = c(as.Date("2003-01-01"), as.Date("2024-12-31"))) +
   labs(
     title = "D. Survey Temporal Calibration Span",
@@ -401,10 +398,10 @@ p2_d <- ggplot(cluster_spans) +
   ) +
   t_theme +
   theme(legend.position = "bottom",
-        legend.title = element_text(size = 6.0, face = "bold"),
+        legend.title = element_text(size = 5.5, face = "bold"),
         legend.text = element_text(size = 5.0),
         legend.key.height = unit(0.12, "cm"),
-        legend.key.width = unit(1.0, "cm"),
+        legend.key.width = unit(0.5, "cm"),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         plot.margin = margin(2, 4, 2, 4, "pt"))
