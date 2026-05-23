@@ -260,42 +260,32 @@ if (!file.exists(det_path)) {
 }
 det_all <- read_csv(det_path, show_col_types = FALSE)
 
-# --- Panel A: Species Rank-Abundance curves ---
-sp_abundance <- det_all %>%
-  filter(!is.na(species) & taxon_quality == "species") %>%
-  group_by(region, genus, species, common_name) %>%
-  summarise(n_detections = sum(n_detections), .groups = "drop") %>%
-  arrange(region, desc(n_detections))
+# --- Panel A: Individual size distribution curve ---
+bin_width <- 0.25
+df_binned_mass <- det_all %>%
+  filter(!is.na(body_mass_kg) & body_mass_kg > 0) %>%
+  mutate(log_mass = log10(body_mass_kg)) %>%
+  mutate(bin_center = round(log_mass / bin_width) * bin_width) %>%
+  group_by(region, bin_center) %>%
+  summarise(n_ind = sum(n_detections), .groups = "drop") %>%
+  mutate(body_mass_kg = 10^bin_center)
 
-# Rank species within each region
-sp_abundance <- sp_abundance %>%
-  group_by(region) %>%
-  mutate(rank = row_number()) %>%
-  ungroup()
-
-p2_a <- ggplot(sp_abundance, aes(x = rank, y = n_detections, color = region)) +
+p2_a <- ggplot(df_binned_mass, aes(x = body_mass_kg, y = n_ind, color = region)) +
   geom_line(linewidth = 0.8) +
-  geom_point(size = 1.0, alpha = 0.8) +
+  geom_point(size = 1.2, alpha = 0.8) +
   scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
   scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
   labs(
-    title = "A. Vertebrate Rank-Abundance Curves",
-    x = "Species Rank",
-    y = "Total Independent Detections"
+    title = "A. Vertebrate Individual Size Distribution",
+    x = "Mammal Body Mass (kg, log scale)",
+    y = "Total Detections (log scale)"
   ) +
   t_theme +
-  theme(legend.position = c(0.7, 0.8),
+  theme(legend.position = c(0.78, 0.82),
         legend.title = element_text(size = 6.0, face = "bold"),
         legend.text = element_text(size = 5.5),
         plot.margin = margin(2, 4, 2, 4, "pt"))
-
-# Add text labels for top species
-top_spp <- sp_abundance %>% group_by(region) %>% slice_max(n_detections, n = 1)
-p2_a <- p2_a +
-  annotate("text", x = top_spp$rank[top_spp$region == "Congo"] + 5, y = top_spp$n_detections[top_spp$region == "Congo"],
-           label = "Duiker (Congo)", size = 1.8, fontface = "italic", color = pal_basin["Congo"], hjust = 0) +
-  annotate("text", x = top_spp$rank[top_spp$region == "Amazon"] + 5, y = top_spp$n_detections[top_spp$region == "Amazon"],
-           label = "Paca (Amazon)", size = 1.8, fontface = "italic", color = pal_basin["Amazon"], hjust = 0)
 
 # --- Dynamic Haversine Clustering Maps Helper ---
 haversine_dist <- function(lon1, lat1, lon2, lat2) {
@@ -439,19 +429,19 @@ ORDER_COLOURS <- c(
 )
 
 df_tax <- det_all %>%
-  filter(!is.na(order)) %>%
+  filter(!is.na(order) & !is.na(body_mass_kg) & body_mass_kg > 0) %>%
   group_by(region, order) %>%
-  summarise(n_events = sum(n_detections), .groups = "drop")
+  summarise(total_biomass = sum(n_detections * body_mass_kg), .groups = "drop")
 
 top_orders <- c("Cetartiodactyla", "Proboscidea", "Carnivora", "Rodentia", "Primates", "Cingulata", "Perissodactyla")
 df_tax <- df_tax %>%
   mutate(order_clean = ifelse(order %in% top_orders, order, "Other")) %>%
   group_by(region, order_clean) %>%
-  summarise(n_events = sum(n_events), .groups = "drop")
+  summarise(total_biomass = sum(total_biomass), .groups = "drop")
 
 df_tax <- df_tax %>%
   group_by(region) %>%
-  mutate(prop = n_events / sum(n_events) * 100) %>%
+  mutate(prop = total_biomass / sum(total_biomass) * 100) %>%
   ungroup()
 
 df_tax$order_clean <- factor(df_tax$order_clean, levels = rev(c(top_orders, "Other")))
@@ -460,8 +450,8 @@ p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
   geom_bar(stat = "identity", width = 0.55, color = "black", linewidth = 0.25) +
   scale_fill_manual(values = ORDER_COLOURS, name = "Taxonomic Order:") +
   labs(
-    title = "E. Vertebrate Order Composition",
-    x = "Proportion of Detections (%)",
+    title = "E. Vertebrate Biomass Composition",
+    x = "Proportion of Total Biomass (%)",
     y = "Basin/Continent"
   ) +
   t_theme +
