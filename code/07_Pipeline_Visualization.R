@@ -148,7 +148,7 @@ df_zoom_uoi <- as.data.frame(r_zoom_uoi, xy = TRUE, na.rm = TRUE)
 
 p1_c <- ggplot() +
   geom_tile(data = df_zoom_n, aes(x = x, y = y, fill = gedi_n)) +
-  scale_fill_viridis_c(option = "mako", name = "Shot Count", trans = "log1p", breaks = c(0, 5, 20, 100), labels = c("0", "5", "20", "100+")) +
+  scale_fill_viridis_c(option = "mako", name = "Shot Density", limits = c(0, 0.15), oob = scales::squish) +
   t_theme +
   theme(legend.position = "right",
         legend.title = element_text(size = 6.0, face = "bold"),
@@ -158,7 +158,7 @@ p1_c <- ggplot() +
         axis.text = element_blank(), axis.ticks = element_blank(),
         axis.title = element_blank(), panel.grid = element_blank(),
         plot.margin = margin(2, 2, 2, 2, "pt")) +
-  labs(title = "C. Zoomed Raw GEDI Shot Counts (500m)")
+  labs(title = "C. Zoomed Raw GEDI Shot Density (500m)")
 
 p1_d <- ggplot() +
   geom_tile(data = df_zoom_uoi, aes(x = x, y = y, fill = uoi)) +
@@ -174,8 +174,8 @@ p1_d <- ggplot() +
         plot.margin = margin(2, 2, 2, 2, "pt")) +
   labs(title = "D. Zoomed Raw Understory Openness (500m)")
 
-# --- Figure 1 Panel E: GEDI UOI Standard Error vs. Shot Count ---
-# Showcases the shot-noise uncertainty reduction scaling law (SE ~ 1/sqrt(gedi_n))
+# --- Figure 1 Panel E: Uncertainty Decay Across Scales ---
+# Showcases the reduction of UOI standard error of the mean for each camera trap cluster across scales
 scales_vector <- c(5000, 10000, 20000, 30000, 50000)
 df_multiscale_se <- do.call(rbind, lapply(scales_vector, function(s) {
   dat <- extract_scale_data(s)
@@ -183,38 +183,31 @@ df_multiscale_se <- do.call(rbind, lapply(scales_vector, function(s) {
   return(dat)
 }))
 
-p1_e <- ggplot(df_multiscale_se, aes(x = n_pixels * 5, y = uoi_se, color = basin)) +
-  geom_point(aes(size = scale_km), alpha = 0.6) +
-  geom_smooth(method = "lm", formula = y ~ log(x), color = "black", linetype = "dashed", linewidth = 0.5, se = FALSE) +
+p1_e <- ggplot(df_multiscale_se, aes(x = factor(scale_km), y = uoi_se, color = basin, group = paste(cluster_id, basin))) +
+  geom_line(alpha = 0.5, linewidth = 0.55) +
+  geom_point(size = 1.0, alpha = 0.75) +
   scale_color_manual(values = pal_basin, name = "Basin") +
-  scale_size_continuous(name = "Scale (km)", range = c(1.0, 3.5), breaks = c(5, 20, 50)) +
-  scale_x_log10(labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
-    title = "E. Shot-Noise Averaging Law",
-    x = "Average GEDI Shots per Grid Cell (log scale)",
+    title = "E. Uncertainty Decay Across Scales",
+    x = "Spatial Grain (km)",
     y = "GEDI UOI Standard Error of Mean (SE)"
   ) +
   t_theme +
-  theme(legend.position = "right",
+  theme(legend.position = c(0.78, 0.76),
         legend.title = element_text(size = 6.0, face = "bold"),
-        legend.text = element_text(size = 5.0),
-        legend.key.width = unit(0.12, "cm"),
-        legend.key.height = unit(0.35, "cm"),
-        legend.margin = margin(0,0,0,0),
-        plot.margin = margin(2, 2, 2, 2, "pt"))
+        legend.text = element_text(size = 5.5),
+        plot.margin = margin(2, 4, 2, 4, "pt"))
 
-# --- Figure 1 Panel F: UOI Distribution Scaling Law (500m vs 5km vs 20km) ---
+# --- Figure 1 Panel F: UOI Distribution Scaling Law (500m vs 5km) ---
 uoi_500m <- as.data.frame(r_congo_native[["uoi"]], na.rm = TRUE)$uoi
 uoi_5km <- as.data.frame(r_congo_5km[["uoi"]], na.rm = TRUE)$uoi
-uoi_20km <- as.data.frame(assign_multiscale_names(rast("outputs/EOdata/analysis_stack_20000_Congo.tif"))[["uoi"]], na.rm = TRUE)$uoi
 
 df_hist <- rbind(
   data.frame(uoi = uoi_500m, scale = "Raw 500m"),
-  data.frame(uoi = uoi_5km, scale = "Aggregated 5km"),
-  data.frame(uoi = uoi_20km, scale = "Aggregated 20km")
+  data.frame(uoi = uoi_5km, scale = "Aggregated 5km")
 )
-df_hist$scale <- factor(df_hist$scale, levels = c("Raw 500m", "Aggregated 5km", "Aggregated 20km"))
+df_hist$scale <- factor(df_hist$scale, levels = c("Raw 500m", "Aggregated 5km"))
 
 p1_f <- ggplot(df_hist, aes(x = uoi, fill = scale, color = scale)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
@@ -464,32 +457,23 @@ p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
         plot.margin = margin(2, 4, 2, 4, "pt")) +
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 
-# --- Panel F: Vertebrate Body Mass Probability Density curves ---
-df_mass <- det_all %>%
-  filter(!is.na(body_mass_kg) & body_mass_kg > 0) %>%
-  select(region, body_mass_kg, n_detections) %>%
-  uncount(weights = n_detections)
+# --- Panel F: Vertebrate Biomass Index distribution across clusters ---
+df_clusters <- extract_scale_data(5000)
 
-p2_f <- ggplot(df_mass, aes(x = body_mass_kg, fill = region, color = region)) +
-  geom_density(alpha = 0.4, linewidth = 0.75) +
+p2_f <- ggplot(df_clusters, aes(x = basin, y = B_H_index, fill = basin, color = basin)) +
+  geom_boxplot(alpha = 0.25, width = 0.5, outlier.shape = NA, linewidth = 0.5) +
+  geom_jitter(width = 0.15, size = 1.6, alpha = 0.8, shape = 21, stroke = 0.4, color = "black") +
   scale_fill_manual(values = pal_basin, name = "Basin") +
   scale_color_manual(values = pal_basin, name = "Basin") +
-  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 4000), labels = c("0", "10", "100", "1,000", "4,000")) +
   labs(
-    title = "F. Mammal Body Mass Distribution",
-    x = "Mammal Body Mass (kg, log scale)",
-    y = "Probability Density"
+    title = "F. Standing Biomass Across Spatial Clusters",
+    x = "Basin / Region",
+    y = "Cluster Biomass Index (log1p scale)"
   ) +
   t_theme +
   theme(legend.position = "none",
         plot.margin = margin(2, 4, 2, 4, "pt"))
-
-# Annotate body size limits
-p2_f <- p2_f +
-  annotate("segment", x = 5000, xend = 5000, y = 0, yend = 0.35, color = pal_basin["Congo"], linewidth = 0.5, linetype = "dotted") +
-  annotate("text", x = 4800, y = 0.37, label = "Elephants\n(~5000kg)", size = 1.8, color = pal_basin["Congo"], fontface = "bold", hjust = 1) +
-  annotate("segment", x = 200, xend = 200, y = 0, yend = 0.50, color = pal_basin["Amazon"], linewidth = 0.5, linetype = "dotted") +
-  annotate("text", x = 220, y = 0.52, label = "Tapirs\n(~200kg)", size = 1.8, color = pal_basin["Amazon"], fontface = "bold", hjust = 0)
 
 # Assemble Figure 2 (6 Panels in Balanced Layout)
 row1_p2 <- plot_grid(p2_a, p2_d, ncol = 2, rel_widths = c(1, 1))
