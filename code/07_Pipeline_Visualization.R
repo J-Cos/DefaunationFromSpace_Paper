@@ -460,16 +460,14 @@ p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
 # --- Panel F: Vertebrate Biomass Index distribution across clusters ---
 df_clusters <- extract_scale_data(5000)
 
-p2_f <- ggplot(df_clusters, aes(x = basin, y = B_H_index, fill = basin, color = basin)) +
-  geom_boxplot(alpha = 0.25, width = 0.5, outlier.shape = NA, linewidth = 0.5) +
-  geom_jitter(width = 0.15, size = 1.6, alpha = 0.8, shape = 21, stroke = 0.4, color = "black") +
+p2_f <- ggplot(df_clusters, aes(x = B_H_index, fill = basin)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 12, color = "black", linewidth = 0.25) +
   scale_fill_manual(values = pal_basin, name = "Basin") +
-  scale_color_manual(values = pal_basin, name = "Basin") +
-  scale_y_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 4000), labels = c("0", "10", "100", "1,000", "4,000")) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 4000), labels = c("0", "10", "100", "1,000", "4,000")) +
   labs(
     title = "F. Standing Biomass Across Spatial Clusters",
-    x = "Basin / Region",
-    y = "Cluster Biomass Index (log1p scale)"
+    x = "Cluster Biomass Index (log1p scale)",
+    y = "Number of Spatial Clusters"
   ) +
   t_theme +
   theme(legend.position = "none",
