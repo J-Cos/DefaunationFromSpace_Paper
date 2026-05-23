@@ -1,20 +1,24 @@
 # =============================================================================
 # code/07_Pipeline_Visualization.R
 #
-# Generates two premium PNAS-style publication-grade figures summarizing the
-# GEDI raw data pipeline (Figure 1) and the Camera Trap data pipeline (Figure 2).
+# Generates two premium 6-panel PNAS-style publication-grade figures summarizing
+# the GEDI raw data pipeline (Figure 1) and the Camera Trap data pipeline (Figure 2).
 #
-# Figure 1: GEDI Raw Data Pipeline & Shot-Sparsity Distribution
+# Figure 1: GEDI Raw Data Pipeline & Shot-Sparsity Distribution (6 Panels)
 #   (A) Congo Basin regional map of GEDI UOI (5km) with cluster points
 #   (B) Amazon Basin regional map of GEDI UOI (5km) with cluster points
 #   (C) Zoomed-in inset at raw 500m scale showing GEDI shot density sparsity (gedi_n)
-#   (D) Shot-noise uncertainty reduction: GEDI UOI Standard Error vs. Shot Count (gedi_n)
+#   (D) Zoomed-in inset at raw 500m scale showing GEDI understory openness (uoi)
+#   (E) Shot-noise uncertainty reduction: GEDI UOI Standard Error vs. Shot Count
+#   (F) UOI Distribution Scaling Law: raw 500m vs aggregated 5km vs aggregated 20km
 #
-# Figure 2: Camera Trap Wildlife Ingestion, Clustering, and Temporal Calibration
+# Figure 2: Camera Trap Wildlife Ingestion, Clustering, and Temporal Calibration (6 Panels)
 #   (A) Species rank-abundance curves for both basins
-#   (B) Spatial clustering map of deployments colored by mathematical cluster ID
-#   (C) Temporal calibration timeline showing cluster survey spans vs. GEDI mission launch
-#   (D) Proportional horizontal bar plot of taxonomic order composition
+#   (B) Spatial clustering map of Congo deployments colored by mathematical cluster ID
+#   (C) Spatial clustering map of Amazon deployments colored by mathematical cluster ID
+#   (D) Temporal calibration timeline showing cluster survey spans vs. GEDI mission launch
+#   (E) Proportional horizontal bar plot of taxonomic order composition
+#   (F) Vertebrate body mass probability density distribution (Congo vs. Amazon)
 # =============================================================================
 
 library(terra)
@@ -25,9 +29,10 @@ library(dplyr)
 library(readr)
 library(sf)
 library(scales)
+library(tidyr)
 
 cat("============================================================\n")
-cat("=== Generating Manuscript Figures 1 and 2 (Pipeline Summary) ===\n")
+cat("=== Generating 6-Panel Manuscript Figures 1 and 2 (Pipeline Summary) ===\n")
 cat("============================================================\n\n")
 
 # --- Source standard styling and helpers -------------------------------------
@@ -40,9 +45,9 @@ dir.create("figures", recursive = TRUE, showWarnings = FALSE)
 pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20")
 
 # =============================================================================
-# FIGURE 1: GEDI RAW DATA PIPELINE & SHOT-SPARSITY DISTRIBUTION
+# FIGURE 1: GEDI RAW DATA PIPELINE & SHOT-SPARSITY DISTRIBUTION (6 PANELS)
 # =============================================================================
-cat("--- Drafting Figure 1: GEDI Raw Data Pipeline ---\n")
+cat("--- Drafting Figure 1: GEDI Raw Data Pipeline (6 Panels) ---\n")
 
 # Helper to dynamically assign names based on layer counts
 assign_multiscale_names <- function(r) {
@@ -128,7 +133,7 @@ p1_b <- ggplot() +
 shared_uoi_legend <- get_legend(p1_b)
 p1_b <- p1_b + theme(legend.position = "none")
 
-# --- Figure 1 Panel C: Zoomed-in Inset at raw 500m scale showing GEDI shot density sparsity (gedi_n) ---
+# --- Figure 1 Panels C & D: Zoomed-in Inset at raw 500m scale ---
 # We select a sub-extent of Congo native stack containing a camera trap cluster
 r_congo_native <- assign_native_names(rast("outputs/EOdata/analysis_stack_native_Congo.tif"))
 
@@ -139,6 +144,7 @@ r_zoom_n <- crop(r_congo_native[["gedi_n"]], zoom_ext)
 
 # Convert to dataframes for neat plotting
 df_zoom_n <- as.data.frame(r_zoom_n, xy = TRUE, na.rm = TRUE)
+df_zoom_uoi <- as.data.frame(r_zoom_uoi, xy = TRUE, na.rm = TRUE)
 
 p1_c <- ggplot() +
   geom_tile(data = df_zoom_n, aes(x = x, y = y, fill = gedi_n)) +
@@ -149,26 +155,27 @@ p1_c <- ggplot() +
         legend.text = element_text(size = 5.0),
         legend.key.width = unit(0.12, "cm"),
         legend.key.height = unit(0.4, "cm"),
-        axis.text = element_text(size = 5.5),
+        axis.text = element_blank(), axis.ticks = element_blank(),
+        axis.title = element_blank(), panel.grid = element_blank(),
         plot.margin = margin(2, 2, 2, 2, "pt")) +
-  labs(title = "C. Zoomed Raw GEDI Shot Counts (500m)",
-       x = "Longitude (°E)", y = "Latitude (°N)")
+  labs(title = "C. Zoomed Raw GEDI Shot Counts (500m)")
 
-# --- Figure 1 Panel D: GEDI UOI Standard Error vs. Shot Count (gedi_n) ---
+p1_d <- ggplot() +
+  geom_tile(data = df_zoom_uoi, aes(x = x, y = y, fill = uoi)) +
+  scale_fill_viridis_c(option = "plasma", name = "UOI", limits = c(0.88, 0.99), oob = scales::squish) +
+  t_theme +
+  theme(legend.position = "right",
+        legend.title = element_text(size = 6.0, face = "bold"),
+        legend.text = element_text(size = 5.0),
+        legend.key.width = unit(0.12, "cm"),
+        legend.key.height = unit(0.4, "cm"),
+        axis.text = element_blank(), axis.ticks = element_blank(),
+        axis.title = element_blank(), panel.grid = element_blank(),
+        plot.margin = margin(2, 2, 2, 2, "pt")) +
+  labs(title = "D. Zoomed Raw Understory Openness (500m)")
+
+# --- Figure 1 Panel E: GEDI UOI Standard Error vs. Shot Count ---
 # Showcases the shot-noise uncertainty reduction scaling law (SE ~ 1/sqrt(gedi_n))
-# We extract a random sample of pixels from the native Congo stack
-set.seed(42)
-df_native_sample <- as.data.frame(r_congo_native[[c("uoi", "gedi_n")]], na.rm = TRUE)
-df_native_sample <- df_native_sample %>%
-  filter(gedi_n > 0 & gedi_n < 1000) %>%
-  sample_n(pmin(nrow(.), 1500))
-
-# Standard error of the mean for UOI can be simulated or calculated.
-# Since UOI is beta-distributed, UOI_SD across a cluster decreases with shot density.
-# Let's plot the standard error of UOI aggregated across scales vs aggregated shot counts!
-# We extract this from the multi-scale dataset itself
-df_scales <- extract_scale_data(5000)
-# We can pool multiple scales to show the standard error of UOI decreasing as average shot counts (gedi_n) increase!
 scales_vector <- c(5000, 10000, 20000, 30000, 50000)
 df_multiscale_se <- do.call(rbind, lapply(scales_vector, function(s) {
   dat <- extract_scale_data(s)
@@ -176,7 +183,7 @@ df_multiscale_se <- do.call(rbind, lapply(scales_vector, function(s) {
   return(dat)
 }))
 
-p1_d <- ggplot(df_multiscale_se, aes(x = n_pixels * 5, y = uoi_se, color = basin)) +
+p1_e <- ggplot(df_multiscale_se, aes(x = n_pixels * 5, y = uoi_se, color = basin)) +
   geom_point(aes(size = scale_km), alpha = 0.6) +
   geom_smooth(method = "lm", formula = y ~ log(x), color = "black", linetype = "dashed", linewidth = 0.5, se = FALSE) +
   scale_color_manual(values = pal_basin, name = "Basin") +
@@ -184,33 +191,67 @@ p1_d <- ggplot(df_multiscale_se, aes(x = n_pixels * 5, y = uoi_se, color = basin
   scale_x_log10(labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
   labs(
-    title = "D. Shot-Noise Averaging Law",
+    title = "E. Shot-Noise Averaging Law",
     x = "Average GEDI Shots per Grid Cell (log scale)",
     y = "GEDI UOI Standard Error of Mean (SE)"
   ) +
   t_theme +
   theme(legend.position = "right",
         legend.title = element_text(size = 6.0, face = "bold"),
-        legend.text = element_text(size = 5.5),
+        legend.text = element_text(size = 5.0),
+        legend.key.width = unit(0.12, "cm"),
+        legend.key.height = unit(0.35, "cm"),
         legend.margin = margin(0,0,0,0),
         plot.margin = margin(2, 2, 2, 2, "pt"))
 
-# Assemble Figure 1
-row1 <- plot_grid(p1_a, p1_b, ncol = 2, rel_widths = c(1, 1))
-row1_legend <- plot_grid(row1, shared_uoi_legend, ncol = 1, rel_heights = c(1, 0.15))
-row2 <- plot_grid(p1_c, p1_d, ncol = 2, rel_widths = c(1, 1.15))
+# --- Figure 1 Panel F: UOI Distribution Scaling Law (500m vs 5km vs 20km) ---
+uoi_500m <- as.data.frame(r_congo_native[["uoi"]], na.rm = TRUE)$uoi
+uoi_5km <- as.data.frame(r_congo_5km[["uoi"]], na.rm = TRUE)$uoi
+uoi_20km <- as.data.frame(assign_multiscale_names(rast("outputs/EOdata/analysis_stack_20000_Congo.tif"))[["uoi"]], na.rm = TRUE)$uoi
 
-fig1_final <- plot_grid(row1_legend, row2, ncol = 1, rel_heights = c(1.05, 0.95), hspace = 0.2)
+df_hist <- rbind(
+  data.frame(uoi = uoi_500m, scale = "Raw 500m"),
+  data.frame(uoi = uoi_5km, scale = "Aggregated 5km"),
+  data.frame(uoi = uoi_20km, scale = "Aggregated 20km")
+)
+df_hist$scale <- factor(df_hist$scale, levels = c("Raw 500m", "Aggregated 5km", "Aggregated 20km"))
+
+p1_f <- ggplot(df_hist, aes(x = uoi, fill = scale, color = scale)) +
+  geom_density(alpha = 0.35, linewidth = 0.6) +
+  scale_fill_viridis_d(option = "viridis", name = "Spatial Grain") +
+  scale_color_viridis_d(option = "viridis", name = "Spatial Grain") +
+  scale_x_continuous(limits = c(0.88, 0.99)) +
+  labs(
+    title = "F. UOI Distribution Scaling Law",
+    x = "GEDI Understory Openness Index (UOI)",
+    y = "Probability Density"
+  ) +
+  t_theme +
+  theme(legend.position = "right",
+        legend.title = element_text(size = 6.0, face = "bold"),
+        legend.text = element_text(size = 5.0),
+        legend.key.width = unit(0.12, "cm"),
+        legend.key.height = unit(0.35, "cm"),
+        legend.margin = margin(0,0,0,0),
+        plot.margin = margin(2, 2, 2, 2, "pt"))
+
+# Assemble Figure 1 (6 Panels arranged in 3x2 Grid)
+row1_f1 <- plot_grid(p1_a, p1_b, ncol = 2, rel_widths = c(1, 1))
+row1_legend_f1 <- plot_grid(row1_f1, shared_uoi_legend, ncol = 1, rel_heights = c(1, 0.15))
+row2_f1 <- plot_grid(p1_c, p1_d, ncol = 2, rel_widths = c(1, 1))
+row3_f1 <- plot_grid(p1_e, p1_f, ncol = 2, rel_widths = c(1.05, 1.0))
+
+fig1_final <- plot_grid(row1_legend_f1, row2_f1, row3_f1, ncol = 1, rel_heights = c(1.05, 0.9, 0.9), hspace = 0.28)
 
 fig1_png <- "figures/figure1_gedi_pipeline.png"
-ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 15.0, units = "cm", dpi = 600, bg = "white")
-cat("✓ Figure 1 successfully saved to:", fig1_png, "\n\n")
+ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 22.0, units = "cm", dpi = 600, bg = "white")
+cat("✓ 6-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 
 
 # =============================================================================
 # FIGURE 2: CAMERA TRAP WILDLIFE INGESTION, CLUSTERING, AND TEMPORAL CALIBRATION
 # =============================================================================
-cat("--- Drafting Figure 2: Camera Trap Wildlife Ingestion & Calibration ---\n")
+cat("--- Drafting Figure 2: Camera Trap Wildlife Ingestion & Calibration (6 Panels) ---\n")
 
 # Load raw detections
 det_path <- "outputs/camera_traps_joint_detections.csv"
@@ -218,9 +259,6 @@ if (!file.exists(det_path)) {
   stop("Camera trap detections missing: ", det_path)
 }
 det_all <- read_csv(det_path, show_col_types = FALSE)
-
-# Load aggregated cluster data
-df_clusters <- extract_scale_data(5000)
 
 # --- Panel A: Species Rank-Abundance curves ---
 sp_abundance <- det_all %>%
@@ -255,18 +293,11 @@ p2_a <- ggplot(sp_abundance, aes(x = rank, y = n_detections, color = region)) +
 top_spp <- sp_abundance %>% group_by(region) %>% slice_max(n_detections, n = 1)
 p2_a <- p2_a +
   annotate("text", x = top_spp$rank[top_spp$region == "Congo"] + 5, y = top_spp$n_detections[top_spp$region == "Congo"],
-           label = "Duiker (Congo)", size = 2.0, fontface = "italic", color = pal_basin["Congo"], hjust = 0) +
+           label = "Duiker (Congo)", size = 1.8, fontface = "italic", color = pal_basin["Congo"], hjust = 0) +
   annotate("text", x = top_spp$rank[top_spp$region == "Amazon"] + 5, y = top_spp$n_detections[top_spp$region == "Amazon"],
-           label = "Paca (Amazon)", size = 2.0, fontface = "italic", color = pal_basin["Amazon"], hjust = 0)
+           label = "Paca (Amazon)", size = 1.8, fontface = "italic", color = pal_basin["Amazon"], hjust = 0)
 
-# --- Panel B: Spatial Clustering Map of Deployments ---
-# We extract unique coordinate locations for deployments in Congo
-# and map them to their Haversine cluster ID to show single-linkage clustering
-unique_deps <- det_all %>%
-  select(region, longitude, latitude, deployment_id) %>%
-  distinct()
-
-# Calculate spatial clusters dynamically for plotting
+# --- Dynamic Haversine Clustering Maps Helper ---
 haversine_dist <- function(lon1, lat1, lon2, lat2) {
   r <- 6371.0
   rad <- pi / 180
@@ -279,55 +310,68 @@ haversine_dist <- function(lon1, lat1, lon2, lat2) {
   return(r * c)
 }
 
-coords_df <- unique_deps %>% 
-  filter(region == "Congo") %>%
-  select(longitude, latitude) %>% 
-  distinct() %>% 
-  mutate(cluster_num = 0)
-
-# Haversine distance single-linkage clustering (11.1km threshold)
-n_c <- nrow(coords_df)
-if (n_c > 1) {
-  dist_mat <- matrix(0, nrow=n_c, ncol=n_c)
-  for (i in 1:n_c) {
-    for (j in 1:n_c) {
-      dist_mat[i,j] <- haversine_dist(coords_df$longitude[i], coords_df$latitude[i], coords_df$longitude[j], coords_df$latitude[j])
+get_clustered_deployments <- function(basin_name, buffer_val = 0.1) {
+  unique_deps <- det_all %>%
+    filter(region == basin_name) %>%
+    select(longitude, latitude, deployment_id) %>%
+    distinct()
+  
+  n_deps <- nrow(unique_deps)
+  if (n_deps > 1) {
+    dist_mat <- matrix(0, nrow = n_deps, ncol = n_deps)
+    for (i in 1:n_deps) {
+      for (j in 1:n_deps) {
+        dist_mat[i,j] <- haversine_dist(unique_deps$longitude[i], unique_deps$latitude[i], unique_deps$longitude[j], unique_deps$latitude[j])
+      }
     }
+    hc <- hclust(as.dist(dist_mat), method = "single")
+    unique_deps$cluster_num <- cutree(hc, h = 11.1)
+  } else {
+    unique_deps$cluster_num <- 1
   }
-  hc <- hclust(as.dist(dist_mat), method="single")
-  coords_df$cluster_num <- cutree(hc, h=11.1)
-} else {
-  coords_df$cluster_num <- 1
+  
+  centroids <- unique_deps %>%
+    group_by(cluster_num) %>%
+    summarise(lon = mean(longitude), lat = mean(latitude), .groups = "drop")
+  
+  return(list(deps = unique_deps, centroids = centroids))
 }
 
-# Overlay Congo country outlines zoomed into Congo Camera Trap clusters
-congo_deps_zoom <- unique_deps %>%
-  filter(region == "Congo") %>%
-  left_join(coords_df, by = c("longitude", "latitude"))
+# Run Haversine Single-Linkage Clustering for both basins
+congo_c_info <- get_clustered_deployments("Congo")
+amazon_c_info <- get_clustered_deployments("Amazon")
 
-congo_cluster_centroids <- congo_deps_zoom %>%
-  group_by(cluster_num) %>%
-  summarise(lon = mean(longitude), lat = mean(latitude), .groups = "drop")
-
+# --- Panel B: Congo Spatial Clustering Map ---
 p2_b <- ggplot() +
   geom_spatvector(data = countries_c, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
-  # Draw circles indicating 11.1km radius around centroids
-  geom_point(data = congo_cluster_centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
-  # Plot individual camera trap deployments colored by spatial cluster ID
-  geom_point(data = congo_deps_zoom, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
+  # Draw circles representing the 11.1km clustering radius around centroids
+  geom_point(data = congo_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
+  # Plot camera deployments colored by cluster number
+  geom_point(data = congo_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
   scale_fill_viridis_d(option = "turbo", guide = "none") +
   labs(
-    title = "B. Haversine Single-Linkage Clustering",
-    subtitle = "Congo Basin: 11.1 km Distance Thresholds"
+    title = "B. Congo Spatial Clustering (11.1 km)",
+    x = "Longitude (°E)", y = "Latitude (°N)"
   ) +
   t_theme +
   theme(axis.text = element_text(size = 5.5),
-        plot.margin = margin(2, 4, 2, 4, "pt")) +
-  labs(x = "Longitude (°E)", y = "Latitude (°N)")
+        plot.margin = margin(2, 4, 2, 4, "pt"))
 
-# --- Panel C: Temporal Calibration Timeline ---
-# Visualizes survey start/end dates in relation to GEDI launch (April 17, 2019)
-# and shows how temporal weights are assigned
+# --- Panel C: Amazon Spatial Clustering Map ---
+p2_c <- ggplot() +
+  geom_spatvector(data = countries_a, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
+  geom_point(data = amazon_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
+  geom_point(data = amazon_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
+  scale_fill_viridis_d(option = "turbo", guide = "none") +
+  labs(
+    title = "C. Amazon Spatial Clustering (11.1 km)",
+    x = "Longitude (°E)", y = "Latitude (°N)"
+  ) +
+  t_theme +
+  theme(axis.text = element_text(size = 5.5),
+        plot.margin = margin(2, 4, 2, 4, "pt"))
+
+# --- Panel D: Temporal Calibration Timeline ---
 gedi_start <- as.Date("2019-04-17")
 
 cluster_temporal_spans <- det_all %>%
@@ -357,11 +401,9 @@ cluster_spans <- cluster_temporal_spans %>%
   arrange(start) %>%
   mutate(row_idx = row_number())
 
-p2_c <- ggplot(cluster_spans) +
-  # Draw a vertical line representing the GEDI mission launch
+p2_d <- ggplot(cluster_spans) +
   geom_vline(xintercept = gedi_start, linetype = "solid", color = "#D32F2F", linewidth = 0.75) +
   annotate("text", x = gedi_start + 180, y = 5, label = "GEDI Launch\n(April 2019)", color = "#D32F2F", size = 2.0, fontface = "bold", hjust = 0) +
-  # Draw horizontal bars for each camera trap cluster survey span
   geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = w_temp_cluster), linewidth = 1.5, alpha = 0.8) +
   scale_color_gradientn(
     colors = c("#D32F2F", "#F57C00", "#FBC02D", "#388E3C"),
@@ -370,7 +412,7 @@ p2_c <- ggplot(cluster_spans) +
   ) +
   scale_x_date(date_breaks = "4 years", date_labels = "%Y", limits = c(as.Date("2003-01-01"), as.Date("2024-12-31"))) +
   labs(
-    title = "C. Survey Temporal Calibration Span",
+    title = "D. Survey Temporal Calibration Span",
     x = "Survey Era",
     y = "Spatial Clusters (Ranked by Start Date)"
   ) +
@@ -384,7 +426,7 @@ p2_c <- ggplot(cluster_spans) +
         axis.ticks.y = element_blank(),
         plot.margin = margin(2, 4, 2, 4, "pt"))
 
-# --- Panel D: Taxonomic order composition by event count ---
+# --- Panel E: Taxonomic order composition horizontal bar plot ---
 ORDER_COLOURS <- c(
   "Cetartiodactyla"  = "#1B7837",  # Green
   "Proboscidea"      = "#2166AC",  # Blue
@@ -401,14 +443,12 @@ df_tax <- det_all %>%
   group_by(region, order) %>%
   summarise(n_events = sum(n_detections), .groups = "drop")
 
-# Keep top orders, pool other
 top_orders <- c("Cetartiodactyla", "Proboscidea", "Carnivora", "Rodentia", "Primates", "Cingulata", "Perissodactyla")
 df_tax <- df_tax %>%
   mutate(order_clean = ifelse(order %in% top_orders, order, "Other")) %>%
   group_by(region, order_clean) %>%
   summarise(n_events = sum(n_events), .groups = "drop")
 
-# Calculate proportions
 df_tax <- df_tax %>%
   group_by(region) %>%
   mutate(prop = n_events / sum(n_events) * 100) %>%
@@ -416,40 +456,68 @@ df_tax <- df_tax %>%
 
 df_tax$order_clean <- factor(df_tax$order_clean, levels = rev(c(top_orders, "Other")))
 
-p2_d <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
+p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
   geom_bar(stat = "identity", width = 0.55, color = "black", linewidth = 0.25) +
   scale_fill_manual(values = ORDER_COLOURS, name = "Taxonomic Order:") +
   labs(
-    title = "D. Vertebrate Order Composition",
+    title = "E. Vertebrate Order Composition",
     x = "Proportion of Detections (%)",
     y = "Basin/Continent"
   ) +
   t_theme +
   theme(legend.position = "bottom",
-        legend.title = element_text(size = 6.0, face = "bold"),
-        legend.text = element_text(size = 5.5),
+        legend.title = element_text(size = 5.5, face = "bold"),
+        legend.text = element_text(size = 5.0),
         legend.key.width = unit(0.2, "cm"),
         legend.key.height = unit(0.2, "cm"),
         legend.margin = margin(0,0,0,0),
         plot.margin = margin(2, 4, 2, 4, "pt")) +
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 
-# Assemble Figure 2
-row1_p2 <- plot_grid(p2_a, p2_b, ncol = 2, rel_widths = c(1, 1))
-row2_p2 <- plot_grid(p2_c, p2_d, ncol = 2, rel_widths = c(1, 1))
+# --- Panel F: Vertebrate Body Mass Probability Density curves ---
+df_mass <- det_all %>%
+  filter(!is.na(body_mass_kg) & body_mass_kg > 0) %>%
+  select(region, body_mass_kg, n_detections) %>%
+  uncount(weights = n_detections)
 
-fig2_final <- plot_grid(row1_p2, row2_p2, ncol = 1, rel_heights = c(1, 1.1), hspace = 0.3)
+p2_f <- ggplot(df_mass, aes(x = body_mass_kg, fill = region, color = region)) +
+  geom_density(alpha = 0.4, linewidth = 0.75) +
+  scale_fill_manual(values = pal_basin, name = "Basin") +
+  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+  labs(
+    title = "F. Mammal Body Mass Distribution",
+    x = "Mammal Body Mass (kg, log scale)",
+    y = "Probability Density"
+  ) +
+  t_theme +
+  theme(legend.position = "none",
+        plot.margin = margin(2, 4, 2, 4, "pt"))
+
+# Annotate body size limits
+p2_f <- p2_f +
+  annotate("segment", x = 5000, xend = 5000, y = 0, yend = 0.35, color = pal_basin["Congo"], linewidth = 0.5, linetype = "dotted") +
+  annotate("text", x = 4800, y = 0.37, label = "Elephants\n(~5000kg)", size = 1.8, color = pal_basin["Congo"], fontface = "bold", hjust = 1) +
+  annotate("segment", x = 200, xend = 200, y = 0, yend = 0.50, color = pal_basin["Amazon"], linewidth = 0.5, linetype = "dotted") +
+  annotate("text", x = 220, y = 0.52, label = "Tapirs\n(~200kg)", size = 1.8, color = pal_basin["Amazon"], fontface = "bold", hjust = 0)
+
+# Assemble Figure 2 (6 Panels in Balanced Layout)
+row1_p2 <- plot_grid(p2_a, p2_d, ncol = 2, rel_widths = c(1, 1))
+row2_p2 <- plot_grid(p2_b, p2_c, ncol = 2, rel_widths = c(1, 1))
+row3_p2 <- plot_grid(p2_e, p2_f, ncol = 2, rel_widths = c(1, 0.95))
+
+fig2_final <- plot_grid(row1_p2, row2_p2, row3_p2, ncol = 1, rel_heights = c(1, 1, 1.15), hspace = 0.28)
 
 fig2_png <- "figures/figure2_camera_trap_pipeline.png"
-ggsave(filename = fig2_png, plot = fig2_final, width = 17.8, height = 15.0, units = "cm", dpi = 600, bg = "white")
-cat("✓ Figure 2 successfully saved to:", fig2_png, "\n\n")
+ggsave(filename = fig2_png, plot = fig2_final, width = 17.8, height = 22.0, units = "cm", dpi = 600, bg = "white")
+cat("✓ 6-Panel Figure 2 successfully saved to:", fig2_png, "\n\n")
 
 # Copy figures to active brain artifacts folder
 brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
 if (file.exists(brain_artifacts_dir)) {
   file.copy(fig1_png, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.png"), overwrite = TRUE)
   file.copy(fig2_png, file.path(brain_artifacts_dir, "figure2_camera_trap_pipeline.png"), overwrite = TRUE)
-  cat("✓ Copied Figure 1 and 2 to brain artifacts folder.\n")
+  cat("✓ Copied 6-Panel Figures 1 and 2 to brain artifacts folder.\n")
 }
 
 cat("============================================================\n")
