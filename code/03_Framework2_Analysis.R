@@ -44,23 +44,31 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     "M2.1: UOI Only"                                        = gam(B_H_index ~ uoi, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
     "M2.2: Basin Only"                                      = gam(B_H_index ~ basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
     
+    # --- UOI + Environmental Covariate Set ---
+    "M2.3: UOI + Elev"                                      = gam(B_H_index ~ uoi + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.4: UOI + Slope"                                     = gam(B_H_index ~ uoi + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.5: UOI + HAND"                                      = gam(B_H_index ~ uoi + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.6: UOI + Precip"                                    = gam(B_H_index ~ uoi + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.7: UOI + Clay"                                      = gam(B_H_index ~ uoi + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.8: UOI + Forest"                                    = gam(B_H_index ~ uoi + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+
     # --- Main Effect Backbone Set ---
-    "M2.3: UOI + Basin"                                     = gam(B_H_index ~ uoi + basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.4: UOI + Basin + Elev"                              = gam(B_H_index ~ uoi + basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.5: UOI + Basin + Slope"                             = gam(B_H_index ~ uoi + basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.6: UOI + Basin + HAND"                              = gam(B_H_index ~ uoi + basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.7: UOI + Basin + Precip"                            = gam(B_H_index ~ uoi + basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.8: UOI + Basin + Clay"                              = gam(B_H_index ~ uoi + basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.9: UOI + Basin + Forest"                            = gam(B_H_index ~ uoi + basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.9: UOI + Basin"                                     = gam(B_H_index ~ uoi + basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.10: UOI + Basin + Elev"                             = gam(B_H_index ~ uoi + basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.11: UOI + Basin + Slope"                            = gam(B_H_index ~ uoi + basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.12: UOI + Basin + HAND"                             = gam(B_H_index ~ uoi + basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.13: UOI + Basin + Precip"                           = gam(B_H_index ~ uoi + basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.14: UOI + Basin + Clay"                             = gam(B_H_index ~ uoi + basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.15: UOI + Basin + Forest"                           = gam(B_H_index ~ uoi + basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
     
     # --- Interaction Effect Backbone Set (Decoupled / Compliance) ---
-    "M2.10: UOI * Basin"                                    = gam(B_H_index ~ uoi * basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.11: UOI * Basin + Elev"                             = gam(B_H_index ~ uoi * basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.12: UOI * Basin + Slope"                            = gam(B_H_index ~ uoi * basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.13: UOI * Basin + HAND"                             = gam(B_H_index ~ uoi * basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.14: UOI * Basin + Precip"                           = gam(B_H_index ~ uoi * basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.15: UOI * Basin + Clay"                             = gam(B_H_index ~ uoi * basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.16: UOI * Basin + Forest"                           = gam(B_H_index ~ uoi * basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
+    "M2.16: UOI * Basin"                                    = gam(B_H_index ~ uoi * basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.17: UOI * Basin + Elev"                             = gam(B_H_index ~ uoi * basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.18: UOI * Basin + Slope"                            = gam(B_H_index ~ uoi * basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.19: UOI * Basin + HAND"                             = gam(B_H_index ~ uoi * basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.20: UOI * Basin + Precip"                           = gam(B_H_index ~ uoi * basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.21: UOI * Basin + Clay"                             = gam(B_H_index ~ uoi * basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.22: UOI * Basin + Forest"                           = gam(B_H_index ~ uoi * basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
   )
   
   # Compile results table
@@ -317,7 +325,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     rel_heights = c(1.0, 0.9, 0.12)
   )
   
-  fig_png_path <- file.path(figures_dir, "framework2_integrated_pnas_figure.png")
+  fig_png_path <- file.path(figures_dir, "figure4.png")
   save_pnas(
     plot = fig_final,
     filename = fig_png_path,
@@ -329,8 +337,15 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
   if (file.exists(brain_artifact_dir)) {
     file.copy(fig_png_path,
-              file.path(brain_artifact_dir, "framework2_integrated_pnas_figure.png"),
+              file.path(brain_artifact_dir, "figure4.png"),
               overwrite = TRUE)
+    # Also copy pdf version
+    fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
+    if (file.exists(fig_pdf_path)) {
+      file.copy(fig_pdf_path,
+                file.path(brain_artifact_dir, "figure4.pdf"),
+                overwrite = TRUE)
+    }
     cat("✓ Copied integrated figure to brain artifacts folder.\n")
   }
   

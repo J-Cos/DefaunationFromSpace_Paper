@@ -229,11 +229,11 @@ p1_e <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point(alpha = 0.25, size = 0.5, stroke = 0) +
   geom_smooth(method = "gam", formula = y ~ s(x, k = 5), se = TRUE, linewidth = 0.75) +
   scale_color_manual(values = pal_basin, name = "Basin") +
-  scale_x_continuous(trans = "log10", labels = comma_format()) +
+  scale_x_continuous(labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
     title = "E. Uncertainty Decay vs. GEDI Shot Density",
-    x = "GEDI Shot Density (log scale)",
+    x = "GEDI Shot Density",
     y = "GEDI UOI Standard Error (SE)"
   ) +
   t_theme +

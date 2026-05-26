@@ -39,10 +39,14 @@ cat("Cleaning up old files for clean integration testing...\n")
 unlink("outputs/rds/loaded_data.rds")
 unlink("outputs/framework1_best_model.RDS")
 unlink("outputs/framework2_best_model.RDS")
-unlink("figures/framework1_integrated_pnas_figure.png")
-unlink("figures/framework2_integrated_pnas_figure.png")
-unlink("figures/framework2_biomass_predictions_5km.png")
-unlink("figures/best_model_biomass_predictions_20km.png")
+unlink("figures/figure3.png")
+unlink("figures/figure3.pdf")
+unlink("figures/figure4.png")
+unlink("figures/figure4.pdf")
+unlink("figures/figureS5.png")
+unlink("figures/figureS5.pdf")
+unlink("figures/figure5.png")
+unlink("figures/figure5.pdf")
 cat("  Old files cleaned successfully.\n\n")
 
 # =============================================================================
@@ -92,10 +96,10 @@ checks <- c(
   verify_file("outputs/framework2_best_model.RDS", "Framework 2 best model RDS"),
   
   # Figure deliverables
-  verify_file("figures/framework1_integrated_pnas_figure.png", "Manuscript Figure 2"),
-  verify_file("figures/framework2_integrated_pnas_figure.png", "Manuscript Figure 3"),
-  verify_file("figures/framework2_biomass_predictions_5km.png", "Predicted Biomass Map (5km)"),
-  verify_file("figures/best_model_biomass_predictions_20km.png", "Predicted Biomass Map (20km)")
+  verify_file("figures/figure3.png", "Manuscript Figure 3 (F1)"),
+  verify_file("figures/figure4.png", "Manuscript Figure 4 (F2)"),
+  verify_file("figures/figureS5.png", "Predicted Biomass Map (5km, Fig S5)"),
+  verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)")
 )
 
 # =============================================================================

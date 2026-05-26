@@ -134,7 +134,7 @@ run_test("run_framework1_analysis execution and returns list of data + fitted mo
     inherits(res$best_model, "gam") &&
     grepl("Beta regression", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework1_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "framework1_integrated_pnas_figure.png"))
+    file.exists(file.path(temp_fig_dir, "figure3.png"))
 }))
 
 # =============================================================================
@@ -159,7 +159,7 @@ run_test("run_framework2_analysis execution and returns list of data + fitted Tw
     inherits(res$best_model, "gam") &&
     grepl("Tweedie", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework2_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "framework2_integrated_pnas_figure.png"))
+    file.exists(file.path(temp_fig_dir, "figure4.png"))
 }))
 
 # =============================================================================
@@ -188,8 +188,8 @@ run_test("run_predictive_biomass_mapping successfully projects and outputs raste
     length(rasts) == 2 &&
     inherits(rasts[["5000"]]$congo, "SpatRaster") &&
     inherits(rasts[["5000"]]$amazon, "SpatRaster") &&
-    file.exists(file.path(temp_fig_dir, "framework2_biomass_predictions_5km.png")) &&
-    file.exists(file.path(temp_fig_dir, "best_model_biomass_predictions_20km.png"))
+    file.exists(file.path(temp_fig_dir, "figureS5.png")) &&
+    file.exists(file.path(temp_fig_dir, "figure5.png"))
 }))
 
 # --- Cleanup temp test directories ---

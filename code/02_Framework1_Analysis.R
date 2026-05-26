@@ -45,23 +45,31 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     "M2: Megafauna Only"            = gam(uoi ~ B_H_gt100, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
     "M3: Basin Only"                = gam(uoi ~ basin, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
     
+    # --- Biomass + Environmental Covariate Set ---
+    "M4: Biomass + Elev"            = gam(uoi ~ B_H_index + elevation, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M5: Biomass + Slope"           = gam(uoi ~ B_H_index + slope, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M6: Biomass + HAND"            = gam(uoi ~ B_H_index + hnd, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M7: Biomass + Precip"          = gam(uoi ~ B_H_index + precip, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M8: Biomass + Clay"            = gam(uoi ~ B_H_index + clay, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M9: Biomass + Forest"          = gam(uoi ~ B_H_index + forest_fraction, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+
     # --- Main Effect Backbone Set ---
-    "M4: Biomass + Basin"           = gam(uoi ~ B_H_index + basin, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M5: Biomass + Basin + Elev"    = gam(uoi ~ B_H_index + basin + elevation, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M6: Biomass + Basin + Slope"   = gam(uoi ~ B_H_index + basin + slope, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M7: Biomass + Basin + HAND"    = gam(uoi ~ B_H_index + basin + hnd, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M8: Biomass + Basin + Precip"  = gam(uoi ~ B_H_index + basin + precip, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M9: Biomass + Basin + Clay"    = gam(uoi ~ B_H_index + basin + clay, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M10: Biomass + Basin + Forest" = gam(uoi ~ B_H_index + basin + forest_fraction, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M10: Biomass + Basin"           = gam(uoi ~ B_H_index + basin, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M11: Biomass + Basin + Elev"    = gam(uoi ~ B_H_index + basin + elevation, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M12: Biomass + Basin + Slope"   = gam(uoi ~ B_H_index + basin + slope, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M13: Biomass + Basin + HAND"    = gam(uoi ~ B_H_index + basin + hnd, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M14: Biomass + Basin + Precip"  = gam(uoi ~ B_H_index + basin + precip, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M15: Biomass + Basin + Clay"    = gam(uoi ~ B_H_index + basin + clay, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M16: Biomass + Basin + Forest"  = gam(uoi ~ B_H_index + basin + forest_fraction, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
     
     # --- Interaction Effect Backbone Set (Decoupled) ---
-    "M11: Biomass * Basin"           = gam(uoi ~ B_H_index * basin, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M12: Biomass * Basin + Elev"    = gam(uoi ~ B_H_index * basin + elevation, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M13: Biomass * Basin + Slope"   = gam(uoi ~ B_H_index * basin + slope, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M14: Biomass * Basin + HAND"    = gam(uoi ~ B_H_index * basin + hnd, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M15: Biomass * Basin + Precip"  = gam(uoi ~ B_H_index * basin + precip, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M16: Biomass * Basin + Clay"    = gam(uoi ~ B_H_index * basin + clay, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M17: Biomass * Basin + Forest"  = gam(uoi ~ B_H_index * basin + forest_fraction, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
+    "M17: Biomass * Basin"           = gam(uoi ~ B_H_index * basin, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M18: Biomass * Basin + Elev"    = gam(uoi ~ B_H_index * basin + elevation, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M19: Biomass * Basin + Slope"   = gam(uoi ~ B_H_index * basin + slope, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M20: Biomass * Basin + HAND"    = gam(uoi ~ B_H_index * basin + hnd, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M21: Biomass * Basin + Precip"  = gam(uoi ~ B_H_index * basin + precip, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M22: Biomass * Basin + Clay"    = gam(uoi ~ B_H_index * basin + clay, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M23: Biomass * Basin + Forest"  = gam(uoi ~ B_H_index * basin + forest_fraction, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
   )
   
   # Compile results table
@@ -323,7 +331,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   )
   
   # Save to the designated figures directory
-  fig_png_path <- file.path(figures_dir, "framework1_integrated_pnas_figure.png")
+  fig_png_path <- file.path(figures_dir, "figure3.png")
   save_pnas(
     plot = fig_final,
     filename = fig_png_path,
@@ -335,8 +343,15 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
   if (file.exists(brain_artifact_dir)) {
     file.copy(fig_png_path,
-              file.path(brain_artifact_dir, "framework1_integrated_pnas_figure.png"),
+              file.path(brain_artifact_dir, "figure3.png"),
               overwrite = TRUE)
+    # Also copy pdf version
+    fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
+    if (file.exists(fig_pdf_path)) {
+      file.copy(fig_pdf_path,
+                file.path(brain_artifact_dir, "figure3.pdf"),
+                overwrite = TRUE)
+    }
     cat("✓ Copied integrated figure to brain artifacts folder.\n")
   }
   
