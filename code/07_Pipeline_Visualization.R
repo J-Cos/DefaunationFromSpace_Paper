@@ -165,8 +165,11 @@ p1_c <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
   scale_fill_viridis_c(
     option = "mako",
-    name = "GEDI Shot Count",
-    limits = c(0, 6000),
+    name = "GEDI Shot Count (log scale)",
+    trans = "log10",
+    limits = c(10, 6000),
+    breaks = c(10, 100, 1000, 6000),
+    labels = c("10", "100", "1,000", "6,000"),
     oob = scales::squish,
     na.value = "transparent"
   ) +
@@ -187,8 +190,11 @@ p1_d <- ggplot() +
   geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
   scale_fill_viridis_c(
     option = "mako",
-    name = "GEDI Shot Count",
-    limits = c(0, 6000),
+    name = "GEDI Shot Count (log scale)",
+    trans = "log10",
+    limits = c(10, 6000),
+    breaks = c(10, 100, 1000, 6000),
+    labels = c("10", "100", "1,000", "6,000"),
     oob = scales::squish,
     na.value = "transparent",
     guide = guide_colorbar(
@@ -233,11 +239,11 @@ p1_e <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point(alpha = 0.25, size = 0.5, stroke = 0) +
   geom_smooth(method = "gam", formula = y ~ s(x, k = 5), se = TRUE, linewidth = 0.75) +
   scale_color_manual(values = pal_basin, name = "Basin") +
-  scale_x_continuous(labels = comma_format()) +
+  scale_x_continuous(trans = "log10", labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
     title = "E. Uncertainty Decay vs. GEDI Shot Count",
-    x = "GEDI Shot Count",
+    x = "GEDI Shot Count (log scale)",
     y = "GEDI UOI Standard Error (SE)"
   ) +
   t_theme +
