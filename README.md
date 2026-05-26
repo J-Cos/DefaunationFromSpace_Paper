@@ -47,36 +47,40 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 [Local R Analysis Pipeline (code/)]
 00_Generate_Synthetic_Data.R  --> Generates mock EO stacks & camera trap CSVs for local testing.
 01_Load_And_Join.R            --> Rasterizes vectors, cleans data, and saves ready-to-use cluster RDS.
-02_Framework1_Analysis.R      --> Fits weighted Beta Regressions (UOI ~ Biomass) & generates Figure 2.
-03_Framework2_Analysis.R      --> Fits weighted Tweedie GLMs (Biomass ~ UOI) & generates Figure 3.
-04_Predictive_Biomass_Maps.R  --> Functional, DRY projection mapping at 5 km and 20 km scales.
+02_Framework1_Analysis.R      --> Fits weighted Beta Regressions (UOI ~ Biomass) across 23 candidate models & generates Figure 3 (figure3.png).
+03_Framework2_Analysis.R      --> Fits weighted Tweedie GLMs (Biomass ~ UOI) across 22 formulations & generates Figure 4 (figure4.png).
+04_Predictive_Biomass_Maps.R  --> Functional, DRY projection mapping at 5 km (figureS5.png) and 20 km (figure5.png) scales.
 ```
 
-### **R Script Catalog (code/)**
+### **Script Catalog (code/)**
 
 1.  **[code/00_Generate_Synthetic_Data.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/00_Generate_Synthetic_Data.R):**  
     Generates synthetic multi-scale Earth Observation stacks (`analysis_stack_{scale}_{region}.tif`) and mock camera trap detections to enable robust local pipeline verification in the absence of GEE asset connections.
 2.  **[code/01_Load_And_Join.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/01_Load_And_Join.R):**  
     Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, and saves a consolidated multi-scale environmental composite `loaded_data.rds`.
 3.  **[code/02_Framework1_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/02_Framework1_Analysis.R):**  
-    Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across 10 candidate models, runs residual temporal stability checks, and generates the publication-quality Figure 2.
+    Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across **23 candidate models** (incorporating environmental covariates and basin interactions), runs residual temporal stability checks, and generates the publication-quality **Figure 3 (figure3.png)**.
 4.  **[code/03_Framework2_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/03_Framework2_Analysis.R):**  
-    Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across 10 formulations, runs residual checks, and generates the publication-quality Figure 3.
+    Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across **22 formulations** (evaluating combinations of understory openness, elevation, and basin interactions), runs residual checks, and generates the publication-quality **Figure 4 (figure4.png)**.
 5.  **[code/04_Predictive_Biomass_Maps.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/04_Predictive_Biomass_Maps.R):**  
-    Consolidates biomass prediction mapping. Projects the best-fitting Tweedie GLM from Framework 2 across Congo and Amazon landscapes at both the **$5\text{ km}$** (core analysis) and **$20\text{ km}$** (peak predictive) scales.
+    Consolidates biomass prediction mapping. Projects the best-fitting Tweedie GLM from Framework 2 across Congo and Amazon landscapes at both the **5 km** (supplementary map, **Figure S5 / figureS5.png**) and **20 km** (peak predictive scale, **Figure 5 / figure5.png**).
 6.  **[code/05_Unit_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/05_Unit_Tests.R):**  
-    A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, temporal weighting, regression modeling, and spatial projection mapping modules.
+    A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
 7.  **[code/06_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Integration_Tests.R):**  
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `04`) on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, CSV tables, and manuscript figures.
 8.  **[code/07_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Pipeline_Visualization.R):**  
-    Generates premium, PNAS-style multipanel manuscript Figures 1 and 2, which visually synthesize GEDI orbital shot density distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
+    Generates premium, PNAS-style multipanel manuscript **Figure 1 (figure1_gedi_pipeline.png)** and **Figure 2 (figure2_camera_trap_pipeline.png)**, which visually synthesize log-scale GEDI Shot Count distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
+9.  **[code/process_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/process_camera_traps.py):**  
+    Ingests and cleans raw Wildlife Insights camera trap packages from Congo and Amazon basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, and computes corrected Relative Abundance Indices (RAI) and site-level standing mammal biomass ($B_H$) and metabolism ($M_H$) indices.
+10. **[code/visualise_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/visualise_camera_traps.py):**  
+    Generates initial publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the 11.1 km cluster level.
 
 ### **Core Biophysical Functions Module**
 
 *   **[code/functions/calibration_helpers.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/functions/calibration_helpers.R):**  
     Defines all shared mathematical operations, ensuring strict DRY compliance:
     *   `extract_scale_pixels()`: Performs raw pixel extraction within buffered MCP polygons.
-    *   `extract_scale_data()`: Aggregates pixels, computes empirical GEDI standard error (`uoi_se`), and derives normalized precision weights (`w_uoi_norm = w_uoi / mean(w_uoi)`) and spatial homogeneity (`homogeneity`).
+    *   `extract_scale_data()`: Aggregates pixels, computes empirical GEDI standard error (`uoi_se`), and derives normalized precision weights (`w_uoi_norm = w_uoi / mean(w_uoi)`) and spatial homogeneity (`homogeneity`). It joins temporal weights (`w_temp_cluster`) and computes normalized combined weights (`w_combined_norm = w_combined / mean(w_combined)`) as `w_uoi * w_temp_cluster`.
     *   `calculate_temporal_weights()`: Runs geographical single-linkage clustering (11.1km threshold) on camera trap coordinates and computes deployment temporal alignment weights (`w_temp_cluster`) to account for GEDI temporal offset.
     *   `fit_framework1_model()` / `fit_framework2_model()`: Dynamically loads fitted model formulas and coefficients from outputs RDS files, ensuring downstream code remains completely parameterization-independent.
 *   **[code/functions/theme_pnas.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/functions/theme_pnas.R):**  
@@ -136,10 +140,10 @@ pip install earthengine-api geemap numpy pandas
 | **02_GEDI_Aggregation_GEE.ipynb** | ✅ Complete | 3-layer high-fidelity GEDI shot-quality and slope filtering applied at 25m. |
 | **03_FRIP_Signals_Exports_GEE.ipynb** | ✅ Complete | Multi-scale GeoTIFFs successfully exported to Drive. |
 | **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `04`) executing completely warning-free. |
-| **Principled Weighting Scenarios** | ✅ Complete | Spatial homogeneity weighting (`uoi_se`) validated as statistically superior to raw shot count (`gedi_n`). |
-| **Manuscript-Ready Figures** | ✅ Complete | Double-column Figure 2 and Figure 3, and single-column predicted maps (5km & 20km) successfully generated. |
-| **Functional Unit Testing Suite** | ✅ Complete | 19 functional checks covering 100% of pipeline functions passing 100% successfully. |
-| **End-to-End Integration Runner** | ✅ Complete | Validates sequential flow on real GEE datasets and verifies all output sizes and shapes. |
+| **Principled Weighting Scenarios** | ✅ Complete | Combined precision-temporal weights (`w_combined_norm`) validated as statistically superior to raw shot count (`gedi_n`). |
+| **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3** and **Figure 4**, 6-panel **Figures 1 and 2**, and predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Figure S5**) successfully generated. |
+| **Functional Unit Testing Suite** | ✅ Complete | 16 functional assertions covering 100% of pipeline modules in `code/05_Unit_Tests.R` passing 100% successfully. |
+| **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/06_Integration_Tests.R`. |
 
 ---
 *Defaunation synthesis modeling completed successfully. All outputs are fully reproducible and verified.*
