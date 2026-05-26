@@ -1,5 +1,5 @@
 # =============================================================================
-# code/07_Pipeline_Visualization.R
+# code/06_Pipeline_Visualization.R
 #
 # Generates two premium 6-panel PNAS-style publication-grade figures summarizing
 # the GEDI raw data pipeline (Figure 1) and the Camera Trap data pipeline (Figure 2).

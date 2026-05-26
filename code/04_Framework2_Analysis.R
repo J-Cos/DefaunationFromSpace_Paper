@@ -1,5 +1,5 @@
 # =============================================================================
-# code/03_Framework2_Analysis.R
+# code/04_Framework2_Analysis.R
 #
 # Performs covariate model selection for Framework 2 (Spaceborne Biomass Prediction)
 # using Tweedie GLMs (via mgcv::gam) across 10 candidate models, evaluates them via AIC,

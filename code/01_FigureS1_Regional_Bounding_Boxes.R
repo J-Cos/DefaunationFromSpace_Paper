@@ -1,5 +1,5 @@
 # =============================================================================
-# code/08_FigureS1_Regional_Bounding_Boxes.R
+# code/01_FigureS1_Regional_Bounding_Boxes.R
 #
 # Beautiful tidyterra map script producing a column of 3 maps (Amazon, Congo, 
 # Southeast Asia) running exactly from 15°S to 15°N latitude and spanning 

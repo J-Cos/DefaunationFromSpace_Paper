@@ -1,5 +1,5 @@
 # =============================================================================
-# code/05_Unit_Tests.R
+# code/07_Unit_Tests.R
 #
 # Rigorous unit testing suite for all central functions in the defaunation pipeline:
 #   1. calibration_helpers.R functions
@@ -113,10 +113,10 @@ run_test("extract_scale_data returns valid structure (5km scale)", quote({
 }))
 
 # =============================================================================
-# MODULE 2: code/02_Framework1_Analysis.R
+# MODULE 2: code/03_Framework1_Analysis.R
 # =============================================================================
-cat("\n--- Module: code/02_Framework1_Analysis.R ---\n")
-source("code/02_Framework1_Analysis.R")
+cat("\n--- Module: code/03_Framework1_Analysis.R ---\n")
+source("code/03_Framework1_Analysis.R")
 
 run_test("run_framework1_analysis exists", quote({
   exists("run_framework1_analysis", mode = "function")
@@ -138,10 +138,10 @@ run_test("run_framework1_analysis execution and returns list of data + fitted mo
 }))
 
 # =============================================================================
-# MODULE 3: code/03_Framework2_Analysis.R
+# MODULE 3: code/04_Framework2_Analysis.R
 # =============================================================================
-cat("\n--- Module: code/03_Framework2_Analysis.R ---\n")
-source("code/03_Framework2_Analysis.R")
+cat("\n--- Module: code/04_Framework2_Analysis.R ---\n")
+source("code/04_Framework2_Analysis.R")
 
 run_test("run_framework2_analysis exists", quote({
   exists("run_framework2_analysis", mode = "function")
@@ -163,10 +163,10 @@ run_test("run_framework2_analysis execution and returns list of data + fitted Tw
 }))
 
 # =============================================================================
-# MODULE 4: code/04_Predictive_Biomass_Maps.R
+# MODULE 4: code/05_Predictive_Biomass_Maps.R
 # =============================================================================
-cat("\n--- Module: code/04_Predictive_Biomass_Maps.R ---\n")
-source("code/04_Predictive_Biomass_Maps.R")
+cat("\n--- Module: code/05_Predictive_Biomass_Maps.R ---\n")
+source("code/05_Predictive_Biomass_Maps.R")
 
 run_test("run_predictive_biomass_mapping exists", quote({
   exists("run_predictive_biomass_mapping", mode = "function")

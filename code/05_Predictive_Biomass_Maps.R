@@ -1,5 +1,5 @@
 # =============================================================================
-# code/04_Predictive_Biomass_Maps.R
+# code/05_Predictive_Biomass_Maps.R
 #
 # Consolidates biomass predictive mapping for both the 5 km core scale and
 # the 20 km peak predictive scale. Implements functional programming and the

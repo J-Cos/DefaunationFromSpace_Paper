@@ -31,11 +31,9 @@ A central finding of this synthesis is the scale dependency of spaceborne wildli
 2.  **Noise-Averaging Aggregation ($5-15\text{ km}$):** Aggregating GEDI UOI to intermediate grid cells averages out fine-scale GEDI orbital shot noise and camera trap positioning variance. This noise reduction reveals highly significant biophysical relationships, matching the biological home-range scales at which mammal engineering operates.
 3.  **Spatial Dilution ($>20\text{ km}$):** Beyond $20\text{ km}$, the biotic footprint is diluted as regional environmental gradients (precipitation, soil texture, elevation) dominate canopy variance.
 
----
+---## 3. Pipeline Architecture & Sequential Run Order
 
-## 3. Pipeline Architecture & Sequential Run Order
-
-The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion and statistical modeling:
+The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion, geographical/temporal calibration, and statistical modeling:
 
 ```
 [Google Earth Engine Cloud Processing]
@@ -45,38 +43,36 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
       │
       ▼
 [Local R Analysis Pipeline (code/)]
-00_Generate_Synthetic_Data.R  --> Generates mock EO stacks & camera trap CSVs for local testing.
-01_Load_And_Join.R            --> Rasterizes vectors, cleans data, and saves ready-to-use cluster RDS.
-02_Framework1_Analysis.R      --> Fits weighted Beta Regressions (UOI ~ Biomass) across 23 candidate models & generates Figure 3 (figure3.png).
-03_Framework2_Analysis.R      --> Fits weighted Tweedie GLMs (Biomass ~ UOI) across 22 formulations & generates Figure 4 (figure4.png).
-04_Predictive_Biomass_Maps.R  --> Functional, DRY projection mapping at 5 km (figureS5.png) and 20 km (figure5.png) scales.
-08_FigureS1_Regional_Bounding_Boxes.R --> Generates Figure S1 showing regional bounding boxes with IUCN Proboscidea range overlays colored by status, exporting the combined vector to GPKG.
+01_FigureS1_Regional_Bounding_Boxes.R --> Prepares elephant ranges -> outputs outputs/elephant_ranges.gpkg and figureS1.png
+02_Load_And_Join.R                    --> Rasterizes vectors, loads elephant ranges, saves ready-to-use cluster RDS.
+03_Framework1_Analysis.R              --> Fits Beta Regressions (UOI ~ Biomass) -> generates Figure 3 (figure3.png).
+04_Framework2_Analysis.R              --> Fits Tweedie GLMs (Biomass ~ UOI) -> generates Figure 4 (figure4.png).
+05_Predictive_Biomass_Maps.R          --> Standing biomass projection mapping at 5 km (figureS5.png) and 20 km (figure5.png).
+06_Pipeline_Visualization.R           --> Generates GEDI & camera trap pipeline summary Figures 1 and 2.
 ```
 
 ### **Script Catalog (code/)**
 
-1.  **[code/00_Generate_Synthetic_Data.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/00_Generate_Synthetic_Data.R):**  
-    Generates synthetic multi-scale Earth Observation stacks (`analysis_stack_{scale}_{region}.tif`) and mock camera trap detections to enable robust local pipeline verification in the absence of GEE asset connections.
-2.  **[code/01_Load_And_Join.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/01_Load_And_Join.R):**  
-    Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, and saves a consolidated multi-scale environmental composite `loaded_data.rds`.
-3.  **[code/02_Framework1_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/02_Framework1_Analysis.R):**  
+1.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/01_FigureS1_Regional_Bounding_Boxes.R):**  
+    Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
+2.  **[code/02_Load_And_Join.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/02_Load_And_Join.R):**  
+    Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, loads the prepared elephant range GeoPackage, and saves a consolidated multi-scale environmental composite `loaded_data.rds`.
+3.  **[code/03_Framework1_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/03_Framework1_Analysis.R):**  
     Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across **23 candidate models** (incorporating environmental covariates and basin interactions), runs residual temporal stability checks, and generates the publication-quality **Figure 3 (figure3.png)**.
-4.  **[code/03_Framework2_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/03_Framework2_Analysis.R):**  
+4.  **[code/04_Framework2_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/04_Framework2_Analysis.R):**  
     Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across **22 formulations** (evaluating combinations of understory openness, elevation, and basin interactions), runs residual checks, and generates the publication-quality **Figure 4 (figure4.png)**.
-5.  **[code/04_Predictive_Biomass_Maps.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/04_Predictive_Biomass_Maps.R):**  
+5.  **[code/05_Predictive_Biomass_Maps.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/05_Predictive_Biomass_Maps.R):**  
     Consolidates biomass prediction mapping. Projects the best-fitting Tweedie GLM from Framework 2 across Congo and Amazon landscapes at both the **5 km** (supplementary map, **Figure S5 / figureS5.png**) and **20 km** (peak predictive scale, **Figure 5 / figure5.png**).
-6.  **[code/05_Unit_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/05_Unit_Tests.R):**  
-    A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
-7.  **[code/06_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Integration_Tests.R):**  
-    An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `04`) on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, CSV tables, and manuscript figures.
-8.  **[code/07_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Pipeline_Visualization.R):**  
+6.  **[code/06_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Pipeline_Visualization.R):**  
     Generates premium, PNAS-style multipanel manuscript **Figure 1 (figure1_gedi_pipeline.png)** and **Figure 2 (figure2_camera_trap_pipeline.png)**, which visually synthesize log-scale GEDI Shot Count distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
+7.  **[code/07_Unit_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Unit_Tests.R):**  
+    A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
+8.  **[code/08_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/08_Integration_Tests.R):**  
+    An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `06`) sequentially on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, vector GPKGs, CSV tables, and manuscript figures.
 9.  **[code/process_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/process_camera_traps.py):**  
     Ingests and cleans raw Wildlife Insights camera trap packages from Congo and Amazon basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, and computes corrected Relative Abundance Indices (RAI) and site-level standing mammal biomass ($B_H$) and metabolism ($M_H$) indices.
 10. **[code/visualise_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/visualise_camera_traps.py):**  
     Generates initial publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the 11.1 km cluster level.
-11. **[code/08_FigureS1_Regional_Bounding_Boxes.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/08_FigureS1_Regional_Bounding_Boxes.R):**  
-    Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
 
 ### **Core Biophysical Functions Module**
 
@@ -96,11 +92,11 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 To guarantee scientific reproducibility and statistical rigor, the pipeline is covered by a two-tiered testing framework:
 
 ### Unit Test Coverage (100% of Core Pipeline Functions)
-The unit test suite (`code/05_Unit_Tests.R`) verifies the behavior of all core functions in isolation, including the calibration helper algorithms, temporal weighting, and integrated model fit routines.
+The unit test suite (`code/07_Unit_Tests.R`) verifies the behavior of all core functions in isolation, including the calibration helper algorithms, temporal weighting, and integrated model fit routines.
 *   **Coverage Summary**: 100% of high-level analytical, modeling, mapping, and plotting functions are covered under 19 strict assertions.
 *   **Run Command**:
     ```bash
-    Rscript code/05_Unit_Tests.R
+    Rscript code/07_Unit_Tests.R
     ```
 *   **Assertions Verified**:
     *   Pixel extraction matrices (`extract_scale_pixels`) and region bounding coordinates.
@@ -110,12 +106,12 @@ The unit test suite (`code/05_Unit_Tests.R`) verifies the behavior of all core f
     *   High-level script runners (`run_framework1_analysis`, `run_framework2_analysis`, `run_predictive_biomass_mapping`) ensuring correct models are outputted and figures are cleanly populated in `figures/`.
 
 ### End-to-End Integration Testing
-The integration test suite (`code/06_Integration_Tests.R`) validates the end-to-end sequential pipeline by unlinking old deliverables and executing the entire processing flow on the real GEE GeoTIFF stack exports located in `outputs/EOdata/`.
+The integration test suite (`code/08_Integration_Tests.R`) validates the end-to-end sequential pipeline by unlinking old deliverables and executing the entire processing flow sequentially on the real GEE GeoTIFF stack exports located in `outputs/EOdata/`.
 *   **Run Command**:
     ```bash
-    Rscript code/06_Integration_Tests.R
+    Rscript code/08_Integration_Tests.R
     ```
-*   **Integrity Checks**: Verifies that all expected model parameters, goodness-of-fit tables, and publication-ready figures are successfully generated with non-zero sizes in `outputs/` and `figures/`.
+*   **Integrity Checks**: Verifies that all expected model parameters, elephant range GPKGs, goodness-of-fit tables, and publication-ready figures are successfully generated sequentially with non-zero sizes in `outputs/` and `figures/`.
 
 ---
 
@@ -142,12 +138,12 @@ pip install earthengine-api geemap numpy pandas
 | **01_BaseStack_GEE.ipynb** | ✅ Complete | GEDI, NPP, and Covariate stacks successfully pre-materialized in cloud assets. |
 | **02_GEDI_Aggregation_GEE.ipynb** | ✅ Complete | 3-layer high-fidelity GEDI shot-quality and slope filtering applied at 25m. |
 | **03_FRIP_Signals_Exports_GEE.ipynb** | ✅ Complete | Multi-scale GeoTIFFs successfully exported to Drive. |
-| **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `04`) executing completely warning-free. |
+| **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `06`) executing completely warning-free. |
 | **Principled Weighting Scenarios** | ✅ Complete | Combined precision-temporal weights (`w_combined_norm`) validated as statistically superior to raw shot count (`gedi_n`). |
 | **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3** and **Figure 4**, 6-panel **Figures 1 and 2**, predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Figure S5**), and regional bounding boxes (**Figure S1**) successfully generated. |
-| **Figure S1 (Regional Maps)** | ✅ Complete | Shows $15^\circ\text{S}$ to $15^\circ\text{N}$ bounding boxes with IUCN elephant range overlays colored by status, saving `figureS1.png/pdf` and `outputs/elephant_ranges.gpkg`. |
-| **Functional Unit Testing Suite** | ✅ Complete | 16 functional assertions covering 100% of pipeline modules in `code/05_Unit_Tests.R` passing 100% successfully. |
-| **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/06_Integration_Tests.R`. |
+| **Figure S1 (Regional Bounding Boxes)** | ✅ Complete | Shows $15^\circ\text{S}$ to $15^\circ\text{N}$ bounding boxes with IUCN elephant range overlays colored by status, saving `figureS1.png/pdf` and `outputs/elephant_ranges.gpkg`. |
+| **Functional Unit Testing Suite** | ✅ Complete | 19 functional assertions covering 100% of pipeline modules in `code/07_Unit_Tests.R` passing 100% successfully. |
+| **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/08_Integration_Tests.R`. |
 
 ---
-*Defaunation synthesis modeling completed successfully. All outputs are fully reproducible and verified.*
+*Defaunation synthesis modeling completed successfully. All outputs are fully reproducible and verified.*producible and verified.*

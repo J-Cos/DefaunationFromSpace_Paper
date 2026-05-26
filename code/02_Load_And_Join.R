@@ -1,5 +1,5 @@
 # =============================================================================
-# 01_Load_And_Join.R
+# 02_Load_And_Join.R
 #
 # Load all GeoTIFF stacks from GEE exports, load and rasterise vector layers,
 # and prepare the full analysis environment.
@@ -35,7 +35,7 @@ source("code/functions/temporal_analysis.R")
 source("code/functions/plotting.R")
 source("code/functions/pa_pairs.R")
 
-cat("=== 01: Load and Join ===\n\n")
+cat("=== 02: Load and Join ===\n\n")
 
 
 # --- Configuration -----------------------------------------------------------
@@ -202,4 +202,4 @@ loaded_data <- list(
 )
 saveRDS(loaded_data, file.path(RDS_DIR, "loaded_data.rds"))
 
-cat("=== 01: Done ===\n")
+cat("=== 02: Done ===\n")

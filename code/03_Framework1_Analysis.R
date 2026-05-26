@@ -1,5 +1,5 @@
 # =============================================================================
-# code/02_Framework1_Analysis.R
+# code/03_Framework1_Analysis.R
 #
 # Performs covariate model selection for Framework 1 (GEDI UOI as Response) using
 # Beta Regression (via mgcv::gam) across 10 candidate models, evaluates them via AIC,
