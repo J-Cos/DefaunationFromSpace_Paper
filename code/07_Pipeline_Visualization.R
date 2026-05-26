@@ -348,7 +348,7 @@ haversine_dist <- function(lon1, lat1, lon2, lat2) {
 get_clustered_deployments <- function(basin_name, buffer_val = 0.1) {
   unique_deps <- det_all %>%
     filter(region == basin_name) %>%
-    select(longitude, latitude, deployment_id) %>%
+    select(longitude, latitude, deployment_id, trap_days) %>%
     distinct()
   
   n_deps <- nrow(unique_deps)
@@ -360,14 +360,20 @@ get_clustered_deployments <- function(basin_name, buffer_val = 0.1) {
       }
     }
     hc <- hclust(as.dist(dist_mat), method = "single")
-    unique_deps$cluster_num <- cutree(hc, h = 11.1)
+    unique_deps$cluster_num <- cutree(hc, h = CLUSTER_THRESHOLD_KM)
   } else {
     unique_deps$cluster_num <- 1
   }
   
+  # Calculate centroids and sum trap days per cluster
   centroids <- unique_deps %>%
     group_by(cluster_num) %>%
-    summarise(lon = mean(longitude), lat = mean(latitude), .groups = "drop")
+    summarise(
+      lon = mean(longitude),
+      lat = mean(latitude),
+      total_trap_days = sum(trap_days, na.rm = TRUE),
+      .groups = "drop"
+    )
   
   return(list(deps = unique_deps, centroids = centroids))
 }
@@ -379,31 +385,43 @@ amazon_c_info <- get_clustered_deployments("Amazon")
 # --- Panel B: Congo Spatial Clustering Map ---
 p2_b <- ggplot() +
   geom_spatvector(data = countries_c, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
-  # Draw circles representing the 11.1km clustering radius around centroids
-  geom_point(data = congo_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
-  # Plot camera deployments colored by cluster number using a custom green ramp
-  geom_point(data = congo_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
-  scale_fill_manual(values = colorRampPalette(c("#81C784", "#1B5E20"))(length(unique(congo_c_info$deps$cluster_num))), guide = "none") +
+  # Plot each cluster as a single point at its centroid, size scaled by total trap days, 50% transparency
+  geom_point(data = congo_c_info$centroids, aes(x = lon, y = lat, size = total_trap_days), 
+             shape = 21, color = "black", fill = "#1B5E20", stroke = 0.4, alpha = 0.5) +
+  scale_size_continuous(name = "Trap Days", range = c(1.5, 6.0), breaks = c(100, 500, 1000, 2000), limits = c(10, 5000)) +
   labs(
-    title = "B. Congo Spatial Clustering (11.1 km)",
+    title = sprintf("B. Congo Spatial Clusters (%s km)", CLUSTER_THRESHOLD_KM),
     x = "Longitude (°E)", y = "Latitude (°N)"
   ) +
   t_theme +
   theme(axis.text = element_text(size = 5.5),
+        legend.position = c(0.18, 0.22),
+        legend.title = element_text(size = 5.0, face = "bold"),
+        legend.text = element_text(size = 4.5),
+        legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
+        legend.key = element_blank(),
+        legend.key.size = unit(0.2, "cm"),
         plot.margin = margin(2, 4, 2, 4, "pt"))
 
 # --- Panel C: Amazon Spatial Clustering Map ---
 p2_c <- ggplot() +
   geom_spatvector(data = countries_a, fill = "#F8F8F6", colour = "grey80", linewidth = 0.3) +
-  geom_point(data = amazon_c_info$centroids, aes(x = lon, y = lat), size = 6.8, color = "black", fill = NA, shape = 21, stroke = 0.4, linetype = "dashed", alpha = 0.4) +
-  geom_point(data = amazon_c_info$deps, aes(x = longitude, y = latitude, fill = factor(cluster_num)), size = 1.6, shape = 21, color = "black", stroke = 0.2) +
-  scale_fill_manual(values = colorRampPalette(c("#FFB74D", "#E65100"))(length(unique(amazon_c_info$deps$cluster_num))), guide = "none") +
+  # Plot each cluster as a single point at its centroid, size scaled by total trap days, 50% transparency
+  geom_point(data = amazon_c_info$centroids, aes(x = lon, y = lat, size = total_trap_days), 
+             shape = 21, color = "black", fill = "#E65100", stroke = 0.4, alpha = 0.5) +
+  scale_size_continuous(name = "Trap Days", range = c(1.5, 6.0), breaks = c(100, 500, 1000, 2000), limits = c(10, 5000)) +
   labs(
-    title = "C. Amazon Spatial Clustering (11.1 km)",
+    title = sprintf("C. Amazon Spatial Clusters (%s km)", CLUSTER_THRESHOLD_KM),
     x = "Longitude (°E)", y = "Latitude (°N)"
   ) +
   t_theme +
   theme(axis.text = element_text(size = 5.5),
+        legend.position = c(0.18, 0.22),
+        legend.title = element_text(size = 5.0, face = "bold"),
+        legend.text = element_text(size = 4.5),
+        legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
+        legend.key = element_blank(),
+        legend.key.size = unit(0.2, "cm"),
         plot.margin = margin(2, 4, 2, 4, "pt"))
 
 # --- Panel D: Temporal Calibration Timeline ---

@@ -20,6 +20,9 @@ library(dplyr)
 library(mgcv)
 library(readr)
 
+# Global Shared Constants
+CLUSTER_THRESHOLD_KM <- 11.1
+
 # --- Internal Helper: Calculate Camera Trap Deployment Temporal Weights ------
 calculate_temporal_weights <- function() {
   detections_path <- "outputs/camera_traps_joint_detections.csv"
@@ -62,7 +65,7 @@ calculate_temporal_weights <- function() {
         }
       }
       hc <- hclust(as.dist(dist_mat), method="single")
-      labels <- cutree(hc, h=11.1)
+      labels <- cutree(hc, h=CLUSTER_THRESHOLD_KM)
     } else {
       labels <- 1
     }
@@ -97,6 +100,75 @@ calculate_temporal_weights <- function() {
     )
   
   return(cluster_temp_metrics)
+}
+
+# --- Internal Helper: Calculate Camera Trap Deployment Taxonomic Keep Props ---
+calculate_taxonomic_keep_proportions <- function() {
+  detections_path <- "outputs/camera_traps_joint_detections.csv"
+  if (!file.exists(detections_path)) {
+    return(NULL)
+  }
+  
+  det_all <- readr::read_csv(detections_path, show_col_types = FALSE)
+  
+  # Group coordinates into clusters
+  haversine_dist <- function(lon1, lat1, lon2, lat2) {
+    r <- 6371.0
+    rad <- pi / 180
+    dlon <- (lon2 - lon1) * rad
+    dlat <- (lat2 - lat1) * rad
+    lat1 <- lat1 * rad
+    lat2 <- lat2 * rad
+    a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
+    c <- 2 * asin(sqrt(a))
+    return(r * c)
+  }
+  
+  coords_df <- det_all %>% 
+    select(region, longitude, latitude) %>% 
+    distinct() %>% 
+    mutate(cluster_id_geo = "")
+  
+  for (reg in unique(coords_df$region)) {
+    sub_indices <- which(coords_df$region == reg)
+    sub <- coords_df[sub_indices, ]
+    n <- nrow(sub)
+    if (n == 0) next
+    if (n > 1) {
+      dist_mat <- matrix(0, nrow=n, ncol=n)
+      for (i in 1:n) {
+        for (j in 1:n) {
+          dist_mat[i,j] <- haversine_dist(sub$longitude[i], sub$latitude[i], sub$longitude[j], sub$latitude[j])
+        }
+      }
+      hc <- hclust(as.dist(dist_mat), method="single")
+      labels <- cutree(hc, h=CLUSTER_THRESHOLD_KM)
+    } else {
+      labels <- 1
+    }
+    coords_df$cluster_id_geo[sub_indices] <- paste0(reg, "_", sprintf("%02d", labels))
+  }
+  
+  det_all <- det_all %>%
+    left_join(coords_df, by = c("region", "longitude", "latitude"))
+  
+  # Filter out blanks, humans, domestic animals
+  wild_det <- det_all %>%
+    filter(!taxon_quality %in% c("blank", "human", "domestic"))
+  
+  cluster_keep_props <- wild_det %>%
+    group_by(cluster_id_geo) %>%
+    summarise(
+      total_wild_detections = sum(n_detections, na.rm = TRUE),
+      kept_wild_detections = sum(n_detections[taxon_quality %in% c("species", "genus", "family")], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      p_keep = ifelse(total_wild_detections > 0, kept_wild_detections / total_wild_detections, 1.0)
+    ) %>%
+    select(cluster_id_geo, p_keep)
+  
+  return(cluster_keep_props)
 }
 
 # --- 1. Extract Raw Pixel-Level Data Within MCP Polygons ---------------------
@@ -254,12 +326,26 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
   joined_data <- joined_data %>%
     mutate(uoi_se = uoi_sd / sqrt(n_pixels))
   
-  # Compute precision weights
+  # Load and join taxonomic keep proportions
+  cluster_keep <- calculate_taxonomic_keep_proportions()
+  if (!is.null(cluster_keep)) {
+    joined_data <- joined_data %>%
+      left_join(cluster_keep, by = c("cluster_id" = "cluster_id_geo"))
+    joined_data$p_keep[is.na(joined_data$p_keep)] <- 1.0
+  } else {
+    joined_data$p_keep <- 1.0
+  }
+  
+  # Calculate effective trap days discounted by taxonomic resolution issues
+  joined_data <- joined_data %>%
+    mutate(trap_days_effective = trap_days * p_keep)
+
+  # Compute precision weights with taxonomic effort discount
   reg_uoi <- median(joined_data$uoi_se[joined_data$uoi_se > 0])
   if (is.na(reg_uoi) || reg_uoi == 0) reg_uoi <- 1e-4
   
   joined_data <- joined_data %>%
-    mutate(w_uoi = log10(trap_days) / (uoi_se + reg_uoi))
+    mutate(w_uoi = log10(pmax(trap_days_effective, 1.0)) / (uoi_se + reg_uoi))
   
   # Normalize weights so they sum to N (mean = 1) for proper statistical scale
   joined_data$w_uoi_norm <- joined_data$w_uoi / mean(joined_data$w_uoi)
