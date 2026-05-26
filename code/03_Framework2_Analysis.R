@@ -40,16 +40,27 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   cat("\nRunning Tweedie GLM Model Selection across 10 formulations...\n")
   
   models_list <- list(
-    "M2.1: UOI Only"                                        = gam(B_H_index ~ uoi, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.2: UOI + Basin"                                     = gam(B_H_index ~ uoi + basin, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.2b: UOI + UOI:Basin (Shared)"                       = gam(B_H_index ~ uoi + uoi:basin, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.3: UOI * Basin"                                     = gam(B_H_index ~ uoi * basin, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.4: UOI + UOI:Basin + Elevation"                     = gam(B_H_index ~ uoi + uoi:basin + elevation, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.5: UOI + UOI:Basin + Slope"                         = gam(B_H_index ~ uoi + uoi:basin + slope, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.6: UOI + UOI:Basin + HAND"                          = gam(B_H_index ~ uoi + uoi:basin + hnd, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.7: UOI + UOI:Basin + Precipitation"                 = gam(B_H_index ~ uoi + uoi:basin + precip, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.8: UOI + UOI:Basin + Clay"                          = gam(B_H_index ~ uoi + uoi:basin + clay, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML"),
-    "M2.9: UOI + UOI:Basin + Forest"                        = gam(B_H_index ~ uoi + uoi:basin + forest_fraction, family = tw(), weights = w_uoi_norm, data = joined_data, method = "REML")
+    # --- Base Models ---
+    "M2.1: UOI Only"                                        = gam(B_H_index ~ uoi, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.2: Basin Only"                                      = gam(B_H_index ~ basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    
+    # --- Main Effect Backbone Set ---
+    "M2.3: UOI + Basin"                                     = gam(B_H_index ~ uoi + basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.4: UOI + Basin + Elev"                              = gam(B_H_index ~ uoi + basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.5: UOI + Basin + Slope"                             = gam(B_H_index ~ uoi + basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.6: UOI + Basin + HAND"                              = gam(B_H_index ~ uoi + basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.7: UOI + Basin + Precip"                            = gam(B_H_index ~ uoi + basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.8: UOI + Basin + Clay"                              = gam(B_H_index ~ uoi + basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.9: UOI + Basin + Forest"                            = gam(B_H_index ~ uoi + basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    
+    # --- Interaction Effect Backbone Set (Decoupled / Compliance) ---
+    "M2.10: UOI * Basin"                                    = gam(B_H_index ~ uoi * basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.11: UOI * Basin + Elev"                             = gam(B_H_index ~ uoi * basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.12: UOI * Basin + Slope"                            = gam(B_H_index ~ uoi * basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.13: UOI * Basin + HAND"                             = gam(B_H_index ~ uoi * basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.14: UOI * Basin + Precip"                           = gam(B_H_index ~ uoi * basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.15: UOI * Basin + Clay"                             = gam(B_H_index ~ uoi * basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.16: UOI * Basin + Forest"                           = gam(B_H_index ~ uoi * basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
   )
   
   # Compile results table
@@ -180,18 +191,63 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     )
   
   # --- Panel C: Model Selection Bar Plot ---
+  # Helper function for dynamic plotmath bolding of significant variables
+  format_model_label_f2 <- function(model_name, model_obj) {
+    clean_name <- sub("^M2\\.[0-9a-z]+: ", "", model_name)
+    clean_name <- gsub(" (Shared)", "", clean_name, fixed = TRUE)
+    
+    tokens <- strsplit(clean_name, "\\s+")[[1]]
+    tokens <- tokens[tokens != ""]
+    
+    p_table <- summary(model_obj)$p.table
+    
+    var_map <- list(
+      "Biomass"       = "B_H_index",
+      "Megafauna"     = "B_H_gt100",
+      "Basin"         = "basinCongo",
+      "UOI"           = "uoi",
+      "Elevation"     = "elevation",
+      "Slope"         = "slope",
+      "HAND"          = "hnd",
+      "Precipitation" = "precip",
+      "Clay"          = "clay",
+      "Forest"        = "forest_fraction",
+      "UOI:Basin"     = "uoi:basinCongo",
+      "Biomass:Basin" = "B_H_index:basinCongo"
+    )
+    
+    plotmath_tokens <- sapply(tokens, function(tok) {
+      if (tok %in% c("+", "*", ":")) return(sprintf("plain(\" %s \")", tok))
+      if (tok == "Only") return(sprintf("plain(\" %s\")", tok))
+      
+      matched_term <- var_map[[tok]]
+      if (!is.null(matched_term)) {
+        is_sig <- FALSE
+        if (matched_term %in% rownames(p_table)) {
+          p_val <- p_table[matched_term, ncol(p_table)]
+          is_sig <- !is.na(p_val) && p_val < 0.05
+        }
+        return(ifelse(is_sig, sprintf("bold(\"%s\")", tok), sprintf("plain(\"%s\")", tok)))
+      } else {
+        return(sprintf("plain(\"%s\")", tok))
+      }
+    })
+    
+    paste(plotmath_tokens, collapse = " * ")
+  }
+  
+  results_df$plotmath_label <- sapply(1:nrow(results_df), function(i) {
+    format_model_label_f2(results_df$Model[i], models_list[[results_df$Model[i]]])
+  })
+  
   plot_sel_df <- results_df %>%
     mutate(
       CleanName = sub("^M2\\.[0-9a-z]+: ", "", Model),
       CleanName = factor(CleanName, levels = rev(CleanName))
     )
   
-  y_levels <- levels(plot_sel_df$CleanName)
-  matched_sig <- plot_sel_df$IsSignificant[match(y_levels, plot_sel_df$CleanName)]
-  math_labels <- ifelse(matched_sig,
-                        paste0("bold(\"", y_levels, "\")"),
-                        paste0("plain(\"", y_levels, "\")"))
-  parsed_labels <- parse(text = math_labels)
+  ordered_exprs <- plot_sel_df$plotmath_label[match(levels(plot_sel_df$CleanName), plot_sel_df$CleanName)]
+  parsed_labels <- parse(text = ordered_exprs)
   
   p_c <- ggplot(plot_sel_df, aes(x = dev_expl * 100, y = CleanName, fill = delta_AIC)) +
     geom_bar(stat = "identity", width = 0.7, color = "black", linewidth = 0.2) +

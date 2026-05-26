@@ -86,7 +86,7 @@ theme_pnas <- function(base_size = 8) {
 #' Named colour vector for the two study basins.
 #' @export
 pal_basin <- c(
-  Congo  = "#2E7D32",
+  Congo  = "#1B5E20",
   Amazon = "#E65100"
 )
 

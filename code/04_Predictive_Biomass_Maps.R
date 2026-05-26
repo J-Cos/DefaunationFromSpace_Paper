@@ -141,68 +141,116 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     values(r_pred_amazon) <- NA
     r_pred_amazon[amazon_cells$cell] <- as.vector(amazon_cells$pred)
     
+    # Load and crop protected areas (> 1000 sq km) if files exist
+    pa_congo_file <- file.path(outputs_dir, "WDPA_congo_500km2.gpkg")
+    pa_amazon_file <- file.path(outputs_dir, "WDPA_amazon_500km2.gpkg")
+    
+    pas_congo_cropped <- NULL
+    if (file.exists(pa_congo_file)) {
+      pas_congo <- vect(pa_congo_file)
+      # Only show PAs > 1000 km2
+      pas_congo <- pas_congo[pas_congo$REP_AREA >= 1000 | pas_congo$GIS_AREA >= 1000, ]
+      if (nrow(pas_congo) > 0) {
+        pas_congo_proj <- project(pas_congo, crs(r_congo_cropped))
+        pas_congo_cropped <- crop(pas_congo_proj, study_extent_congo)
+      }
+    }
+    
+    pas_amazon_cropped <- NULL
+    if (file.exists(pa_amazon_file)) {
+      pas_amazon <- vect(pa_amazon_file)
+      # Only show PAs > 1000 km2
+      pas_amazon <- pas_amazon[pas_amazon$REP_AREA >= 1000 | pas_amazon$GIS_AREA >= 1000, ]
+      if (nrow(pas_amazon) > 0) {
+        pas_amazon_proj <- project(pas_amazon, crs(r_amazon_cropped))
+        pas_amazon_cropped <- crop(pas_amazon_proj, study_extent_amazon)
+      }
+    }
+    
     # Build ggplot Panels
     t_theme <- theme_pnas(base_size = 8)
     
-    # Panel A: Congo Basin Map (Stretched 0-3000)
+    # Panel A: Congo Basin Map (Green Theme - Stretched 0-3000)
     p_congo <- ggplot() +
       geom_spatraster(data = r_pred_congo, aes(fill = pred)) +
       scale_fill_viridis_c(
-        option = "plasma",
+        option = "mako",
         name = "Standing Mammal Biomass Index (Congo)",
         limits = c(0, 3000),
         oob = scales::squish,
-        na.value = "transparent"
+        na.value = "transparent",
+        guide = guide_colorbar(
+          title.position = "top",
+          title.hjust = 0.5,
+          label.position = "bottom",
+          barwidth = unit(5.5, "cm"),
+          barheight = unit(0.18, "cm")
+        )
       ) +
-      geom_spatvector(data = countries_congo, fill = NA, colour = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_congo, fill = NA, colour = "grey80", linewidth = 0.25)
+    
+    if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
+      p_congo <- p_congo + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
+    }
+    
+    p_congo <- p_congo +
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       t_theme +
       theme(
         legend.position = "bottom",
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.text = element_text(size = 6),
-        legend.key.height = unit(0.2, "cm"),
-        legend.key.width = unit(1.0, "cm"),
+        legend.title = element_text(size = 6.5, face = "bold"),
+        legend.text = element_text(size = 5.5),
+        legend.margin = margin(t = -2, b = 2, unit = "pt"),
         axis.text = element_blank(),
         axis.ticks = element_blank(),
         axis.title = element_blank(),
         panel.grid = element_blank()
       ) +
       labs(
-        title = sprintf("Congo Basin (%s)", map_title_suffix),
-        subtitle = "Predicted standing mammal biomass"
+        title = sprintf("A. Congo Basin (%s)", map_title_suffix)
       )
     
-    # Panel B: Amazon Basin Map (Stretched 0-800)
+    # Panel B: Amazon Basin Map (Orange Theme - Stretched 0-800)
     p_amazon <- ggplot() +
       geom_spatraster(data = r_pred_amazon, aes(fill = pred)) +
       scale_fill_viridis_c(
-        option = "plasma",
+        option = "magma",
         name = "Standing Mammal Biomass Index (Amazon)",
         limits = c(0, 800),
         oob = scales::squish,
-        na.value = "transparent"
+        na.value = "transparent",
+        guide = guide_colorbar(
+          title.position = "top",
+          title.hjust = 0.5,
+          label.position = "bottom",
+          barwidth = unit(5.5, "cm"),
+          barheight = unit(0.18, "cm")
+        )
       ) +
-      geom_spatvector(data = countries_amazon, fill = NA, colour = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_amazon, fill = NA, colour = "grey80", linewidth = 0.25)
+    
+    if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
+      p_amazon <- p_amazon + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
+    }
+    
+    p_amazon <- p_amazon +
       geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       t_theme +
       theme(
         legend.position = "bottom",
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.text = element_text(size = 6),
-        legend.key.height = unit(0.2, "cm"),
-        legend.key.width = unit(1.0, "cm"),
+        legend.title = element_text(size = 6.5, face = "bold"),
+        legend.text = element_text(size = 5.5),
+        legend.margin = margin(t = -2, b = 2, unit = "pt"),
         axis.text = element_blank(),
         axis.ticks = element_blank(),
         axis.title = element_blank(),
         panel.grid = element_blank()
       ) +
       labs(
-        title = sprintf("Amazon Basin (%s)", map_title_suffix),
-        subtitle = "Predicted standing mammal biomass"
+        title = sprintf("B. Amazon Basin (%s)", map_title_suffix)
       )
     
-    # Stack vertically to preserve true relative aspect ratios (ncol = 1)
+    # Combine Congo and Amazon vertically in PNAS multi-panel style
     fig_combined <- cowplot::plot_grid(
       p_congo, p_amazon,
       ncol = 1,

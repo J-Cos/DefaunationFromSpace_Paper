@@ -245,6 +245,7 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
       clay = mean(clay, na.rm = TRUE),
       forest_fraction = mean(forest_fraction, na.rm = TRUE),
       frip = mean(frip, na.rm = TRUE),
+      rh98 = mean(rh98, na.rm = TRUE),
       .groups = "drop"
     ) %>%
     filter(trap_days >= 10)
@@ -284,6 +285,11 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
     joined_data$w_temp_cluster <- 1.0 # Default fallback
   }
   
+  # Calculate Combined Weight (Spatial Precision * Temporal Alignment)
+  joined_data <- joined_data %>%
+    mutate(w_combined = w_uoi * w_temp_cluster) %>%
+    mutate(w_combined_norm = w_combined / mean(w_combined))
+  
   return(joined_data)
 }
 
@@ -304,7 +310,7 @@ fit_framework1_model <- function(data, formula_path = "outputs/framework1_best_f
   } else {
     uoi ~ B_H_index
   }
-  mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_uoi_norm, data = data, method = "REML")
+  mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_combined_norm, data = data, method = "REML")
 }
 
 #' Fit Framework 2 Model (Tweedie GLM)
@@ -321,7 +327,7 @@ fit_framework2_model <- function(data, formula_path = "outputs/framework2_best_f
   formula_obj <- if (file.exists(formula_path)) {
     readRDS(formula_path)
   } else {
-    B_H_index ~ uoi:basin + elevation
+    B_H_index ~ uoi * basin + elevation
   }
-  mgcv::gam(formula_obj, family = tw(), weights = w_uoi_norm, data = data, method = "REML")
+  mgcv::gam(formula_obj, family = tw(), weights = w_combined_norm, data = data, method = "REML")
 }

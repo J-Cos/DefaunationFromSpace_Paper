@@ -109,7 +109,7 @@ run_test("extract_scale_data returns valid structure (5km scale)", quote({
   dat <- extract_scale_data(5000)
   is.data.frame(dat) && 
     nrow(dat) > 0 && 
-    all(c("cluster_id", "region", "basin", "trap_days", "uoi", "w_uoi_norm", "homogeneity", "w_temp_cluster") %in% names(dat))
+    all(c("cluster_id", "region", "basin", "trap_days", "uoi", "w_combined_norm", "homogeneity", "w_temp_cluster") %in% names(dat))
 }))
 
 # =============================================================================
