@@ -96,6 +96,10 @@ ext_a <- ext(xmin(ext_a)-1.0, xmax(ext_a)+1.0, ymin(ext_a)-1.0, ymax(ext_a)+1.0)
 r_c_crop <- crop(r_congo_5km, ext_c)
 r_a_crop <- crop(r_amazon_5km, ext_a)
 
+# Scale GEDI shot density to raw shot count (number of GEDI footprints in 5km cell)
+r_c_crop$gedi_n <- r_c_crop$gedi_n * 40000
+r_a_crop$gedi_n <- r_a_crop$gedi_n * 40000
+
 countries_c <- crop(project(countries_v, crs(r_c_crop)), ext_c)
 countries_a <- crop(project(countries_v, crs(r_a_crop)), ext_a)
 
@@ -161,8 +165,8 @@ p1_c <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
   scale_fill_viridis_c(
     option = "mako",
-    name = "GEDI Shot Density (gedi_n)",
-    limits = c(0, 0.15),
+    name = "GEDI Shot Count",
+    limits = c(0, 6000),
     oob = scales::squish,
     na.value = "transparent"
   ) +
@@ -177,14 +181,14 @@ p1_c <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "C. Congo Basin GEDI Shot Density (5 km)")
+  labs(title = "C. Congo Basin GEDI Shot Count (5 km)")
 
 p1_d <- ggplot() +
   geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
   scale_fill_viridis_c(
     option = "mako",
-    name = "GEDI Shot Density (gedi_n)",
-    limits = c(0, 0.15),
+    name = "GEDI Shot Count",
+    limits = c(0, 6000),
     oob = scales::squish,
     na.value = "transparent",
     guide = guide_colorbar(
@@ -209,7 +213,7 @@ p1_d <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "D. Amazon Basin GEDI Shot Density (5 km)")
+  labs(title = "D. Amazon Basin GEDI Shot Count (5 km)")
 
 # --- Figure 1 Panel E: Uncertainty Decay vs. GEDI Shot Density ---
 df_c_pts <- as.data.frame(r_c_crop[[c("uoi_sd", "gedi_n")]], na.rm = TRUE)
@@ -232,8 +236,8 @@ p1_e <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   scale_x_continuous(labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
-    title = "E. Uncertainty Decay vs. GEDI Shot Density",
-    x = "GEDI Shot Density",
+    title = "E. Uncertainty Decay vs. GEDI Shot Count",
+    x = "GEDI Shot Count",
     y = "GEDI UOI Standard Error (SE)"
   ) +
   t_theme +
