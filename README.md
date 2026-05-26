@@ -50,6 +50,7 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 02_Framework1_Analysis.R      --> Fits weighted Beta Regressions (UOI ~ Biomass) across 23 candidate models & generates Figure 3 (figure3.png).
 03_Framework2_Analysis.R      --> Fits weighted Tweedie GLMs (Biomass ~ UOI) across 22 formulations & generates Figure 4 (figure4.png).
 04_Predictive_Biomass_Maps.R  --> Functional, DRY projection mapping at 5 km (figureS5.png) and 20 km (figure5.png) scales.
+08_FigureS1_Regional_Bounding_Boxes.R --> Generates Figure S1 showing regional bounding boxes with IUCN Proboscidea range overlays colored by status, exporting the combined vector to GPKG.
 ```
 
 ### **Script Catalog (code/)**
@@ -74,6 +75,8 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
     Ingests and cleans raw Wildlife Insights camera trap packages from Congo and Amazon basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, and computes corrected Relative Abundance Indices (RAI) and site-level standing mammal biomass ($B_H$) and metabolism ($M_H$) indices.
 10. **[code/visualise_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/visualise_camera_traps.py):**  
     Generates initial publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the 11.1 km cluster level.
+11. **[code/08_FigureS1_Regional_Bounding_Boxes.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/08_FigureS1_Regional_Bounding_Boxes.R):**  
+    Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
 
 ### **Core Biophysical Functions Module**
 
@@ -141,7 +144,8 @@ pip install earthengine-api geemap numpy pandas
 | **03_FRIP_Signals_Exports_GEE.ipynb** | ✅ Complete | Multi-scale GeoTIFFs successfully exported to Drive. |
 | **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `04`) executing completely warning-free. |
 | **Principled Weighting Scenarios** | ✅ Complete | Combined precision-temporal weights (`w_combined_norm`) validated as statistically superior to raw shot count (`gedi_n`). |
-| **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3** and **Figure 4**, 6-panel **Figures 1 and 2**, and predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Figure S5**) successfully generated. |
+| **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3** and **Figure 4**, 6-panel **Figures 1 and 2**, predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Figure S5**), and regional bounding boxes (**Figure S1**) successfully generated. |
+| **Figure S1 (Regional Maps)** | ✅ Complete | Shows $15^\circ\text{S}$ to $15^\circ\text{N}$ bounding boxes with IUCN elephant range overlays colored by status, saving `figureS1.png/pdf` and `outputs/elephant_ranges.gpkg`. |
 | **Functional Unit Testing Suite** | ✅ Complete | 16 functional assertions covering 100% of pipeline modules in `code/05_Unit_Tests.R` passing 100% successfully. |
 | **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/06_Integration_Tests.R`. |
 

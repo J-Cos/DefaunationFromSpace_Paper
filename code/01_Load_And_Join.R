@@ -178,6 +178,13 @@ pa_polys_v$NAME <- df_cats$NAME[match(pa_polys_v$PA_ID, df_cats$ID)]
 
 cat("\nSaving loaded data to RDS...\n")
 
+# Load elephant range vector if present
+elephant_ranges <- NULL
+if (file.exists("outputs/elephant_ranges.gpkg")) {
+  cat("Loading combined elephant range vector...\n")
+  elephant_ranges <- vect("outputs/elephant_ranges.gpkg")
+}
+
 # HIGH-PERFORMANCE OPTIMIZATION:
 # To prevent gzipping and writing gigabytes of raw pixel values (which takes 10+ minutes and 1.5GB of space),
 # we save a lightweight structured metadata list. Downstream scripts read directly from the
@@ -190,7 +197,8 @@ loaded_data <- list(
   countries_r       = list(),
   basins_v          = list(),
   countries_v       = list(),
-  pa_polys_v        = list()
+  pa_polys_v        = list(),
+  elephant_ranges   = list()
 )
 saveRDS(loaded_data, file.path(RDS_DIR, "loaded_data.rds"))
 
