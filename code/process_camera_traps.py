@@ -33,6 +33,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 CONGO_DIR = DATA_DIR / "CongoCameraTrapping"
 AMAZON_DIR = DATA_DIR / "AmazonCameraTrapping"
+SEASIA_DIR = DATA_DIR / "SEAsiaCameraTrapping"
 TRAIT_DIR = DATA_DIR / "trait_databases"
 
 # ── Allometric & Biophysical Constants ──────────────────────────────────────
@@ -113,13 +114,13 @@ EXCLUDE_COMMON_NAMES = {
 # ── Ingestion Helpers ────────────────────────────────────────────────────────
 
 def discover_wi_packages(region_dir: Path) -> list[Path]:
-    """Find all unzipped WI data package directories under a folder."""
+    """Find all unzipped WI data package directories under a folder (supporting nesting)."""
     packages = []
     if not region_dir.exists():
         return packages
-    for d in sorted(region_dir.iterdir()):
-        if d.is_dir() and (d / "deployments.csv").exists():
-            packages.append(d)
+    for path in sorted(region_dir.rglob("deployments.csv")):
+        if path.is_file():
+            packages.append(path.parent)
     return packages
 
 
@@ -253,10 +254,11 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
     """Load and collapse image-level or sequence-level records from a WI package."""
     img_path = package_dir / "images.csv"
     seq_path = package_dir / "sequences.csv"
+    img_parts = sorted(package_dir.glob("images_*.csv"))
 
     if seq_path.exists():
         # Sequences exists: pre-collapsed event-level data
-        df = pd.read_csv(seq_path)
+        df = pd.read_csv(seq_path, low_memory=False)
         df.columns = df.columns.str.strip().str.lower()
 
         if "group_size" in df.columns and "number_of_objects" not in df.columns:
@@ -279,9 +281,14 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
 
         return df
 
-    elif img_path.exists():
-        # Images exists: requires event collapsing
-        df = pd.read_csv(img_path)
+    elif img_path.exists() or len(img_parts) > 0:
+        # Images exists (single or split): requires event collapsing
+        if img_path.exists():
+            df = pd.read_csv(img_path, low_memory=False)
+        else:
+            print(f"    Found split image files: {[p.name for p in img_parts]}")
+            df = pd.concat([pd.read_csv(p, low_memory=False) for p in img_parts], ignore_index=True)
+
         df.columns = df.columns.str.strip().str.lower()
 
         df["number_of_objects"] = pd.to_numeric(
@@ -297,7 +304,7 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
 
         return df
     else:
-        raise FileNotFoundError(f"No images.csv or sequences.csv in {package_dir}")
+        raise FileNotFoundError(f"No images.csv, images_*.csv or sequences.csv in {package_dir}")
 
 
 def safe_str(val) -> str:
@@ -586,6 +593,7 @@ def main():
     )
     parser.add_argument("--congo-dir", type=Path, default=CONGO_DIR)
     parser.add_argument("--amazon-dir", type=Path, default=AMAZON_DIR)
+    parser.add_argument("--seasia-dir", type=Path, default=SEASIA_DIR)
     parser.add_argument("--trait-dir", type=Path, default=TRAIT_DIR)
     parser.add_argument("--out-detections", type=Path, default=OUTPUT_DIR / "camera_traps_joint_detections.csv")
     parser.add_argument("--out-metrics", type=Path, default=OUTPUT_DIR / "camera_traps_joint_metrics.csv")
@@ -601,9 +609,12 @@ def main():
     # Process Amazon
     amazon_det, amazon_raw_events = process_region(args.amazon_dir, "Amazon")
 
+    # Process Southeast Asia
+    seasia_det, seasia_raw_events = process_region(args.seasia_dir, "SE_Asia")
+
     # Combine detections
     print("\nMerging datasets...")
-    joint_det = pd.concat([congo_det, amazon_det], ignore_index=True)
+    joint_det = pd.concat([congo_det, amazon_det, seasia_det], ignore_index=True)
 
     # Match body masses
     print("Matching body masses...")
@@ -633,7 +644,7 @@ def main():
     print(f"\n{'='*60}")
     print("SUMMARY")
     print(f"{'='*60}")
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = joint_metrics[joint_metrics["region"] == region]
         print(f"{region} Basin:")
         print(f"  Number of deployments: {len(sub)}")
