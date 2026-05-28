@@ -268,36 +268,68 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       }
     }
     
+    # Helper to dynamically load, merge, and filter protected areas from raw WDPA shapefiles using a spatial filter
+    load_raw_pas <- function(ext_map, fallback_file = NULL) {
+      filter_v <- as.polygons(ext_map, crs = "EPSG:4326")
+      pas_list <- list()
+      for (i in 0:2) {
+        shp_path <- file.path("data", sprintf("WDPA_Nov2024_Public_shp_%d", i), "WDPA_Nov2024_Public_shp-polygons.shp")
+        if (file.exists(shp_path)) {
+          p_part <- tryCatch({
+            vect(shp_path, filter = filter_v)
+          }, error = function(e) NULL)
+          if (!is.null(p_part) && nrow(p_part) > 0) {
+            pas_list[[length(pas_list) + 1]] <- p_part
+          }
+        }
+      }
+      
+      if (length(pas_list) > 0) {
+        pas_all <- vect(pas_list)
+        # strict terrestrial filter (MARINE != "2") and size filter (> 1000 km2)
+        pas_filt <- pas_all[pas_all$MARINE != "2" & (pas_all$REP_AREA >= 1000 | pas_all$GIS_AREA >= 1000), ]
+        return(pas_filt)
+      }
+      
+      if (!is.null(fallback_file) && file.exists(fallback_file)) {
+        pas_fallback <- vect(fallback_file)
+        pas_fallback <- pas_fallback[pas_fallback$MARINE != "2" & (pas_fallback$REP_AREA >= 1000 | pas_fallback$GIS_AREA >= 1000), ]
+        return(pas_fallback)
+      }
+      
+      return(NULL)
+    }
+
     # Load and crop protected areas
     pa_congo_file <- file.path(outputs_dir, "WDPA_congo_500km2.gpkg")
-    pa_amazon_file <- file.path(outputs_dir, "WDPA_amazon_500km2.gpkg")
-    
-    pas_congo_cropped <- NULL
-    if (file.exists(pa_congo_file)) {
-      pas_congo <- vect(pa_congo_file)
-      pas_congo <- pas_congo[pas_congo$REP_AREA >= 1000 | pas_congo$GIS_AREA >= 1000, ]
-      if (nrow(pas_congo) > 0) {
-        pas_congo_proj <- project(pas_congo, crs(r_congo_cropped))
-        pas_congo_cropped <- crop(pas_congo_proj, ext_congo_map)
-      }
+    pas_congo_cropped <- load_raw_pas(ext_congo_map, pa_congo_file)
+    if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
+      pas_congo_proj <- project(pas_congo_cropped, crs(r_congo_cropped))
+      pas_congo_cropped <- crop(pas_congo_proj, ext_congo_map)
     }
     
-    pas_amazon_cropped <- NULL
-    if (file.exists(pa_amazon_file)) {
-      pas_amazon <- vect(pa_amazon_file)
-      pas_amazon <- pas_amazon[pas_amazon$REP_AREA >= 1000 | pas_amazon$GIS_AREA >= 1000, ]
-      if (nrow(pas_amazon) > 0) {
-        pas_amazon_proj <- project(pas_amazon, crs(r_amazon_cropped))
-        pas_amazon_cropped <- crop(pas_amazon_proj, ext_amazon_map)
-      }
+    pa_amazon_file <- file.path(outputs_dir, "WDPA_amazon_500km2.gpkg")
+    pas_amazon_cropped <- load_raw_pas(ext_amazon_map, pa_amazon_file)
+    if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
+      pas_amazon_proj <- project(pas_amazon_cropped, crs(r_amazon_cropped))
+      pas_amazon_cropped <- crop(pas_amazon_proj, ext_amazon_map)
     }
     
     # Build ggplot Panels
-    t_theme <- theme_pnas(base_size = 8)
+    t_theme <- theme_pnas(base_size = 8) +
+      theme(
+        legend.position = "none",
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "white", color = NA),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
     
-    # Symmetrical highly-discriminative multi-hue colorblind-safe scale centered at 0.0 (Pure White)
+    # Symmetrical highly-discriminative multi-hue colorblind-safe scale centered at 0.0 (Light Grey)
     fill_scale <- scale_fill_gradientn(
-      colors = c("#b2182b", "#fdae61", "#ffffff", "#abdda4", "#2b5c8f"),
+      colors = c("#b2182b", "#fdae61", "#dcdcdc", "#abdda4", "#2b5c8f"),
       name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
       limits = c(-2.5, 2.5),
       breaks = c(-2.0, -1.0, 0, 1.0, 2.0),
@@ -313,13 +345,13 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       )
     )
 
-    
     # --- RENDER AMAZON PANELS ---
     # Column 1 (LOBO)
     p_amazon_lobo <- ggplot() +
-      geom_spatvector(data = countries_amazon, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_amazon, fill = "white", color = NA) +
       geom_spatraster(data = r_pred_amazon_lobo, aes(fill = zscore_mae)) +
-      fill_scale
+      fill_scale +
+      geom_spatvector(data = countries_amazon, fill = NA, color = "grey75", linewidth = 0.25)
     if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
       p_amazon_lobo <- p_amazon_lobo + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
@@ -327,14 +359,14 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-      labs(title = sprintf("A. Neotropical Basin (Amazon LOBO Best, %s)", map_title_suffix))
+      labs(title = "A")
       
     # Column 2 (AIC)
     p_amazon_aic <- ggplot() +
-      geom_spatvector(data = countries_amazon, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_amazon, fill = "white", color = NA) +
       geom_spatraster(data = r_pred_amazon_aic, aes(fill = zscore_mae)) +
-      fill_scale
+      fill_scale +
+      geom_spatvector(data = countries_amazon, fill = NA, color = "grey75", linewidth = 0.25)
     if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
       p_amazon_aic <- p_amazon_aic + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
@@ -342,15 +374,15 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-      labs(title = sprintf("D. Neotropical Basin (Amazon AIC Best, %s)", map_title_suffix))
+      labs(title = "D")
       
     # --- RENDER CONGO PANELS ---
     # Column 1 (LOBO)
     p_congo_lobo <- ggplot() +
-      geom_spatvector(data = countries_congo, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_congo, fill = "white", color = NA) +
       geom_spatraster(data = r_pred_congo_lobo, aes(fill = zscore_mae)) +
-      fill_scale
+      fill_scale +
+      geom_spatvector(data = countries_congo, fill = NA, color = "grey75", linewidth = 0.25)
     if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
       p_congo_lobo <- p_congo_lobo + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
@@ -358,14 +390,14 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-      labs(title = sprintf("B. Afrotropical Basin (Congo LOBO Best, %s)", map_title_suffix))
+      labs(title = "B")
       
     # Column 2 (AIC)
     p_congo_aic <- ggplot() +
-      geom_spatvector(data = countries_congo, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatvector(data = countries_congo, fill = "white", color = NA) +
       geom_spatraster(data = r_pred_congo_aic, aes(fill = zscore_mae)) +
-      fill_scale
+      fill_scale +
+      geom_spatvector(data = countries_congo, fill = NA, color = "grey75", linewidth = 0.25)
     if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
       p_congo_aic <- p_congo_aic + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
@@ -373,28 +405,24 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-      labs(title = sprintf("E. Afrotropical Basin (Congo AIC Best, %s)", map_title_suffix))
+      labs(title = "E")
       
     # --- RENDER SE ASIA PANELS ---
     # Crop blank SE Asia protected areas
     pa_seasia_file <- file.path(outputs_dir, "WDPA_seasia_500km2.gpkg")
-    pas_seasia_cropped <- NULL
-    if (file.exists(pa_seasia_file)) {
-      pas_seasia <- vect(pa_seasia_file)
-      pas_seasia <- pas_seasia[pas_seasia$REP_AREA >= 1000 | pas_seasia$GIS_AREA >= 1000, ]
-      if (nrow(pas_seasia) > 0) {
-        pas_seasia_proj <- project(pas_seasia, crs(r_seasia_cropped))
-        pas_seasia_cropped <- crop(pas_seasia_proj, ext_seasia_map)
-      }
+    pas_seasia_cropped <- load_raw_pas(ext_seasia_map, pa_seasia_file)
+    if (!is.null(pas_seasia_cropped) && nrow(pas_seasia_cropped) > 0) {
+      pas_seasia_proj <- project(pas_seasia_cropped, crs(r_seasia_cropped))
+      pas_seasia_cropped <- crop(pas_seasia_proj, ext_seasia_map)
     }
     
     # Column 1 (LOBO)
     if (!is.null(r_pred_seasia_lobo)) {
       p_seasia_lobo <- ggplot() +
-        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        geom_spatvector(data = countries_seasia, fill = "white", color = NA) +
         geom_spatraster(data = r_pred_seasia_lobo, aes(fill = zscore_mae)) +
-        fill_scale
+        fill_scale +
+        geom_spatvector(data = countries_seasia, fill = NA, color = "grey75", linewidth = 0.25)
       if (!is.null(pas_seasia_cropped) && nrow(pas_seasia_cropped) > 0) {
         p_seasia_lobo <- p_seasia_lobo + geom_spatvector(data = pas_seasia_cropped, fill = NA, color = "black", linewidth = 0.12)
       }
@@ -405,25 +433,24 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       p_seasia_lobo <- p_seasia_lobo +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-        labs(title = sprintf("C. Indo-Malayan Basin (Southeast Asia LOBO Best, %s)", map_title_suffix))
+        labs(title = "C")
     } else {
       countries_seasia <- crop(project(countries_v, crs(r_congo_cropped)), ext_seasia_map)
       p_seasia_lobo <- ggplot() +
-        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        geom_spatvector(data = countries_seasia, fill = "white", color = "grey75", linewidth = 0.25) +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank(), panel.background = element_rect(fill = "#FFFFFF", color = NA)) +
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
-        labs(title = sprintf("C. Indo-Malayan Basin (Southeast Asia LOBO Best, %s)", map_title_suffix))
+        labs(title = "C")
     }
     
     # Column 2 (AIC)
     if (!is.null(r_pred_seasia_aic)) {
       p_seasia_aic <- ggplot() +
-        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        geom_spatvector(data = countries_seasia, fill = "white", color = NA) +
         geom_spatraster(data = r_pred_seasia_aic, aes(fill = zscore_mae)) +
-        fill_scale
+        fill_scale +
+        geom_spatvector(data = countries_seasia, fill = NA, color = "grey75", linewidth = 0.25)
       if (!is.null(pas_seasia_cropped) && nrow(pas_seasia_cropped) > 0) {
         p_seasia_aic <- p_seasia_aic + geom_spatvector(data = pas_seasia_cropped, fill = NA, color = "black", linewidth = 0.12)
       }
@@ -434,17 +461,15 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       p_seasia_aic <- p_seasia_aic +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
-        labs(title = sprintf("F. Indo-Malayan Basin (Southeast Asia AIC Best, %s)", map_title_suffix))
+        labs(title = "F")
     } else {
       countries_seasia <- crop(project(countries_v, crs(r_congo_cropped)), ext_seasia_map)
       p_seasia_aic <- ggplot() +
-        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        geom_spatvector(data = countries_seasia, fill = "white", color = "grey75", linewidth = 0.25) +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank(), panel.background = element_rect(fill = "#FFFFFF", color = NA)) +
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
-        labs(title = sprintf("F. Indo-Malayan Basin (Southeast Asia AIC Best, %s)", map_title_suffix))
+        labs(title = "F")
     }
     
     # --- 8. Combine Panels into a Symmetrical 3-Row x 2-Column Grid ---
