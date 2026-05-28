@@ -41,6 +41,8 @@ from pathlib import Path
 from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, fcluster
 from shapely.geometry import MultiPoint
+import rasterio
+from rasterio.mask import mask
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -56,6 +58,7 @@ DOUBLE_COL = 7.0
 PAL = {
     "Congo":   "#2166AC",  # Blue for Congo
     "Amazon":  "#B2182B",  # Red for Amazon
+    "SE_Asia": "#1B7837",  # Green for SE Asia
     "green":   "#1B7837",
     "orange":  "#E08214",
     "purple":  "#6A3D9A",
@@ -210,6 +213,7 @@ def aggregate_to_clusters(det, cluster_map):
     
     usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
     usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
+    usable["biomass_contrib_gt1000"] = np.where(usable["body_mass_kg"] > 1000.0, usable["biomass_contrib"], 0.0)
     
     agg_dict = {
         "n_species": ("taxon_key", "nunique"),
@@ -218,6 +222,7 @@ def aggregate_to_clusters(det, cluster_map):
         "M_H_index": ("metabolism_contrib", "sum"),
         "B_H_gt50": ("biomass_contrib_gt50", "sum"),
         "B_H_gt100": ("biomass_contrib_gt100", "sum"),
+        "B_H_gt1000": ("biomass_contrib_gt1000", "sum"),
     }
     
     cluster_metrics = (usable
@@ -248,9 +253,49 @@ def aggregate_to_clusters(det, cluster_map):
     cluster_metrics["M_H_index"] = cluster_metrics["M_H_index"].fillna(0.0)
     cluster_metrics["B_H_gt50"] = cluster_metrics["B_H_gt50"].fillna(0.0)
     cluster_metrics["B_H_gt100"] = cluster_metrics["B_H_gt100"].fillna(0.0)
+    cluster_metrics["B_H_gt1000"] = cluster_metrics["B_H_gt1000"].fillna(0.0)
     cluster_metrics["megafauna_fraction"] = cluster_metrics["megafauna_fraction"].fillna(0.0)
     
     return cluster_metrics, clustered_det
+
+
+def check_gedi_5km_overlap(region, buffered_polygon):
+    """Check if a buffered polygon overlaps at least one valid GEDI 5km pixel."""
+    raster_path = OUTPUT_DIR / "EOdata" / f"analysis_stack_5000_{region}.tif"
+    if not raster_path.exists():
+        raster_path = OUTPUT_DIR / "synthetic_EOdata" / f"analysis_stack_5000_{region}.tif"
+    
+    if not raster_path.exists():
+        return False
+        
+    try:
+        with rasterio.open(raster_path) as src:
+            # Try touches=False first
+            out_image, _ = mask(src, [buffered_polygon], crop=True, filled=False, indexes=3, all_touched=False)
+            if isinstance(out_image, np.ma.MaskedArray):
+                valid_data = out_image.data[~out_image.mask]
+            else:
+                valid_data = out_image
+            valid_data = valid_data[~np.isnan(valid_data)]
+            if src.nodata is not None:
+                valid_data = valid_data[valid_data != src.nodata]
+                
+            if len(valid_data) > 0:
+                return True
+                
+            # touches=True fallback
+            out_image_t, _ = mask(src, [buffered_polygon], crop=True, filled=False, indexes=3, all_touched=True)
+            if isinstance(out_image_t, np.ma.MaskedArray):
+                valid_data_t = out_image_t.data[~out_image_t.mask]
+            else:
+                valid_data_t = out_image_t
+            valid_data_t = valid_data_t[~np.isnan(valid_data_t)]
+            if src.nodata is not None:
+                valid_data_t = valid_data_t[valid_data_t != src.nodata]
+                
+            return len(valid_data_t) > 0
+    except Exception:
+        return False
 
 
 def _compute_region_extent(det: pd.DataFrame, region: str, pad: float = 1.0) -> list:
@@ -298,11 +343,12 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.05], hspace=0.45, wspace=0.35)
 
     # ── (A) Geographic Maps (MCPs + 11.1km Buffers colored by trap_days) ────
-    gs_maps = gs[0, :].subgridspec(1, 2, wspace=0.15)
+    gs_maps = gs[0, :].subgridspec(1, 3, wspace=0.15)
     
     regions_info = [
         {"name": "Congo", "extent": _compute_region_extent(det, "Congo"), "gs": gs_maps[0]},
-        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]}
+        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]},
+        {"name": "SE_Asia", "extent": _compute_region_extent(det, "SE_Asia"), "gs": gs_maps[2]}
     ]
 
     # Shared log-scaled effort normalization across all clusters globally
@@ -386,7 +432,7 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
 
     # ── (B) Rank-Abundance Curves ───────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 0])
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub_det = det[(det["region"] == region) & (det["taxon_quality"] == "species")].copy()
         
         sp_counts = (sub_det.groupby(["genus", "species", "common_name"])["n_detections"]
@@ -415,7 +461,7 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     # ── (C) Taxonomic Order Composition ──────────────────────────────────────
     ax = fig.add_subplot(gs[1, 1])
     order_data = []
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub_det = det[(det["region"] == region) & (det["taxon_quality"].isin(["species", "genus", "family"]))].copy()
         sub_det = sub_det[~sub_det["taxon_quality"].isin(["blank", "human", "domestic"])]
         
@@ -438,8 +484,8 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
         legend_orders.append("Other")
     df_pivot = df_pivot[legend_orders]
 
-    left = np.zeros(2)
-    regions_idx = ["Congo", "Amazon"]
+    left = np.zeros(3)
+    regions_idx = ["Congo", "Amazon", "SE_Asia"]
     
     for ord_name in legend_orders:
         pcts = df_pivot[ord_name].reindex(regions_idx).values
@@ -463,13 +509,14 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     
     box_data = [
         wild_clustered[wild_clustered["region"] == "Congo"]["RAI"].values,
-        wild_clustered[wild_clustered["region"] == "Amazon"]["RAI"].values
+        wild_clustered[wild_clustered["region"] == "Amazon"]["RAI"].values,
+        wild_clustered[wild_clustered["region"] == "SE_Asia"]["RAI"].values
     ]
     
-    bp = ax.boxplot(box_data, tick_labels=["Congo", "Amazon"], patch_artist=True,
+    bp = ax.boxplot(box_data, tick_labels=["Congo", "Amazon", "SE_Asia"], patch_artist=True,
                     widths=0.45, showfliers=False, zorder=2)
     
-    colors_bp = [PAL["Congo"], PAL["Amazon"]]
+    colors_bp = [PAL["Congo"], PAL["Amazon"], PAL["SE_Asia"]]
     for patch, color in zip(bp["boxes"], colors_bp):
         patch.set_facecolor(color)
         patch.set_alpha(0.6)
@@ -480,7 +527,7 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
         plt.setp(bp[element], color="black", lw=0.6)
         
     # Jitter raw clusters
-    for i, region in enumerate(["Congo", "Amazon"]):
+    for i, region in enumerate(["Congo", "Amazon", "SE_Asia"]):
         vals = box_data[i]
         x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
         ax.scatter(x_jitter, vals, color=colors_bp[i], s=5, alpha=0.6, edgecolors="none", zorder=3)
@@ -519,7 +566,7 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
 
     # ── (A) log B_H vs log M_H Scatter ──────────────────────────────────────
     ax = axes[0, 0]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = valid[valid["region"] == region]
         ax.scatter(np.log10(sub["B_H_index"]), np.log10(sub["M_H_index"]),
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -547,7 +594,7 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
 
     # ── (B) Cluster-level Species Richness vs log B_H ────────────────────────
     ax = axes[0, 1]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = valid[valid["region"] == region]
         ax.scatter(sub["n_species"], np.log10(sub["B_H_index"]),
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -568,24 +615,31 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
     ax = axes[1, 0]
     logB_congo = np.log10(valid[valid["region"] == "Congo"]["B_H_index"])
     logB_amazon = np.log10(valid[valid["region"] == "Amazon"]["B_H_index"])
+    logB_seasia = np.log10(valid[valid["region"] == "SE_Asia"]["B_H_index"])
     
-    bins = np.histogram(np.hstack((logB_congo, logB_amazon)), bins=12)[1]
+    bins = np.histogram(np.hstack((logB_congo, logB_amazon, logB_seasia)), bins=12)[1]
     
-    ax.hist(logB_congo, bins=bins, color=PAL["Congo"], alpha=0.55, edgecolor=PAL["Congo"],
+    ax.hist(logB_congo, bins=bins, color=PAL["Congo"], alpha=0.45, edgecolor=PAL["Congo"],
             linewidth=0.4, label="Congo", density=False)
-    ax.hist(logB_amazon, bins=bins, color=PAL["Amazon"], alpha=0.55, edgecolor=PAL["Amazon"],
+    ax.hist(logB_amazon, bins=bins, color=PAL["Amazon"], alpha=0.45, edgecolor=PAL["Amazon"],
             linewidth=0.4, label="Amazon", density=False)
+    ax.hist(logB_seasia, bins=bins, color=PAL["SE_Asia"], alpha=0.45, edgecolor=PAL["SE_Asia"],
+            linewidth=0.4, label="SE_Asia", density=False)
     
     med_c = np.median(logB_congo)
     med_a = np.median(logB_amazon)
+    med_s = np.median(logB_seasia)
     
     ax.axvline(med_c, color=PAL["Congo"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_a, color=PAL["Amazon"], ls="--", lw=0.8, zorder=4)
+    ax.axvline(med_s, color=PAL["SE_Asia"], ls="--", lw=0.8, zorder=4)
     
     ax.text(med_c + 0.05, ax.get_ylim()[1] * 0.85, f"med={10**med_c:.1f}", 
             color=PAL["Congo"], fontsize=5, fontweight="bold")
     ax.text(med_a - 0.05, ax.get_ylim()[1] * 0.70, f"med={10**med_a:.1f}", 
             color=PAL["Amazon"], fontsize=5, fontweight="bold", ha="right")
+    ax.text(med_s + 0.05, ax.get_ylim()[1] * 0.55, f"med={10**med_s:.1f}", 
+            color=PAL["SE_Asia"], fontsize=5, fontweight="bold")
     
     ax.set_xlabel("log₁₀ standing Biomass Index ($B_H$)")
     ax.set_ylabel("Number of spatial clusters")
@@ -596,24 +650,31 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
     ax = axes[1, 1]
     logM_congo = np.log10(valid[valid["region"] == "Congo"]["M_H_index"])
     logM_amazon = np.log10(valid[valid["region"] == "Amazon"]["M_H_index"])
+    logM_seasia = np.log10(valid[valid["region"] == "SE_Asia"]["M_H_index"])
     
-    bins_m = np.histogram(np.hstack((logM_congo, logM_amazon)), bins=12)[1]
+    bins_m = np.histogram(np.hstack((logM_congo, logM_amazon, logM_seasia)), bins=12)[1]
     
-    ax.hist(logM_congo, bins=bins_m, color=PAL["Congo"], alpha=0.55, edgecolor=PAL["Congo"],
+    ax.hist(logM_congo, bins=bins_m, color=PAL["Congo"], alpha=0.45, edgecolor=PAL["Congo"],
             linewidth=0.4, label="Congo", density=False)
-    ax.hist(logM_amazon, bins=bins_m, color=PAL["Amazon"], alpha=0.55, edgecolor=PAL["Amazon"],
+    ax.hist(logM_amazon, bins=bins_m, color=PAL["Amazon"], alpha=0.45, edgecolor=PAL["Amazon"],
             linewidth=0.4, label="Amazon", density=False)
+    ax.hist(logM_seasia, bins=bins_m, color=PAL["SE_Asia"], alpha=0.45, edgecolor=PAL["SE_Asia"],
+            linewidth=0.4, label="SE_Asia", density=False)
     
     med_mc = np.median(logM_congo)
     med_ma = np.median(logM_amazon)
+    med_ms = np.median(logM_seasia)
     
     ax.axvline(med_mc, color=PAL["Congo"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_ma, color=PAL["Amazon"], ls="--", lw=0.8, zorder=4)
+    ax.axvline(med_ms, color=PAL["SE_Asia"], ls="--", lw=0.8, zorder=4)
     
     ax.text(med_mc + 0.05, ax.get_ylim()[1] * 0.85, f"med={10**med_mc:.1f}", 
             color=PAL["Congo"], fontsize=5, fontweight="bold")
     ax.text(med_ma - 0.05, ax.get_ylim()[1] * 0.70, f"med={10**med_ma:.1f}", 
             color=PAL["Amazon"], fontsize=5, fontweight="bold", ha="right")
+    ax.text(med_ms + 0.05, ax.get_ylim()[1] * 0.55, f"med={10**med_ms:.1f}", 
+            color=PAL["SE_Asia"], fontsize=5, fontweight="bold")
     
     ax.set_xlabel("log₁₀ standing Metabolism Index ($M_H$)")
     ax.set_ylabel("Number of spatial clusters")
@@ -661,11 +722,12 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 1.0], hspace=0.4, wspace=0.3)
 
     # ── (A) Geographic Maps (MCPs + 0.05 deg Buffers colored by B_H_gt50) ────
-    gs_maps = gs[0, :].subgridspec(1, 2, wspace=0.15)
+    gs_maps = gs[0, :].subgridspec(1, 3, wspace=0.15)
     
     regions_info = [
         {"name": "Congo", "extent": _compute_region_extent(det, "Congo"), "gs": gs_maps[0]},
-        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]}
+        {"name": "Amazon", "extent": _compute_region_extent(det, "Amazon"), "gs": gs_maps[1]},
+        {"name": "SE_Asia", "extent": _compute_region_extent(det, "SE_Asia"), "gs": gs_maps[2]}
     ]
 
     # Shared log-scaled biomass normalization across all clusters globally
@@ -758,7 +820,8 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     # Boxplot colors
     congo = cluster_metrics[cluster_metrics["region"] == "Congo"]
     amazon = cluster_metrics[cluster_metrics["region"] == "Amazon"]
-    colors_4 = [PAL["Congo"], "#B2D2EC", PAL["Amazon"], "#F4A582"]
+    seasia = cluster_metrics[cluster_metrics["region"] == "SE_Asia"]
+    colors_6 = [PAL["Congo"], "#B2D2EC", PAL["Amazon"], "#F4A582", PAL["SE_Asia"], "#A1D99B"]
 
     # ── (B) Biomass Index > 50 kg ───────────────────────────────────────────
     ax = fig.add_subplot(gs[1, 0])
@@ -766,19 +829,23 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     congo_abs = congo[congo["B_H_gt50"] == 0]["B_H_gt50"].values
     amazon_pres = amazon[amazon["B_H_gt50"] > 0]["B_H_gt50"].values
     amazon_abs = amazon[amazon["B_H_gt50"] == 0]["B_H_gt50"].values
+    seasia_pres = seasia[seasia["B_H_gt50"] > 0]["B_H_gt50"].values
+    seasia_abs = seasia[seasia["B_H_gt50"] == 0]["B_H_gt50"].values
     
-    box_data_50 = [congo_pres, congo_abs, amazon_pres, amazon_abs]
+    box_data_50 = [congo_pres, congo_abs, amazon_pres, amazon_abs, seasia_pres, seasia_abs]
     labels_50 = [
-        f"Congo\nPresent\n(n={len(congo_pres)})",
-        f"Congo\nAbsent\n(n={len(congo_abs)})",
-        f"Amazon\nPresent\n(n={len(amazon_pres)})",
-        f"Amazon\nAbsent\n(n={len(amazon_abs)})"
+        f"Congo\nPres\n(n={len(congo_pres)})",
+        f"Congo\nAbs\n(n={len(congo_abs)})",
+        f"Amazon\nPres\n(n={len(amazon_pres)})",
+        f"Amazon\nAbs\n(n={len(amazon_abs)})",
+        f"SE_Asia\nPres\n(n={len(seasia_pres)})",
+        f"SE_Asia\nAbs\n(n={len(seasia_abs)})"
     ]
     
     bp_50 = ax.boxplot(box_data_50, tick_labels=labels_50, patch_artist=True,
                        widths=0.5, showfliers=False, zorder=2)
     
-    for patch, color in zip(bp_50["boxes"], colors_4):
+    for patch, color in zip(bp_50["boxes"], colors_6):
         patch.set_facecolor(color)
         patch.set_alpha(0.65)
         patch.set_edgecolor("black")
@@ -789,7 +856,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     for i, vals in enumerate(box_data_50):
         if len(vals) > 0:
             x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-            ax.scatter(x_jitter, vals, color=colors_4[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
+            ax.scatter(x_jitter, vals, color=colors_6[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
             med_val = np.median(vals)
             ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
                     ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
@@ -798,7 +865,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
-    ax.tick_params(axis='x', labelsize=5.0)
+    ax.tick_params(axis='x', labelsize=4.8)
     panel_label(ax, "B")
 
     # ── (C) Biomass Index > 100 kg ──────────────────────────────────────────
@@ -807,19 +874,23 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     congo_abs_100 = congo[congo["B_H_gt100"] == 0]["B_H_gt100"].values
     amazon_pres_100 = amazon[amazon["B_H_gt100"] > 0]["B_H_gt100"].values
     amazon_abs_100 = amazon[amazon["B_H_gt100"] == 0]["B_H_gt100"].values
+    seasia_pres_100 = seasia[seasia["B_H_gt100"] > 0]["B_H_gt100"].values
+    seasia_abs_100 = seasia[seasia["B_H_gt100"] == 0]["B_H_gt100"].values
     
-    box_data_100 = [congo_pres_100, congo_abs_100, amazon_pres_100, amazon_abs_100]
+    box_data_100 = [congo_pres_100, congo_abs_100, amazon_pres_100, amazon_abs_100, seasia_pres_100, seasia_abs_100]
     labels_100 = [
-        f"Congo\nPresent\n(n={len(congo_pres_100)})",
-        f"Congo\nAbsent\n(n={len(congo_abs_100)})",
-        f"Amazon\nPresent\n(n={len(amazon_pres_100)})",
-        f"Amazon\nAbsent\n(n={len(amazon_abs_100)})"
+        f"Congo\nPres\n(n={len(congo_pres_100)})",
+        f"Congo\nAbs\n(n={len(congo_abs_100)})",
+        f"Amazon\nPres\n(n={len(amazon_pres_100)})",
+        f"Amazon\nAbs\n(n={len(amazon_abs_100)})",
+        f"SE_Asia\nPres\n(n={len(seasia_pres_100)})",
+        f"SE_Asia\nAbs\n(n={len(seasia_abs_100)})"
     ]
     
     bp_100 = ax.boxplot(box_data_100, tick_labels=labels_100, patch_artist=True,
                         widths=0.5, showfliers=False, zorder=2)
     
-    for patch, color in zip(bp_100["boxes"], colors_4):
+    for patch, color in zip(bp_100["boxes"], colors_6):
         patch.set_facecolor(color)
         patch.set_alpha(0.65)
         patch.set_edgecolor("black")
@@ -830,7 +901,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     for i, vals in enumerate(box_data_100):
         if len(vals) > 0:
             x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-            ax.scatter(x_jitter, vals, color=colors_4[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
+            ax.scatter(x_jitter, vals, color=colors_6[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
             med_val = np.median(vals)
             ax.text(i + 1, med_val + 5 if med_val > 0 else 5, f"med={med_val:.1f}",
                     ha="center", va="bottom", fontsize=5.0, color="black", fontweight="bold")
@@ -839,7 +910,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     ax.set_yscale("symlog", linthresh=1.0)
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%g"))
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
-    ax.tick_params(axis='x', labelsize=5.0)
+    ax.tick_params(axis='x', labelsize=4.8)
     panel_label(ax, "C")
 
     # ── (D) Individual Body Mass Density ────────────────────────────────────
@@ -853,7 +924,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
         (det["body_mass_kg"] > 0)
     ].copy()
     
-    for reg in ["Congo", "Amazon"]:
+    for idx_reg, reg in enumerate(["Congo", "Amazon", "SE_Asia"]):
         sub_det = usable_det[usable_det["region"] == reg]
         log_masses = np.log10(sub_det["body_mass_kg"])
         
@@ -866,7 +937,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
         
         med_m = np.median(sub_det["body_mass_kg"])
         ax.axvline(np.log10(med_m), color=PAL[reg], ls="--", lw=0.8, alpha=0.7)
-        ax.text(np.log10(med_m), ax.get_ylim()[1] * 0.9, f" {med_m:.1f} kg",
+        ax.text(np.log10(med_m), ax.get_ylim()[1] * (0.9 - 0.15 * idx_reg), f" {med_m:.1f} kg",
                 color=PAL[reg], fontsize=5.5, fontweight="bold", ha="left" if reg=="Congo" else "right")
         
     ax.set_xlabel("log₁₀ species body mass (kg)")
@@ -881,19 +952,23 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     congo_abs_frac = congo[congo["B_H_gt50"] == 0]["megafauna_fraction"].values
     amazon_pres_frac = amazon[amazon["B_H_gt50"] > 0]["megafauna_fraction"].values
     amazon_abs_frac = amazon[amazon["B_H_gt50"] == 0]["megafauna_fraction"].values
+    seasia_pres_frac = seasia[seasia["B_H_gt50"] > 0]["megafauna_fraction"].values
+    seasia_abs_frac = seasia[seasia["B_H_gt50"] == 0]["megafauna_fraction"].values
     
-    box_data_frac = [congo_pres_frac, congo_abs_frac, amazon_pres_frac, amazon_abs_frac]
+    box_data_frac = [congo_pres_frac, congo_abs_frac, amazon_pres_frac, amazon_abs_frac, seasia_pres_frac, seasia_abs_frac]
     labels_frac = [
-        f"Congo\nPresent\n(n={len(congo_pres_frac)})",
-        f"Congo\nAbsent\n(n={len(congo_abs_frac)})",
-        f"Amazon\nPresent\n(n={len(amazon_pres_frac)})",
-        f"Amazon\nAbsent\n(n={len(amazon_abs_frac)})"
+        f"Congo\nPres\n(n={len(congo_pres_frac)})",
+        f"Congo\nAbs\n(n={len(congo_abs_frac)})",
+        f"Amazon\nPres\n(n={len(amazon_pres_frac)})",
+        f"Amazon\nAbs\n(n={len(amazon_abs_frac)})",
+        f"SE_Asia\nPres\n(n={len(seasia_pres_frac)})",
+        f"SE_Asia\nAbs\n(n={len(seasia_abs_frac)})"
     ]
     
     bp_frac = ax.boxplot(box_data_frac, tick_labels=labels_frac, patch_artist=True,
                           widths=0.5, showfliers=False, zorder=2)
     
-    for patch, color in zip(bp_frac["boxes"], colors_4):
+    for patch, color in zip(bp_frac["boxes"], colors_6):
         patch.set_facecolor(color)
         patch.set_alpha(0.65)
         patch.set_edgecolor("black")
@@ -904,7 +979,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     for i, vals in enumerate(box_data_frac):
         if len(vals) > 0:
             x_jitter = np.random.default_rng(i).normal(i + 1, 0.04, len(vals))
-            ax.scatter(x_jitter, vals, color=colors_4[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
+            ax.scatter(x_jitter, vals, color=colors_6[i], s=3.5, alpha=0.6, edgecolors="none", zorder=3)
             
             mean_val = np.mean(vals)
             ax.text(i + 1, mean_val + 2 if mean_val > 0 else 2, f"mean={mean_val:.1f}%",
@@ -913,7 +988,7 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     ax.set_ylabel("Megafaunal Biomass Fraction (%)")
     ax.set_ylim(-2, 105)
     ax.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0", alpha=0.5, zorder=1)
-    ax.tick_params(axis='x', labelsize=5.0)
+    ax.tick_params(axis='x', labelsize=4.8)
     panel_label(ax, "E")
 
     # Save
@@ -939,7 +1014,7 @@ def make_figure4(cluster_metrics: pd.DataFrame, fig_dir: Path):
 
     # ── (A) total standing heterotroph biomass index (B_H_index) vs trap_days ────
     ax = axes[0, 0]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = cluster_metrics[cluster_metrics["region"] == region]
         ax.scatter(sub["trap_days"], sub["B_H_index"],
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -971,7 +1046,7 @@ def make_figure4(cluster_metrics: pd.DataFrame, fig_dir: Path):
 
     # ── (B) standing biomass index of animals > 50 kg (B_H_gt50) vs trap_days ────
     ax = axes[0, 1]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = cluster_metrics[cluster_metrics["region"] == region]
         ax.scatter(sub["trap_days"], sub["B_H_gt50"],
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -1002,7 +1077,7 @@ def make_figure4(cluster_metrics: pd.DataFrame, fig_dir: Path):
 
     # ── (C) standing biomass index of megafauna > 100 kg (B_H_gt100) vs trap_days ────
     ax = axes[1, 0]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = cluster_metrics[cluster_metrics["region"] == region]
         ax.scatter(sub["trap_days"], sub["B_H_gt100"],
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -1033,7 +1108,7 @@ def make_figure4(cluster_metrics: pd.DataFrame, fig_dir: Path):
 
     # ── (D) species richness (n_species) vs trap_days ────
     ax = axes[1, 1]
-    for region in ["Congo", "Amazon"]:
+    for region in ["Congo", "Amazon", "SE_Asia"]:
         sub = cluster_metrics[cluster_metrics["region"] == region]
         ax.scatter(sub["trap_days"], sub["n_species"],
                    c=PAL[region], s=16, alpha=0.7, edgecolors="white", linewidths=0.2,
@@ -1089,6 +1164,32 @@ def main():
     print("Aggregating detections to mathematical cluster-level metrics...")
     cluster_metrics, clustered_det = aggregate_to_clusters(det, cluster_map)
     
+    print("\nFiltering clusters to only keep those overlapping at least one valid GEDI 5km pixel...")
+    # Map deployments to cluster ids for grouping
+    det_copy = det.copy()
+    det_copy['cluster_id'] = det_copy.apply(
+        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+        axis=1
+    )
+    
+    valid_clusters = []
+    for _, row in cluster_metrics.iterrows():
+        c_id = row["cluster_id"]
+        region = row["region"]
+        
+        c_deps = det_copy[det_copy["cluster_id"] == c_id]
+        points = list(zip(c_deps["longitude"], c_deps["latitude"]))
+        
+        mp = MultiPoint(points)
+        hull = mp.convex_hull
+        buffered = hull.buffer(0.05)
+        
+        if check_gedi_5km_overlap(region, buffered):
+            valid_clusters.append(c_id)
+            
+    print(f"  ✓ Retained {len(valid_clusters)} / {len(cluster_metrics)} clusters with valid GEDI 5km pixel overlap.")
+    cluster_metrics = cluster_metrics[cluster_metrics["cluster_id"].isin(valid_clusters)].copy()
+    
     # Save the aggregated cluster metrics for subsequent remote sensing linkage
     cluster_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics.csv"
     cluster_metrics.to_csv(cluster_metrics_path, index=False)
@@ -1114,6 +1215,8 @@ def main():
     )
     # Keep only deployments in robust clusters
     robust_det_for_geojson = det_copy[det_copy['cluster_id'].isin(robust_cluster_metrics['cluster_id'])].copy()
+    robust_det_for_geojson.to_csv(OUTPUT_DIR / "camera_traps_robust_detections.csv", index=False)
+    print(f"Saved robust filtered detections with cluster assignments to {OUTPUT_DIR / 'camera_traps_robust_detections.csv'}")
 
     # Group to unique deployment locations
     deps_unique = (robust_det_for_geojson.groupby(["region", "cluster_id", "project_name", "deployment_id"])
@@ -1148,6 +1251,7 @@ def main():
             "M_H_index": float(c_info["M_H_index"]),
             "B_H_gt50": float(c_info["B_H_gt50"]),
             "B_H_gt100": float(c_info["B_H_gt100"]),
+            "B_H_gt1000": float(c_info["B_H_gt1000"]),
             "megafauna_fraction": float(c_info["megafauna_fraction"])
         }
 
