@@ -74,6 +74,12 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 10. **[code/visualise_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/visualise_camera_traps.py):**  
     Generates initial publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the 11.1 km cluster level.
 
+
+### **Diagnostic & Scratch Utilities (scratch/)**
+
+*   **[scratch/correlation_uoi_biomass.R](file:///home/j/AgenticProjects/DefaunationSynthesis/scratch/correlation_uoi_biomass.R):** Performs statistical correlation tests (Pearson/Spearman) on raw and log1p scales and plots GEDI UOI vs. standing biomass.
+*   **[scratch/correlation_6panel.R](file:///home/j/AgenticProjects/DefaunationSynthesis/scratch/correlation_6panel.R):** Generates a 6-panel publication grid plotting standing biomass components (Total, >100kg, >1000kg) vs. GEDI UOI on both log1p (top row) and raw/linear (bottom row) scales with full Pearson/Spearman correlation statistics.
+
 ### **Core Biophysical Functions Module**
 
 *   **[code/functions/calibration_helpers.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/functions/calibration_helpers.R):**  
