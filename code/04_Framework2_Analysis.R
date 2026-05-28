@@ -92,26 +92,12 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     "M2.22s: UOI * Elephant Strict + Forest"    = B_H_index ~ uoi * elephant_present_strict + forest_fraction
   )
   
-  # Dynamically construct full set of formulas, adding basin alternates for any elephant possible models
-  expanded_formulas_list <- list()
-  for (name in names(formulas_list)) {
-    f <- formulas_list[[name]]
-    expanded_formulas_list[[name]] <- f
-    
-    if (grepl("Elephant Possible", name)) {
-      name_basin <- gsub("Elephant Possible", "Basin", name)
-      name_basin <- gsub("M2\\.(\\d+)p", "M2.\\1b", name_basin)
-      f_str <- deparse(f)
-      f_str <- gsub("elephant_present_possible", "basin", f_str)
-      expanded_formulas_list[[name_basin]] <- as.formula(f_str)
-    }
-  }
+  expanded_formulas_list <- formulas_list
 
   num_models <- length(expanded_formulas_list)
   model_names <- names(expanded_formulas_list)
   
-  # --- 3. Fit Full-Sample Models to get Full-Sample Metrics --------------------
-  cat("Fitting all 52 models on the full dataset...\n")
+  cat(sprintf("Fitting all %d models on the full dataset...\n", num_models))
   full_models <- list()
   full_AIC <- numeric(num_models)
   full_edf <- numeric(num_models)
@@ -256,7 +242,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     }
   })
   
-  # Calculate AIC delta and status for all 52 models
+  # Calculate AIC delta and status for all candidate models
   results_df_aic <- data.frame(
     Model = model_names,
     AIC = full_AIC,
@@ -574,7 +560,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
         fill_var = "delta_AIC",
         fill_label = "Delta AIC",
         x_label = "Model Deviance Explained (%)",
-        plot_title = "C. Standard AIC Model Selection (All 52 Candidates)",
+        plot_title = sprintf("C. Standard AIC Model Selection (All %d Candidates)", nrow(plot_sel_df)),
         parsed_labels = parsed_labels
       )
     } else {

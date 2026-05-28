@@ -37,7 +37,6 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   cat("✓ Merged and calibrated data successfully. N =", nrow(joined_data), "clusters.\n")
   
-  # --- 2. Covariate Model Selection using Beta Regression -----------------------
   cat("\nRunning Beta Regression Covariate Model Selection (Excluding Elephant & MegaHx)...\n")
   base_formulas <- list(
     # --- Base Models ---
@@ -52,47 +51,46 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     "M8: Biomass + Clay"                     = uoi ~ B_H_index + clay,
     "M9: Biomass + Forest"                   = uoi ~ B_H_index + forest_fraction,
 
-    # --- Basin Base and Main Effect Set ---
-    "M24: Basin Only"                        = uoi ~ basin,
-    "M25: Biomass + Basin"                   = uoi ~ B_H_index + basin,
-    "M26: Biomass + Basin + Elev"            = uoi ~ B_H_index + basin + elevation,
-    "M27: Biomass + Basin + Slope"           = uoi ~ B_H_index + basin + slope,
-    "M28: Biomass + Basin + HAND"            = uoi ~ B_H_index + basin + hnd,
-    "M29: Biomass + Basin + Precip"          = uoi ~ B_H_index + basin + precip,
-    "M30: Biomass + Basin + Clay"            = uoi ~ B_H_index + basin + clay,
-    "M31: Biomass + Basin + Forest"          = uoi ~ B_H_index + basin + forest_fraction,
+    # --- Elephant Possible Set ---
+    "M24_possible: ElephantPossible Only"          = uoi ~ elephant_present_possible,
+    "M25_possible: Biomass + ElephantPossible"     = uoi ~ B_H_index + elephant_present_possible,
+    "M26_possible: Biomass + ElephantPossible + Elev" = uoi ~ B_H_index + elephant_present_possible + elevation,
+    "M27_possible: Biomass + ElephantPossible + Slope" = uoi ~ B_H_index + elephant_present_possible + slope,
+    "M28_possible: Biomass + ElephantPossible + HAND" = uoi ~ B_H_index + elephant_present_possible + hnd,
+    "M29_possible: Biomass + ElephantPossible + Precip" = uoi ~ B_H_index + elephant_present_possible + precip,
+    "M30_possible: Biomass + ElephantPossible + Clay" = uoi ~ B_H_index + elephant_present_possible + clay,
+    "M31_possible: Biomass + ElephantPossible + Forest" = uoi ~ B_H_index + elephant_present_possible + forest_fraction,
     
-    # --- Basin Interaction Effect Set ---
-    "M32: Biomass * Basin"                   = uoi ~ B_H_index * basin,
-    "M33: Biomass * Basin + Elev"            = uoi ~ B_H_index * basin + elevation,
-    "M34: Biomass * Basin + Slope"           = uoi ~ B_H_index * basin + slope,
-    "M35: Biomass * Basin + HAND"            = uoi ~ B_H_index * basin + hnd,
-    "M36: Biomass * Basin + Precip"          = uoi ~ B_H_index * basin + precip,
-    "M37: Biomass * Basin + Clay"            = uoi ~ B_H_index * basin + clay,
-    "M38: Biomass * Basin + Forest"          = uoi ~ B_H_index * basin + forest_fraction
+    # --- Elephant Possible Interaction Set ---
+    "M32_possible: Biomass * ElephantPossible"     = uoi ~ B_H_index * elephant_present_possible,
+    "M33_possible: Biomass * ElephantPossible + Elev" = uoi ~ B_H_index * elephant_present_possible + elevation,
+    "M34_possible: Biomass * ElephantPossible + Slope" = uoi ~ B_H_index * elephant_present_possible + slope,
+    "M35_possible: Biomass * ElephantPossible + HAND" = uoi ~ B_H_index * elephant_present_possible + hnd,
+    "M36_possible: Biomass * ElephantPossible + Precip" = uoi ~ B_H_index * elephant_present_possible + precip,
+    "M37_possible: Biomass * ElephantPossible + Clay" = uoi ~ B_H_index * elephant_present_possible + clay,
+    "M38_possible: Biomass * ElephantPossible + Forest" = uoi ~ B_H_index * elephant_present_possible + forest_fraction,
+
+    # --- Elephant Strict Set ---
+    "M24_strict: ElephantStrict Only"              = uoi ~ elephant_present_strict,
+    "M25_strict: Biomass + ElephantStrict"         = uoi ~ B_H_index + elephant_present_strict,
+    "M26_strict: Biomass + ElephantStrict + Elev"     = uoi ~ B_H_index + elephant_present_strict + elevation,
+    "M27_strict: Biomass + ElephantStrict + Slope"     = uoi ~ B_H_index + elephant_present_strict + slope,
+    "M28_strict: Biomass + ElephantStrict + HAND"      = uoi ~ B_H_index + elephant_present_strict + hnd,
+    "M29_strict: Biomass + ElephantStrict + Precip"    = uoi ~ B_H_index + elephant_present_strict + precip,
+    "M30_strict: Biomass + ElephantStrict + Clay"      = uoi ~ B_H_index + elephant_present_strict + clay,
+    "M31_strict: Biomass + ElephantStrict + Forest"    = uoi ~ B_H_index + elephant_present_strict + forest_fraction,
+    
+    # --- Elephant Strict Interaction Set ---
+    "M32_strict: Biomass * ElephantStrict"             = uoi ~ B_H_index * elephant_present_strict,
+    "M33_strict: Biomass * ElephantStrict + Elev"     = uoi ~ B_H_index * elephant_present_strict + elevation,
+    "M34_strict: Biomass * ElephantStrict + Slope"     = uoi ~ B_H_index * elephant_present_strict + slope,
+    "M35_strict: Biomass * ElephantStrict + HAND"      = uoi ~ B_H_index * elephant_present_strict + hnd,
+    "M36_strict: Biomass * ElephantStrict + Precip"    = uoi ~ B_H_index * elephant_present_strict + precip,
+    "M37_strict: Biomass * ElephantStrict + Clay"      = uoi ~ B_H_index * elephant_present_strict + clay,
+    "M38_strict: Biomass * ElephantStrict + Forest"    = uoi ~ B_H_index * elephant_present_strict + forest_fraction
   )
 
-  # Dynamically construct full set of base formulas, adding elephant alternates for any basin models
-  expanded_base_formulas <- list()
-  for (name in names(base_formulas)) {
-    f <- base_formulas[[name]]
-    expanded_base_formulas[[name]] <- f
-    
-    # If the formula contains 'basin', create the ElephantPossible and ElephantStrict alternates
-    if ("basin" %in% all.vars(f)) {
-      # 1. Elephant Possible
-      name_possible <- gsub("Basin", "ElephantPossible", name)
-      f_str_possible <- deparse(f)
-      f_str_possible <- gsub("basin", "elephant_present_possible", f_str_possible)
-      expanded_base_formulas[[name_possible]] <- as.formula(f_str_possible)
-      
-      # 2. Elephant Strict
-      name_strict <- gsub("Basin", "ElephantStrict", name)
-      f_str_strict <- deparse(f)
-      f_str_strict <- gsub("basin", "elephant_present_strict", f_str_strict)
-      expanded_base_formulas[[name_strict]] <- as.formula(f_str_strict)
-    }
-  }
+  expanded_base_formulas <- base_formulas
 
   # Dynamically construct models_list with two alternatives added for each expanded base model
   models_list <- list()
