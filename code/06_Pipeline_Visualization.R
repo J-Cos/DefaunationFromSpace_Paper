@@ -88,15 +88,10 @@ mcps_congo  <- mcps[mcps$region == "Congo", ]
 mcps_amazon  <- mcps[mcps$region == "Amazon", ]
 mcps_seasia  <- mcps[mcps$region == "SE_Asia", ]
 
-# Set up study bounding boxes with padding
-ext_c <- ext(mcps_congo)
-ext_c <- ext(xmin(ext_c)-1.0, xmax(ext_c)+1.0, ymin(ext_c)-1.0, ymax(ext_c)+1.0)
-
-ext_a <- ext(mcps_amazon)
-ext_a <- ext(xmin(ext_a)-1.0, xmax(ext_a)+1.0, ymin(ext_a)-1.0, ymax(ext_a)+1.0)
-
-ext_s <- ext(mcps_seasia)
-ext_s <- ext(xmin(ext_s)-1.0, xmax(ext_s)+1.0, ymin(ext_s)-1.0, ymax(ext_s)+1.0)
+# Set up study bounding boxes: EXACTLY 50° Wide × 30° High (-15 to 15 Lat) to match Figure 5 and S1
+ext_a <- ext(-85, -35, -15, 15)
+ext_c <- ext(-5, 45, -15, 15)
+ext_s <- ext(90, 140, -15, 15)
 
 r_c_crop <- crop(r_congo_5km, ext_c)
 r_a_crop <- crop(r_amazon_5km, ext_a)
@@ -107,11 +102,9 @@ r_c_crop$gedi_n <- r_c_crop$gedi_n * 40000
 r_a_crop$gedi_n <- r_a_crop$gedi_n * 40000
 r_s_crop$gedi_n <- r_s_crop$gedi_n * 40000
 
-countries_c <- crop(project(countries_v, crs(r_c_crop)), ext_c)
-countries_a <- crop(project(countries_v, crs(r_a_crop)), ext_a)
-countries_s <- crop(project(countries_v, crs(r_s_crop)), ext_s)
-
-t_theme <- theme_pnas(base_size = 7.5)
+countries_c <- crop(countries_v, ext_c)
+countries_a <- crop(countries_v, ext_a)
+countries_s <- crop(countries_v, ext_s)
 
 # --- UOI Fill Scale ---
 uoi_fill_scale <- scale_fill_viridis_c(
@@ -121,55 +114,6 @@ uoi_fill_scale <- scale_fill_viridis_c(
   oob = scales::squish,
   na.value = "transparent"
 )
-
-# --- Figure 1 Panels A, B, C: Regional 5km UOI maps ---
-p1_a <- ggplot() +
-  geom_spatraster(data = r_a_crop, aes(fill = uoi)) +
-  uoi_fill_scale +
-  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
-  labs(title = "A. Amazon GEDI Openness (5 km)")
-
-p1_b <- ggplot() +
-  geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
-  uoi_fill_scale +
-  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
-  labs(title = "C. Congo GEDI Openness (5 km)")
-
-p1_c <- ggplot() +
-  geom_spatraster(data = r_s_crop, aes(fill = uoi)) +
-  uoi_fill_scale +
-  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
-  labs(title = "E. SE Asia GEDI Openness (5 km)")
 
 # --- Shot Count Fill Scale ---
 n_fill_scale <- scale_fill_viridis_c(
@@ -183,53 +127,82 @@ n_fill_scale <- scale_fill_viridis_c(
   na.value = "transparent"
 )
 
-# --- Figure 1 Panels D, E, F: Regional 5km GEDI Shot Count maps ---
-p1_d <- ggplot() +
-  geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
-  n_fill_scale +
-  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
+t_theme <- theme_pnas(base_size = 7.5)
+
+# Define premium map theme for Figure 1
+map_theme_fig1 <- theme_pnas(base_size = 7.5) +
   theme(
     legend.position = "none",
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     axis.title = element_blank(),
     panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
+    panel.background = element_rect(fill = "#EBF5FB", color = NA), # Soft blue oceans
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.margin = margin(2, 2, 2, 2, "pt"),
+    panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5)
+  )
+
+# --- Figure 1 Panels A, C, E: UOI Maps ---
+p1_a <- ggplot() +
+  geom_spatvector(data = countries_a, fill = "white", colour = NA) +
+  geom_spatraster(data = r_a_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
+  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.2) +
+  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
+  labs(title = "A. Amazon GEDI Openness (5 km)")
+
+p1_b <- ggplot() +
+  geom_spatvector(data = countries_c, fill = "white", colour = NA) +
+  geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
+  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.2) +
+  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
+  labs(title = "C. Congo GEDI Openness (5 km)")
+
+p1_c <- ggplot() +
+  geom_spatvector(data = countries_s, fill = "white", colour = NA) +
+  geom_spatraster(data = r_s_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
+  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.2) +
+  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
+  labs(title = "E. SE Asia GEDI Openness (5 km)")
+
+# --- Figure 1 Panels B, D, F: Shot Count Maps ---
+p1_d <- ggplot() +
+  geom_spatvector(data = countries_a, fill = "white", colour = NA) +
+  geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
+  n_fill_scale +
+  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.2) +
+  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
   labs(title = "B. Amazon GEDI Shot Count (5 km)")
 
 p1_e <- ggplot() +
+  geom_spatvector(data = countries_c, fill = "white", colour = NA) +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
   n_fill_scale +
-  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.2) +
   geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
+  coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
   labs(title = "D. Congo GEDI Shot Count (5 km)")
 
 p1_f <- ggplot() +
+  geom_spatvector(data = countries_s, fill = "white", colour = NA) +
   geom_spatraster(data = r_s_crop, aes(fill = gedi_n)) +
   n_fill_scale +
-  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.2) +
   geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
+  coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
+  map_theme_fig1 +
   labs(title = "F. SE Asia GEDI Shot Count (5 km)")
 
 # --- Figure 1 Panel G: Uncertainty Decay vs. GEDI Shot Density ---

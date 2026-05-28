@@ -107,7 +107,7 @@ map_theme <- theme_minimal(base_size = 9) +
     panel.grid.minor = element_blank(),
     axis.title = element_blank(),
     axis.text = element_text(size = 6, color = "grey50"),
-    plot.margin = margin(6, 6, 6, 6, "pt"),
+    plot.margin = margin(2, 2, 2, 2, "pt"),
     panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5)
   )
 
@@ -207,8 +207,8 @@ fig_path_png_local <- "figures/figureS1.png"
 fig_path_pdf_local <- "figures/figureS1.pdf"
 
 # Save high-resolution publication-quality PNG and PDF (300 DPI)
-ggsave(fig_path_png_local, plot = col_figure, width = 11.0, height = 20.0, units = "cm", dpi = 300, bg = "white")
-ggsave(fig_path_pdf_local, plot = col_figure, width = 11.0, height = 20.0, units = "cm", dpi = 300, bg = "white")
+ggsave(fig_path_png_local, plot = col_figure, width = 11.5, height = 16.5, units = "cm", dpi = 300, bg = "white")
+ggsave(fig_path_pdf_local, plot = col_figure, width = 11.5, height = 16.5, units = "cm", dpi = 300, bg = "white")
 
 # Mirror in brain artifacts folder
 brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
