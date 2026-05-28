@@ -76,22 +76,49 @@ r_congo <- load_and_aggregate_real("Congo")
 r_amazon <- load_and_aggregate_real("Amazon")
 r_seasia <- load_and_aggregate_real("SE_Asia")
 
-# Collect data frames
-predict_basin_df <- function(r_stack, basin_name) {
-  df <- as.data.frame(r_stack[[c("uoi", "elevation")]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+# Helper to predict any model on a SpatRaster stack and dynamically inject required category covariates
+predict_model_on_raster <- function(model, r_stack, basin_name) {
+  model_vars <- all.vars(formula(model))
+  raster_vars <- intersect(model_vars, names(r_stack))
+  df <- as.data.frame(r_stack[[raster_vars]], cells = TRUE, xy = TRUE, na.rm = TRUE)
   if (nrow(df) == 0) return(NULL)
   
-  df$basin <- factor(basin_name, levels = c("Amazon", "Congo", "SE_Asia"))
+  # Inject categories if expected by the model formulas
+  if ("basin" %in% model_vars) {
+    df$basin <- factor(basin_name, levels = c("Amazon", "Congo", "SE_Asia"))
+  }
+  if ("elephant_present_possible" %in% model_vars) {
+    df$elephant_present_possible <- factor(ifelse(basin_name == "Amazon", "Absent", "Present"), levels = c("Absent", "Present"))
+  }
+  if ("elephant_present_strict" %in% model_vars) {
+    df$elephant_present_strict <- factor(ifelse(basin_name == "Amazon", "Absent", "Present"), levels = c("Absent", "Present"))
+  }
+  
+  df$pred <- predict(model, newdata = df, type = "response")
+  return(df)
+}
+
+# Collect data frames
+predict_basin_df <- function(r_stack, basin_name) {
+  if (is.null(r_stack)) return(NULL)
   
   # Predict Column 1 (LOBO: B_H_index ~ uoi)
-  df$pred_lobo <- predict(m_best, newdata = df, type = "response")
-  df$z_lobo <- (log1p(df$pred_lobo) - mean_log_y_obs) / OOS_MAE_log
+  df_lobo <- predict_model_on_raster(m_best, r_stack, basin_name)
+  if (is.null(df_lobo) || nrow(df_lobo) == 0) return(NULL)
+  df_lobo$z_lobo <- (log1p(df_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
   
   # Predict Column 2 (AIC: B_H_index ~ uoi * basin + elevation)
-  df$pred_aic <- predict(m_best_aic, newdata = df, type = "response")
-  df$z_aic <- (log1p(df$pred_aic) - mean_log_y_obs) / OOS_MAE_log
+  df_aic <- predict_model_on_raster(m_best_aic, r_stack, basin_name)
+  if (is.null(df_aic) || nrow(df_aic) == 0) return(NULL)
+  df_aic$z_aic <- (log1p(df_aic$pred) - mean_log_y_obs) / OOS_MAE_log
   
-  return(df[, c("basin", "z_lobo", "z_aic")])
+  # Join them by cells/coordinates to get side-by-side predictions
+  res_df <- df_lobo %>%
+    select(x, y, z_lobo) %>%
+    inner_join(df_aic %>% select(x, y, z_aic), by = c("x", "y"))
+  
+  res_df$basin <- factor(basin_name, levels = c("Amazon", "Congo", "SE_Asia"))
+  return(res_df[, c("basin", "z_lobo", "z_aic")])
 }
 
 congo_df <- predict_basin_df(r_congo, "Congo")

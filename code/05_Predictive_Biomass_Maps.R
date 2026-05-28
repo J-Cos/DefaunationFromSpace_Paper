@@ -190,14 +190,31 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       countries_seasia <- crop(project(countries_v, crs(r_seasia_cropped)), ext_seasia_map)
     }
     
-    # Run Predictions on Rasters and transform to Z-score normalized OOS MAE units
-    covariate_bands_lobo <- "uoi"
-    covariate_bands_aic  <- c("uoi", "elevation")
+    # Helper to predict any model on a SpatRaster stack and dynamically inject required category covariates
+    predict_model_on_raster <- function(model, r_cropped, basin_name) {
+      model_vars <- all.vars(formula(model))
+      raster_vars <- intersect(model_vars, names(r_cropped))
+      df <- as.data.frame(r_cropped[[raster_vars]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+      if (nrow(df) == 0) return(NULL)
+      
+      # Inject categories if expected by the model formulas
+      if ("basin" %in% model_vars) {
+        df$basin <- factor(basin_name, levels = c("Amazon", "Congo", "SE_Asia"))
+      }
+      if ("elephant_present_possible" %in% model_vars) {
+        df$elephant_present_possible <- factor(ifelse(basin_name == "Amazon", "Absent", "Present"), levels = c("Absent", "Present"))
+      }
+      if ("elephant_present_strict" %in% model_vars) {
+        df$elephant_present_strict <- factor(ifelse(basin_name == "Amazon", "Absent", "Present"), levels = c("Absent", "Present"))
+      }
+      
+      df$pred <- predict(model, newdata = df, type = "response")
+      return(df)
+    }
     
     # --- Congo predictions ---
     # LOBO prediction
-    congo_cells_lobo <- as.data.frame(r_congo_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    congo_cells_lobo$pred <- predict(m_best, newdata = congo_cells_lobo, type = "response")
+    congo_cells_lobo <- predict_model_on_raster(m_best, r_congo_cropped, "Congo")
     congo_cells_lobo$zscore_mae <- (log1p(congo_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
     
     r_pred_congo_lobo <- rast(r_congo_cropped[["uoi"]])
@@ -206,9 +223,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     r_pred_congo_lobo[congo_cells_lobo$cell] <- as.vector(congo_cells_lobo$zscore_mae)
     
     # AIC prediction
-    congo_cells_aic <- as.data.frame(r_congo_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    congo_cells_aic$basin <- factor("Congo", levels = c("Amazon", "Congo", "SE_Asia"))
-    congo_cells_aic$pred <- predict(m_best_aic, newdata = congo_cells_aic, type = "response")
+    congo_cells_aic <- predict_model_on_raster(m_best_aic, r_congo_cropped, "Congo")
     congo_cells_aic$zscore_mae <- (log1p(congo_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
     
     r_pred_congo_aic <- rast(r_congo_cropped[["uoi"]])
@@ -218,8 +233,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     
     # --- Amazon predictions ---
     # LOBO prediction
-    amazon_cells_lobo <- as.data.frame(r_amazon_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    amazon_cells_lobo$pred <- predict(m_best, newdata = amazon_cells_lobo, type = "response")
+    amazon_cells_lobo <- predict_model_on_raster(m_best, r_amazon_cropped, "Amazon")
     amazon_cells_lobo$zscore_mae <- (log1p(amazon_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
     
     r_pred_amazon_lobo <- rast(r_amazon_cropped[["uoi"]])
@@ -228,9 +242,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     r_pred_amazon_lobo[amazon_cells_lobo$cell] <- as.vector(amazon_cells_lobo$zscore_mae)
     
     # AIC prediction
-    amazon_cells_aic <- as.data.frame(r_amazon_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    amazon_cells_aic$basin <- factor("Amazon", levels = c("Amazon", "Congo", "SE_Asia"))
-    amazon_cells_aic$pred <- predict(m_best_aic, newdata = amazon_cells_aic, type = "response")
+    amazon_cells_aic <- predict_model_on_raster(m_best_aic, r_amazon_cropped, "Amazon")
     amazon_cells_aic$zscore_mae <- (log1p(amazon_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
     
     r_pred_amazon_aic <- rast(r_amazon_cropped[["uoi"]])
@@ -243,9 +255,8 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     r_pred_seasia_aic <- NULL
     if (!is.null(r_seasia)) {
       # LOBO prediction
-      seasia_cells_lobo <- as.data.frame(r_seasia_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-      if (nrow(seasia_cells_lobo) > 0) {
-        seasia_cells_lobo$pred <- predict(m_best, newdata = seasia_cells_lobo, type = "response")
+      seasia_cells_lobo <- predict_model_on_raster(m_best, r_seasia_cropped, "SE_Asia")
+      if (!is.null(seasia_cells_lobo) && nrow(seasia_cells_lobo) > 0) {
         seasia_cells_lobo$zscore_mae <- (log1p(seasia_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
         
         r_pred_seasia_lobo <- rast(r_seasia_cropped[["uoi"]])
@@ -255,10 +266,8 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       }
       
       # AIC prediction
-      seasia_cells_aic <- as.data.frame(r_seasia_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-      if (nrow(seasia_cells_aic) > 0) {
-        seasia_cells_aic$basin <- factor("SE_Asia", levels = c("Amazon", "Congo", "SE_Asia"))
-        seasia_cells_aic$pred <- predict(m_best_aic, newdata = seasia_cells_aic, type = "response")
+      seasia_cells_aic <- predict_model_on_raster(m_best_aic, r_seasia_cropped, "SE_Asia")
+      if (!is.null(seasia_cells_aic) && nrow(seasia_cells_aic) > 0) {
         seasia_cells_aic$zscore_mae <- (log1p(seasia_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
         
         r_pred_seasia_aic <- rast(r_seasia_cropped[["uoi"]])
