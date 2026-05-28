@@ -87,7 +87,8 @@ theme_pnas <- function(base_size = 8) {
 #' @export
 pal_basin <- c(
   Congo  = "#1B5E20",
-  Amazon = "#E65100"
+  Amazon = "#E65100",
+  SE_Asia = "#0D47A1"
 )
 
 #' Signal palette
