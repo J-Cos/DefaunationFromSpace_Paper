@@ -2,9 +2,8 @@
 # code/03_Framework1_Analysis.R
 #
 # Performs covariate model selection for Framework 1 (GEDI UOI as Response) using
-# Beta Regression (via mgcv::gam) across 24 candidate models (excluding elephant
-# and megafauna history models), evaluates them via AIC, and generates a
-# publication-quality three-panel PNAS-style figure.
+# Beta Regression (via mgcv::gam) across 37 candidate models, evaluates them via AIC,
+# and generates a publication-quality three-panel PNAS-style figure.
 #
 # All logic is encapsulated in a clean, unit-testable function.
 # =============================================================================
@@ -41,7 +40,6 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   base_formulas <- list(
     # --- Base Models ---
     "M1: Biomass Only"                       = uoi ~ B_H_index,
-    "M2: Megafauna Only"                     = uoi ~ B_H_gt100,
     
     # --- Biomass + Environmental Covariate Set ---
     "M4: Biomass + Elev"                     = uoi ~ B_H_index + elevation,
@@ -92,27 +90,11 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
 
   expanded_base_formulas <- base_formulas
 
-  # Dynamically construct models_list with two alternatives added for each expanded base model
+  # Fit each base model
   models_list <- list()
   for (name in names(expanded_base_formulas)) {
     f <- expanded_base_formulas[[name]]
-    
-    # Base model
     models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
-    
-    # Alternative 1: current + biomass >100kg
-    if (!("B_H_gt100" %in% all.vars(f))) {
-      name_gt100 <- paste0(name, " + Megafauna")
-      f_gt100 <- as.formula(paste(deparse(f), "+ B_H_gt100"))
-      models_list[[name_gt100]] <- gam(f_gt100, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
-    }
-    
-    # Alternative 2: current + biomass >1000kg
-    if (!("B_H_gt1000" %in% all.vars(f))) {
-      name_gt1000 <- paste0(name, " + Megafauna1000")
-      f_gt1000 <- as.formula(paste(deparse(f), "+ B_H_gt1000"))
-      models_list[[name_gt1000]] <- gam(f_gt1000, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
-    }
   }
   
   # Compile results table
@@ -164,7 +146,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   # --- Panel A: Scatter Plot with Best Model Fit ---
   biomass_seq <- seq(0, 5000, length.out = 300)
   
-  covs_to_fill <- c("B_H_gt100", "B_H_gt1000", "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+  covs_to_fill <- c("elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
   
   # Detect whether best model uses megafaunaHistory, basin, or elephant as the grouping variable
   best_formula_vars <- all.vars(formula(best_model))
@@ -327,8 +309,6 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     
     var_map <- list(
       "Biomass"          = "B_H_index",
-      "Megafauna"        = "B_H_gt100",
-      "Megafauna1000"    = "B_H_gt1000",
       "Basin"            = c("basinCongo", "basinSE_Asia"),
       "ElephantPossible" = "elephant_present_possiblePresent",
       "ElephantStrict"   = "elephant_present_strictPresent",
