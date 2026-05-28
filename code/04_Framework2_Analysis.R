@@ -2,10 +2,9 @@
 # code/04_Framework2_Analysis.R
 #
 # Performs covariate model selection for Framework 2 (Spaceborne Biomass Prediction)
-# using Tweedie GLMs (via mgcv::gam) across 10 candidate models, evaluates them via AIC,
-# and generates a publication-quality three-panel PNAS-style figure.
-#
-# All logic is encapsulated in a clean, unit-testable function.
+# using Leave-One-Basin-Out (LOBO) cross-validation across 37 candidate Tweedie GLMs
+# (comparing strict vs possible elephant definitions and pure UOI), selects the best
+# parsimonious model via the 1-SE rule, and generates a publication-quality PNAS figure.
 # =============================================================================
 
 library(terra)
@@ -19,10 +18,11 @@ library(cowplot)
 #' Run Framework 2 Analysis
 #'
 #' Fits a series of Tweedie GLMs predicting standing mammal biomass from GEDI understory
-#' openness, conducts model selection via AIC, and outputs diagnostic plots.
+#' openness, conducts Leave-One-Basin-Out (LOBO) cross-validation, applies the 1-SE
+#' parsimony strategy, and outputs diagnostic plots.
 #'
 #' @param scale_m Numeric. Spatial resolution in meters (default: 5000)
-#  @param outputs_dir Character. Directory to save model outputs (default: "outputs")
+#' @param outputs_dir Character. Directory to save model outputs (default: "outputs")
 #' @param figures_dir Character. Directory to save figures (default: "figures")
 #'
 #' @return A list containing the model selection results data frame and the best fitted model object.
@@ -34,64 +34,226 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   source("code/functions/calibration_helpers.R")
   joined_data <- extract_scale_data(scale_m)
   
+  # Clean up any potential NA values in key environmental variables
+  covs_to_check <- c("uoi", "elevation", "slope", "hnd", "precip", "clay", "forest_fraction", "B_H_index", "elephant_present_strict", "elephant_present_possible")
+  joined_data <- joined_data %>% filter(complete.cases(joined_data[, covs_to_check]))
+  
   cat("✓ Merged and calibrated data successfully. N =", nrow(joined_data), "clusters.\n")
   
-  # --- 2. Tweedie GLM Model Selection (10 Candidate Covariate Models) -----------
-  cat("\nRunning Tweedie GLM Model Selection across 10 formulations...\n")
-  
-  models_list <- list(
+  # --- 2. Define the 37 Candidate Covariate Models (Excluding Basin & MegaHx) ----
+  formulas_list <- list(
     # --- Base Models ---
-    "M2.1: UOI Only"                                        = gam(B_H_index ~ uoi, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.2: Basin Only"                                      = gam(B_H_index ~ basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.1: UOI Only"                           = B_H_index ~ uoi,
+    "M2.2p: Elephant Possible Only"            = B_H_index ~ elephant_present_possible,
+    "M2.2s: Elephant Strict Only"              = B_H_index ~ elephant_present_strict,
     
     # --- UOI + Environmental Covariate Set ---
-    "M2.3: UOI + Elev"                                      = gam(B_H_index ~ uoi + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.4: UOI + Slope"                                     = gam(B_H_index ~ uoi + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.5: UOI + HAND"                                      = gam(B_H_index ~ uoi + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.6: UOI + Precip"                                    = gam(B_H_index ~ uoi + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.7: UOI + Clay"                                      = gam(B_H_index ~ uoi + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.8: UOI + Forest"                                    = gam(B_H_index ~ uoi + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-
-    # --- Main Effect Backbone Set ---
-    "M2.9: UOI + Basin"                                     = gam(B_H_index ~ uoi + basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.10: UOI + Basin + Elev"                             = gam(B_H_index ~ uoi + basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.11: UOI + Basin + Slope"                            = gam(B_H_index ~ uoi + basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.12: UOI + Basin + HAND"                             = gam(B_H_index ~ uoi + basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.13: UOI + Basin + Precip"                           = gam(B_H_index ~ uoi + basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.14: UOI + Basin + Clay"                             = gam(B_H_index ~ uoi + basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.15: UOI + Basin + Forest"                           = gam(B_H_index ~ uoi + basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
+    "M2.3: UOI + Elev"                         = B_H_index ~ uoi + elevation,
+    "M2.4: UOI + Slope"                        = B_H_index ~ uoi + slope,
+    "M2.5: UOI + HAND"                         = B_H_index ~ uoi + hnd,
+    "M2.6: UOI + Precip"                       = B_H_index ~ uoi + precip,
+    "M2.7: UOI + Clay"                         = B_H_index ~ uoi + clay,
+    "M2.8: UOI + Forest"                       = B_H_index ~ uoi + forest_fraction,
+ 
+    # --- Main Effect Backbone Set (Elephant Possible) ---
+    "M2.9p: UOI + Elephant Possible"           = B_H_index ~ uoi + elephant_present_possible,
+    "M2.10p: UOI + Elephant Possible + Elev"   = B_H_index ~ uoi + elephant_present_possible + elevation,
+    "M2.11p: UOI + Elephant Possible + Slope"  = B_H_index ~ uoi + elephant_present_possible + slope,
+    "M2.12p: UOI + Elephant Possible + HAND"   = B_H_index ~ uoi + elephant_present_possible + hnd,
+    "M2.13p: UOI + Elephant Possible + Precip" = B_H_index ~ uoi + elephant_present_possible + precip,
+    "M2.14p: UOI + Elephant Possible + Clay"   = B_H_index ~ uoi + elephant_present_possible + clay,
+    "M2.15p: UOI + Elephant Possible + Forest" = B_H_index ~ uoi + elephant_present_possible + forest_fraction,
     
-    # --- Interaction Effect Backbone Set (Decoupled / Compliance) ---
-    "M2.16: UOI * Basin"                                    = gam(B_H_index ~ uoi * basin, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.17: UOI * Basin + Elev"                             = gam(B_H_index ~ uoi * basin + elevation, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.18: UOI * Basin + Slope"                            = gam(B_H_index ~ uoi * basin + slope, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.19: UOI * Basin + HAND"                             = gam(B_H_index ~ uoi * basin + hnd, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.20: UOI * Basin + Precip"                           = gam(B_H_index ~ uoi * basin + precip, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.21: UOI * Basin + Clay"                             = gam(B_H_index ~ uoi * basin + clay, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML"),
-    "M2.22: UOI * Basin + Forest"                           = gam(B_H_index ~ uoi * basin + forest_fraction, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
+    # --- Main Effect Backbone Set (Elephant Strict) ---
+    "M2.9s: UOI + Elephant Strict"             = B_H_index ~ uoi + elephant_present_strict,
+    "M2.10s: UOI + Elephant Strict + Elev"     = B_H_index ~ uoi + elephant_present_strict + elevation,
+    "M2.11s: UOI + Elephant Strict + Slope"     = B_H_index ~ uoi + elephant_present_strict + slope,
+    "M2.12s: UOI + Elephant Strict + HAND"      = B_H_index ~ uoi + elephant_present_strict + hnd,
+    "M2.13s: UOI + Elephant Strict + Precip"    = B_H_index ~ uoi + elephant_present_strict + precip,
+    "M2.14s: UOI + Elephant Strict + Clay"      = B_H_index ~ uoi + elephant_present_strict + clay,
+    "M2.15s: UOI + Elephant Strict + Forest"    = B_H_index ~ uoi + elephant_present_strict + forest_fraction,
+    
+    # --- Interaction Effect Backbone Set (Elephant Possible) ---
+    "M2.16p: UOI * Elephant Possible"           = B_H_index ~ uoi * elephant_present_possible,
+    "M2.17p: UOI * Elephant Possible + Elev"   = B_H_index ~ uoi * elephant_present_possible + elevation,
+    "M2.18p: UOI * Elephant Possible + Slope"  = B_H_index ~ uoi * elephant_present_possible + slope,
+    "M2.19p: UOI * Elephant Possible + HAND"   = B_H_index ~ uoi * elephant_present_possible + hnd,
+    "M2.20p: UOI * Elephant Possible + Precip" = B_H_index ~ uoi * elephant_present_possible + precip,
+    "M2.21p: UOI * Elephant Possible + Clay"   = B_H_index ~ uoi * elephant_present_possible + clay,
+    "M2.22p: UOI * Elephant Possible + Forest" = B_H_index ~ uoi * elephant_present_possible + forest_fraction,
+    
+    # --- Interaction Effect Backbone Set (Elephant Strict) ---
+    "M2.16s: UOI * Elephant Strict"             = B_H_index ~ uoi * elephant_present_strict,
+    "M2.17s: UOI * Elephant Strict + Elev"     = B_H_index ~ uoi * elephant_present_strict + elevation,
+    "M2.18s: UOI * Elephant Strict + Slope"     = B_H_index ~ uoi * elephant_present_strict + slope,
+    "M2.19s: UOI * Elephant Strict + HAND"      = B_H_index ~ uoi * elephant_present_strict + hnd,
+    "M2.20s: UOI * Elephant Strict + Precip"    = B_H_index ~ uoi * elephant_present_strict + precip,
+    "M2.21s: UOI * Elephant Strict + Clay"      = B_H_index ~ uoi * elephant_present_strict + clay,
+    "M2.22s: UOI * Elephant Strict + Forest"    = B_H_index ~ uoi * elephant_present_strict + forest_fraction
   )
   
-  # Compile results table
+  num_models <- length(formulas_list)
+  model_names <- names(formulas_list)
+  
+  # --- 3. Fit Full-Sample Models to get Full-Sample Metrics --------------------
+  cat("Fitting all 37 models on the full dataset...\n")
+  full_models <- list()
+  full_AIC <- numeric(num_models)
+  full_edf <- numeric(num_models)
+  full_dev_expl <- numeric(num_models)
+  
+  for (m_idx in 1:num_models) {
+    m_name <- model_names[m_idx]
+    m_form <- formulas_list[[m_idx]]
+    
+    m_full <- gam(m_form, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
+    full_models[[m_name]] <- m_full
+    
+    full_AIC[m_idx] <- AIC(m_full)
+    full_edf[m_idx] <- sum(m_full$edf)
+    full_dev_expl[m_idx] <- summary(m_full)$dev.expl
+  }
+  
+  # --- 4. Perform Leave-One-Basin-Out (LOBO) Cross-Validation -----------------
+  cat("Running Leave-One-Basin-Out (LOBO) Cross-Validation...\n")
+  basins <- unique(as.character(joined_data$basin))
+  
+  oos_predictions <- matrix(NA, nrow = nrow(joined_data), ncol = num_models)
+  colnames(oos_predictions) <- model_names
+  
+  for (b in basins) {
+    train_idx <- which(joined_data$basin != b)
+    test_idx <- which(joined_data$basin == b)
+    
+    train_data <- joined_data[train_idx, ]
+    test_data <- joined_data[test_idx, ]
+    
+    train_data$w_combined_norm <- train_data$w_combined / mean(train_data$w_combined)
+    
+    for (m_idx in 1:num_models) {
+      m_form <- formulas_list[[m_idx]]
+      m_name <- model_names[m_idx]
+      
+      fold_model <- tryCatch({
+        gam(m_form, family = tw(), weights = w_combined_norm, data = train_data, method = "REML")
+      }, error = function(e) {
+        NULL
+      })
+      
+      if (!is.null(fold_model)) {
+        pred <- tryCatch({
+          predict(fold_model, newdata = test_data, type = "response")
+        }, error = function(e) {
+          rep(NA, nrow(test_data))
+        })
+        oos_predictions[test_idx, m_idx] <- pred
+      }
+    }
+  }
+  
+  # --- 5. Calculate Out-of-Sample Metrics --------------------------------------
+  y_obs <- joined_data$B_H_index
+  log_y_obs <- log1p(y_obs)
+  mean_log_y_obs <- mean(log_y_obs)
+  
+  oos_RMSE_log <- numeric(num_models)
+  oos_MAE_log <- numeric(num_models)
+  oos_RMSE_raw <- numeric(num_models)
+  oos_MAE_raw <- numeric(num_models)
+  oos_R2_log <- numeric(num_models)
+  
+  for (m_idx in 1:num_models) {
+    y_pred <- oos_predictions[, m_idx]
+    non_na_idx <- which(!is.na(y_pred))
+    n_valid <- length(non_na_idx)
+    
+    if (n_valid > 0) {
+      y_pred_valid <- y_pred[non_na_idx]
+      y_obs_valid <- y_obs[non_na_idx]
+      
+      oos_RMSE_raw[m_idx] <- sqrt(mean((y_obs_valid - y_pred_valid)^2))
+      oos_MAE_raw[m_idx] <- mean(abs(y_obs_valid - y_pred_valid))
+      
+      log_y_pred_valid <- log1p(y_pred_valid)
+      log_y_obs_valid <- log_y_obs[non_na_idx]
+      
+      oos_RMSE_log[m_idx] <- sqrt(mean((log_y_obs_valid - log_y_pred_valid)^2))
+      oos_MAE_log[m_idx] <- mean(abs(log_y_obs_valid - log_y_pred_valid))
+      
+      rss_log_model <- sum((log_y_obs_valid - log_y_pred_valid)^2)
+      tss_log_valid <- sum((log_y_obs_valid - mean(log_y_obs_valid))^2)
+      oos_R2_log[m_idx] <- 1 - (rss_log_model / tss_log_valid)
+    } else {
+      oos_RMSE_raw[m_idx] <- NA; oos_MAE_raw[m_idx] <- NA
+      oos_RMSE_log[m_idx] <- NA; oos_MAE_log[m_idx] <- NA
+      oos_R2_log[m_idx] <- NA
+    }
+  }
+  
+  oos_MAE_log_SE <- sapply(1:num_models, function(m_idx) {
+    abs_err <- abs(log_y_obs - log1p(oos_predictions[, m_idx]))
+    sd(abs_err) / sqrt(length(abs_err))
+  })
+  
+  # 1-SE Parsimony Selection Strategy
+  raw_best_idx <- which.min(oos_RMSE_log)
+  best_mae <- oos_MAE_log[raw_best_idx]
+  best_se <- oos_MAE_log_SE[raw_best_idx]
+  threshold_1se <- best_mae + best_se
+  
+  compliant_indices <- which(oos_MAE_log <= threshold_1se)
+  min_edf <- min(full_edf[compliant_indices])
+  best_parsimonious_indices <- compliant_indices[which(full_edf[compliant_indices] == min_edf)]
+  selected_idx <- best_parsimonious_indices[which.min(oos_MAE_log[best_parsimonious_indices])]
+  
+  parsimony_status <- sapply(1:num_models, function(m_idx) {
+    mae <- oos_MAE_log[m_idx]
+    edf <- full_edf[m_idx]
+    
+    if (m_idx == selected_idx) {
+      return("Parsimonious Selected Best")
+    } else if (m_idx == raw_best_idx) {
+      return("Raw Best (More Complex)")
+    } else if (mae <= threshold_1se) {
+      if (edf < full_edf[raw_best_idx]) {
+        return("Parsimonious Candidate (Within 1-SE)")
+      } else {
+        return("Equivalent (Within 1-SE, More Complex)")
+      }
+    } else {
+      return("Suboptimal (Outside 1-SE)")
+    }
+  })
+  
+  # --- 6. Compile and Save Selection Table -------------------------------------
   results_df <- data.frame(
-    Model = names(models_list),
-    AIC = sapply(models_list, AIC),
-    BIC = sapply(models_list, BIC),
-    LogLik = sapply(models_list, function(m) as.numeric(logLik(m))),
-    edf = sapply(models_list, function(m) sum(m$edf)),
-    dev_expl = sapply(models_list, function(m) summary(m)$dev.expl),
-    IsSignificant = sapply(models_list, function(m) {
-      p_table <- summary(m)$p.table
-      non_intercept_rows <- which(rownames(p_table) != "(Intercept)")
-      if (length(non_intercept_rows) == 0) return(FALSE)
-      p_vals <- p_table[non_intercept_rows, ncol(p_table), drop = TRUE]
-      any(p_vals < 0.05)
-    }),
+    Model = model_names,
+    OOS_RMSE_log = oos_RMSE_log,
+    OOS_MAE_log = oos_MAE_log,
+    OOS_MAE_log_SE = oos_MAE_log_SE,
+    OOS_R2_log = oos_R2_log,
+    OOS_RMSE_raw = oos_RMSE_raw,
+    OOS_MAE_raw = oos_MAE_raw,
+    Full_AIC = full_AIC,
+    Full_edf = full_edf,
+    Full_DevExpl = full_dev_expl,
+    Parsimony_Status = parsimony_status,
     stringsAsFactors = FALSE
   )
   
+  # Sorting strategy centered on 1-SE rank
+  results_df$sort_rank <- sapply(results_df$Parsimony_Status, function(status) {
+    if (status == "Parsimonious Selected Best") return(1)
+    if (status == "Raw Best (More Complex)") return(2)
+    if (status == "Parsimonious Candidate (Within 1-SE)") return(3)
+    if (status == "Equivalent (Within 1-SE, More Complex)") return(4)
+    return(5)
+  })
+  
   results_df <- results_df %>%
-    mutate(delta_AIC = AIC - min(AIC)) %>%
-    arrange(AIC)
+    mutate(delta_OOS_RMSE_log = OOS_RMSE_log - min(OOS_RMSE_log)) %>%
+    arrange(sort_rank, OOS_MAE_log) %>%
+    select(-sort_rank)
   
   print(results_df)
   
@@ -100,94 +262,126 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   write_csv(results_df, file.path(outputs_dir, "framework2_covariate_model_selection.csv"))
   
-  # Identify the top best model on AIC
+  # Save RDS best model objects
   best_model_name <- results_df$Model[1]
-  best_model <- models_list[[best_model_name]]
-  cat(sprintf("\n★ Selected Best-Fitting Model: %s (AIC: %.2f, d_AIC: 0.00)\n\n", best_model_name, AIC(best_model)))
+  best_model <- full_models[[best_model_name]]
+  cat(sprintf("\n★ Parsimoniously Selected Best Model (1-SE Strategy): %s (OOS RMSE_log: %.4f)\n\n", best_model_name, results_df$OOS_RMSE_log[1]))
   
-  # Save best model RDS objects
   saveRDS(formula(best_model), file.path(outputs_dir, "framework2_best_formula.RDS"))
   saveRDS(best_model, file.path(outputs_dir, "framework2_best_model.RDS"))
   
-  # --- 3. Generate Panels for Figure 3 -----------------------------------------
-  cat("Generating PNAS-styled figure panels...\n")
+  # --- 7. Generate Figure 4 Panels ---------------------------------------------
+  cat("Generating PNAS-styled Figure 4 panels...\n")
   source("code/functions/theme_pnas.R")
   
-  pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20")
-  
+  pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")
   uoi_seq <- seq(from = 0.918, to = 0.970, length.out = 300)
-  
-  # --- Panel A: Total standing biomass vs. GEDI UOI ---
-  pred_df_amazon <- data.frame(uoi = uoi_seq, basin = factor("Amazon", levels = c("Amazon", "Congo")))
-  pred_df_congo <- data.frame(uoi = uoi_seq, basin = factor("Congo", levels = c("Amazon", "Congo")))
-  
   covs_to_fill <- c("elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
-  for (cv in covs_to_fill) {
-    pred_df_amazon[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
-    pred_df_congo[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
+  
+  # --- Panel A: Standing Mammal Biomass vs. GEDI Openness ---
+  best_formula_vars <- all.vars(formula(best_model))
+  uses_elephant_possible <- "elephant_present_possible" %in% best_formula_vars
+  uses_elephant_strict   <- "elephant_present_strict" %in% best_formula_vars
+  uses_elephant <- uses_elephant_possible || uses_elephant_strict || ("elephant_present" %in% best_formula_vars)
+  
+  ele_col <- if (uses_elephant_strict) {
+    "elephant_present_strict"
+  } else if (uses_elephant_possible) {
+    "elephant_present_possible"
+  } else {
+    "elephant_present"
   }
   
-  pred_df_amazon$fit <- predict(best_model, newdata = pred_df_amazon, type = "response")
-  pred_df_congo$fit <- predict(best_model, newdata = pred_df_congo, type = "response")
-  
-  pred_total_plot <- rbind(pred_df_amazon, pred_df_congo)
-  
-  p_a <- ggplot() +
-    geom_point(data = joined_data, aes(x = uoi, y = B_H_index, fill = w_temp_cluster, size = trap_days, alpha = homogeneity, shape = basin),
-               color = "black", stroke = 0.3) +
-    geom_line(data = pred_total_plot, aes(x = uoi, y = fit, color = basin), linewidth = 0.75) +
+  if (uses_elephant) {
+    pred_df_absent <- data.frame(uoi = uoi_seq)
+    pred_df_absent[[ele_col]] <- factor("Absent", levels = c("Absent", "Present"))
+    for (cv in covs_to_fill) pred_df_absent[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
+    pred_df_absent$fit <- predict(best_model, newdata = pred_df_absent, type = "response")
     
-    scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21), name = "Basin/Continent") +
-    scale_color_manual(values = pal_basin, name = "Basin/Continent") +
-    scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
-    scale_alpha_continuous(name = "Spatial Homogeneity", range = c(0.35, 1.0), breaks = c(0, 0.5, 1.0), labels = c("Low", "Medium", "High")) +
-    scale_fill_gradientn(
-      colors = c("#D32F2F", "#F57C00", "#FBC02D", "#388E3C"),
-      values = c(0, 0.25, 0.5, 1.0),
-      limits = c(0.1, 1.0),
-      name = "Temporal Weight (W_temp)"
-    ) +
-    scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
-    scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
-    labs(
-      title = "A. Standing Mammal Biomass vs. GEDI Openness",
-      subtitle = sprintf("Best Fit: %s", best_model_name),
-      x = "GEDI Understory Openness Index (UOI)",
-      y = "Total Mammal Biomass Index (log1p scale)"
-    ) +
-    theme_pnas(base_size = 7.5) +
-    theme(
-      legend.position = "none",
-      plot.title = element_text(face = "bold", size = 8.5, margin = margin(b = 6, t = 4)),
-      axis.title.x = element_text(margin = margin(t = 4)),
-      axis.title.y = element_text(margin = margin(r = 4)),
-      plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
-    )
+    pred_df_present <- data.frame(uoi = uoi_seq)
+    pred_df_present[[ele_col]] <- factor("Present", levels = c("Absent", "Present"))
+    for (cv in covs_to_fill) pred_df_present[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
+    pred_df_present$fit <- predict(best_model, newdata = pred_df_present, type = "response")
+    
+    pred_total_plot <- rbind(pred_df_absent, pred_df_present)
+    
+    p_a <- ggplot() +
+      geom_point(data = joined_data, aes(x = uoi, y = B_H_index, fill = .data[[ele_col]], size = trap_days, alpha = w_temp_cluster, shape = basin),
+                 color = "black", stroke = 0.3) +
+      geom_line(data = pred_total_plot, aes(x = uoi, y = fit, color = .data[[ele_col]]), linewidth = 0.75) +
+      
+      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
+      scale_color_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+      scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
+      scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemp.")) +
+      scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+      scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
+      scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
+      labs(
+        title = "A. Standing Mammal Biomass vs. GEDI Openness",
+        subtitle = sprintf("Best Fit: %s", best_model_name),
+        x = "GEDI Understory Openness Index (UOI)",
+        y = "Total Mammal Biomass Index (log1p scale)"
+      ) +
+      theme_pnas(base_size = 7.5) +
+      theme(
+        legend.position = "none",
+        plot.title = element_text(face = "bold", size = 8.5, margin = margin(b = 6, t = 4)),
+        axis.title.x = element_text(margin = margin(t = 4)),
+        axis.title.y = element_text(margin = margin(r = 4)),
+        plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
+      )
+  } else {
+    pred_df <- data.frame(uoi = uoi_seq)
+    for (cv in covs_to_fill) pred_df[[cv]] <- median(joined_data[[cv]], na.rm = TRUE)
+    pred_df$fit <- predict(best_model, newdata = pred_df, type = "response")
+    
+    p_a <- ggplot() +
+      geom_point(data = joined_data, aes(x = uoi, y = B_H_index, fill = elephant_present_strict, size = trap_days, alpha = w_temp_cluster, shape = basin),
+                 color = "black", stroke = 0.3) +
+      geom_line(data = pred_df, aes(x = uoi, y = fit), color = "#2E7D32", linewidth = 0.75) +
+      
+      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
+      scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
+      scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemp.")) +
+      scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+      scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
+      scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
+      labs(
+        title = "A. Standing Mammal Biomass vs. GEDI Openness",
+        subtitle = sprintf("Best Fit: %s", best_model_name),
+        x = "GEDI Understory Openness Index (UOI)",
+        y = "Total Mammal Biomass Index (log1p scale)"
+      ) +
+      theme_pnas(base_size = 7.5) +
+      theme(
+        legend.position = "none",
+        plot.title = element_text(face = "bold", size = 8.5, margin = margin(b = 6, t = 4)),
+        axis.title.x = element_text(margin = margin(t = 4)),
+        axis.title.y = element_text(margin = margin(r = 4)),
+        plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
+      )
+  }
   
   # --- Panel B: Residual stability and temporal independence ---
-  joined_data$residuals <- residuals(best_model, type = "deviance")
+  joined_data$residuals <- log1p(joined_data$B_H_index) - log1p(fitted(best_model))
   
   p_b <- ggplot(joined_data, aes(x = w_temp_cluster, y = residuals)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "#555555", linewidth = 0.4) +
-    geom_point(aes(fill = w_temp_cluster, size = trap_days, alpha = homogeneity, shape = basin), color = "black", stroke = 0.3) +
-    geom_smooth(method = "lm", formula = y ~ x, color = "#2E7D32", linewidth = 0.6, se = TRUE, alpha = 0.1) +
+    geom_point(aes(fill = elephant_present_strict, size = trap_days, alpha = w_temp_cluster, shape = basin), color = "black", stroke = 0.3) +
+    geom_smooth(method = "lm", aes(weight = w_combined_norm), formula = y ~ x, color = "#2E7D32", linewidth = 0.6, se = TRUE, alpha = 0.1) +
     
-    scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21), name = "Basin/Continent") +
+    scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
     scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
-    scale_alpha_continuous(name = "Spatial Homogeneity", range = c(0.35, 1.0), breaks = c(0, 0.5, 1.0), labels = c("Low", "Medium", "High")) +
-    scale_fill_gradientn(
-      colors = c("#D32F2F", "#F57C00", "#FBC02D", "#388E3C"),
-      values = c(0, 0.25, 0.5, 1.0),
-      limits = c(0.1, 1.0),
-      name = "Temporal Weight (W_temp)"
-    ) +
+    scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemporaneous")) +
+    scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
     scale_x_continuous(breaks = seq(0.1, 1.0, by = 0.2), limits = c(0.08, 1.02)) +
-    scale_y_continuous(breaks = seq(-10, 8, by = 2), limits = c(-10.2, 8.2)) +
+    scale_y_continuous(breaks = seq(-4, 4, by = 2), limits = c(-4.5, 4.5)) +
     labs(
       title = "B. Residual Independence & Temporal Stability",
-      subtitle = sprintf("Deviance Residuals from %s", best_model_name),
+      subtitle = sprintf("log1p Residuals from %s", best_model_name),
       x = "Cluster Temporal Alignment Weight (W_temp)",
-      y = "Best Model Deviance Residuals"
+      y = "Best Model log1p Residuals"
     ) +
     theme_pnas(base_size = 7.5) +
     theme(
@@ -199,41 +393,41 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     )
   
   # --- Panel C: Model Selection Bar Plot ---
-  # Helper function for dynamic plotmath bolding of significant variables
-  format_model_label_f2 <- function(model_name, model_obj) {
-    clean_name <- sub("^M2\\.[0-9a-z]+: ", "", model_name)
-    clean_name <- gsub(" (Shared)", "", clean_name, fixed = TRUE)
-    
+  format_model_label_lobo <- function(model_name, model_obj) {
+    clean_name <- sub("^M2\\.[0-9\\.]+[a-z_]*: ", "", model_name)
     tokens <- strsplit(clean_name, "\\s+")[[1]]
     tokens <- tokens[tokens != ""]
-    
     p_table <- summary(model_obj)$p.table
     
     var_map <- list(
-      "Biomass"       = "B_H_index",
-      "Megafauna"     = "B_H_gt100",
-      "Basin"         = "basinCongo",
+      "Elephant"      = c("elephant_presentPresent", "elephant_present_possiblePresent", "elephant_present_strictPresent"),
       "UOI"           = "uoi",
       "Elevation"     = "elevation",
+      "Elev"          = "elevation",
       "Slope"         = "slope",
       "HAND"          = "hnd",
       "Precipitation" = "precip",
+      "Precip"        = "precip",
       "Clay"          = "clay",
       "Forest"        = "forest_fraction",
-      "UOI:Basin"     = "uoi:basinCongo",
-      "Biomass:Basin" = "B_H_index:basinCongo"
+      "UOI:Elephant"  = c("uoi:elephant_presentPresent", "uoi:elephant_present_possiblePresent", "uoi:elephant_present_strictPresent")
     )
     
     plotmath_tokens <- sapply(tokens, function(tok) {
       if (tok %in% c("+", "*", ":")) return(sprintf("plain(\" %s \")", tok))
       if (tok == "Only") return(sprintf("plain(\" %s\")", tok))
       
-      matched_term <- var_map[[tok]]
-      if (!is.null(matched_term)) {
+      matched_terms <- var_map[[tok]]
+      if (!is.null(matched_terms)) {
         is_sig <- FALSE
-        if (matched_term %in% rownames(p_table)) {
-          p_val <- p_table[matched_term, ncol(p_table)]
-          is_sig <- !is.na(p_val) && p_val < 0.05
+        for (term in matched_terms) {
+          if (term %in% rownames(p_table)) {
+            p_val <- p_table[term, ncol(p_table)]
+            if (!is.na(p_val) && p_val < 0.05) {
+              is_sig <- TRUE
+              break
+            }
+          }
         }
         return(ifelse(is_sig, sprintf("bold(\"%s\")", tok), sprintf("plain(\"%s\")", tok)))
       } else {
@@ -245,27 +439,30 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   }
   
   results_df$plotmath_label <- sapply(1:nrow(results_df), function(i) {
-    format_model_label_f2(results_df$Model[i], models_list[[results_df$Model[i]]])
+    format_model_label_lobo(results_df$Model[i], full_models[[results_df$Model[i]]])
   })
   
+  # Select top 15 models for display to avoid clutter, y-axis strictly ordered by 1-SE rank
   plot_sel_df <- results_df %>%
+    head(15) %>%
     mutate(
-      CleanName = sub("^M2\\.[0-9a-z]+: ", "", Model),
+      CleanName = sub("^M2\\.[0-9\\.]+[a-z_]*: ", "", Model),
       CleanName = factor(CleanName, levels = rev(CleanName))
     )
   
   ordered_exprs <- plot_sel_df$plotmath_label[match(levels(plot_sel_df$CleanName), plot_sel_df$CleanName)]
   parsed_labels <- parse(text = ordered_exprs)
   
-  p_c <- ggplot(plot_sel_df, aes(x = dev_expl * 100, y = CleanName, fill = delta_AIC)) +
+  # Fill color is mapped to continuous out-of-sample log-scale Mean Absolute Error
+  p_c <- ggplot(plot_sel_df, aes(x = Full_DevExpl * 100, y = CleanName, fill = OOS_MAE_log)) +
     geom_bar(stat = "identity", width = 0.7, color = "black", linewidth = 0.2) +
     scale_y_discrete(labels = parsed_labels) +
     scale_fill_gradientn(
-      colors = c("#0D47A1", "#29B6F6", "#E0E0E0", "#FF7043", "#D84315"),
-      name = "Delta AIC"
+      colors = c("#0D47A1", "#1976D2", "#64B5F6", "#FFA726", "#F57C00", "#D84315"),
+      name = "OOS MAE (log1p)"
     ) +
     labs(
-      title = "C. Spaceborne Model Selection (Tweedie GLMs)",
+      title = "C. Generalizability Model Selection (LOBO Out-of-Sample Validation)",
       x = "Model Deviance Explained (%)",
       y = "Model Formulation"
     ) +
@@ -277,25 +474,20 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       axis.title.x = element_text(margin = margin(t = 4)),
       axis.title.y = element_text(margin = margin(r = 4)),
       legend.title = element_text(size = 6.0, face = "bold"),
-      legend.text = element_text(size = 5.5),
+      legend.text = element_text(size = 5.0),
       legend.key.width = unit(0.15, "cm"),
-      legend.key.height = unit(0.35, "cm"),
+      legend.key.height = unit(0.25, "cm"),
       legend.margin = margin(l = 2, r = 2, unit = "pt"),
       plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
     )
   
-  # --- 4. Construct Clean Shared Legend ---
+  # --- 8. Construct Clean Shared Legend ---
   p_legend_obj <- ggplot(joined_data) +
-    geom_point(aes(x = uoi, y = B_H_index, fill = w_temp_cluster, size = trap_days, alpha = homogeneity, shape = basin), color = "black", stroke = 0.3) +
-    scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21), name = "Basin:") +
+    geom_point(aes(x = uoi, y = B_H_index, fill = elephant_present_strict, size = trap_days, alpha = w_temp_cluster, shape = basin), color = "black", stroke = 0.3) +
+    scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin:") +
     scale_size_continuous(name = "Effort (Trap-days):", breaks = c(100, 1000, 5000, 15000), range = c(1.2, 4.0)) +
-    scale_alpha_continuous(name = "Spatial Homogeneity:", range = c(0.35, 1.0), breaks = c(0, 0.5, 1.0), labels = c("Low", "Medium", "High")) +
-    scale_fill_gradientn(
-      colors = c("#D32F2F", "#F57C00", "#FBC02D", "#388E3C"),
-      values = c(0, 0.25, 0.5, 1.0),
-      limits = c(0.1, 1.0),
-      name = "Temporal Alignment Weight (W_temp):"
-    ) +
+    scale_alpha_continuous(name = "Temporal Alignment:", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Hist.", "Interm.", "Contemp.")) +
+    scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant:") +
     theme_pnas(base_size = 7.5) +
     theme(
       legend.position = "bottom",
@@ -306,7 +498,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   shared_legend <- cowplot::get_legend(p_legend_obj)
   
-  # --- 5. Assemble and Save Multipanel Figure ---
+  # --- 9. Assemble and Save Multipanel Figure ---
   cat("Assembling panels into 3-panel PNAS-style layout...\n")
   
   row1 <- cowplot::plot_grid(
@@ -334,12 +526,11 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   )
   
   # Copy to brain artifact directory
-  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
+  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
   if (file.exists(brain_artifact_dir)) {
     file.copy(fig_png_path,
               file.path(brain_artifact_dir, "figure4.png"),
               overwrite = TRUE)
-    # Also copy pdf version
     fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
     if (file.exists(fig_pdf_path)) {
       file.copy(fig_pdf_path,
