@@ -234,11 +234,7 @@ p1_g <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   ) +
   t_theme +
   theme(
-    legend.position = c(0.72, 0.76),
-    legend.title = element_text(size = 5.5, face = "bold"),
-    legend.text = element_text(size = 5.0),
-    legend.key.height = unit(0.12, "cm"),
-    legend.key.width = unit(0.3, "cm"),
+    legend.position = "none",
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
@@ -316,13 +312,19 @@ p_n_legend_dummy <- ggplot() +
   )
 n_legend <- cowplot::get_legend(p_n_legend_dummy)
 
-# Stack the two legends neatly inside a single visual element
-p1_legends <- cowplot::plot_grid(
-  uoi_legend,
-  n_legend,
-  ncol = 1,
-  rel_heights = c(1.0, 1.0)
-)
+# Extract robust Basin legend
+p_basin_legend_dummy <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
+  geom_point() +
+  scale_color_manual(values = pal_basin, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Basin:") +
+  theme_pnas(base_size = 7.5) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 6.0, face = "bold"),
+    legend.text = element_text(size = 5.5),
+    legend.key.height = unit(0.25, "cm"),
+    legend.key.width = unit(0.3, "cm")
+  )
+basin_legend <- cowplot::get_legend(p_basin_legend_dummy)
 
 # Combine the 3x2 grid of maps (symmetrical like Figure 5)
 fig_grid_maps <- cowplot::plot_grid(
@@ -334,23 +336,39 @@ fig_grid_maps <- cowplot::plot_grid(
   axis = "tblr"
 )
 
-# Row 4 underneath: G, H, and the stacked legends
+# Side-by-side legends under the columns
+row_legends <- cowplot::plot_grid(
+  uoi_legend, n_legend,
+  ncol = 2,
+  align = "h",
+  axis = "tb"
+)
+
+# Stack maps and their legends directly underneath
+fig_maps_and_legends <- cowplot::plot_grid(
+  fig_grid_maps,
+  row_legends,
+  ncol = 1,
+  rel_heights = c(1.0, 0.08)
+)
+
+# Row 4 underneath: G, H, and the basin legend on the right
 row4_plots <- cowplot::plot_grid(
-  p1_g, p1_h, p1_legends,
+  p1_g, p1_h, basin_legend,
   ncol = 3,
   align = "h",
   axis = "tb",
-  rel_widths = c(1.0, 1.0, 0.8)
+  rel_widths = c(1.0, 1.0, 0.3)
 )
 
 # Assemble full 8-panel double-column PNAS Figure 1
 fig1_final <- cowplot::plot_grid(
-  fig_grid_maps,
+  fig_maps_and_legends,
   row4_plots,
   ncol = 1,
   align = "v",
   axis = "lr",
-  rel_heights = c(1.0, 0.35)
+  rel_heights = c(1.0, 0.32)
 )
 
 fig1_png <- "figures/figure1_gedi_pipeline.png"
