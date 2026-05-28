@@ -295,9 +295,9 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     # Build ggplot Panels
     t_theme <- theme_pnas(base_size = 8)
     
-    # Diverging Colorblind-Safe Brown-Grey-Teal (BrBG) color scale centered at 0.0 representing mean biomass
+    # Diverging Colorblind-Safe Orange-to-Purple (OrPu) color scale centered at 0.0 (Pure White) representing mean biomass
     fill_scale <- scale_fill_gradientn(
-      colors = c("#8c510a", "#d8b365", "#f5f5f5", "#5ab4ac", "#01665e"),
+      colors = c("#b35806", "#f1a340", "#ffffff", "#998ec3", "#542788"),
       name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
       limits = c(-2.5, 2.5),
       breaks = c(-2.0, -1.0, 0, 1.0, 2.0),
@@ -312,6 +312,25 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         barheight = unit(0.24, "cm")
       )
     )
+    
+    # Helper to add an ultra-premium cartographic scale bar representing 1000 km
+    add_scale_bar <- function(p, x_start, y) {
+      x_end <- x_start + 8.983
+      y_top <- y + 0.3
+      y_text <- y - 1.2
+      
+      p +
+        # Semi-transparent backdrop for absolute legibility
+        annotate("rect", xmin = x_start - 0.8, xmax = x_end + 0.8, ymin = y - 2.0, ymax = y_top + 0.4, fill = ggplot2::alpha("white", 0.8), color = "grey80", linewidth = 0.25) +
+        # Left segment (white)
+        annotate("rect", xmin = x_start, xmax = x_start + 4.4915, ymin = y, ymax = y_top, fill = "white", color = "black", linewidth = 0.2) +
+        # Right segment (black)
+        annotate("rect", xmin = x_start + 4.4915, xmax = x_end, ymin = y, ymax = y_top, fill = "black", color = "black", linewidth = 0.2) +
+        # Tick labels
+        annotate("text", x = x_start, y = y_text, label = "0", size = 1.6, fontface = "bold", color = "grey10", hjust = 0.5) +
+        annotate("text", x = x_start + 4.4915, y = y_text, label = "500", size = 1.6, fontface = "bold", color = "grey10", hjust = 0.5) +
+        annotate("text", x = x_end, y = y_text, label = "1000 km", size = 1.6, fontface = "bold", color = "grey10", hjust = 0.5)
+    }
     
     # --- RENDER AMAZON PANELS ---
     # Column 1 (LOBO)
@@ -328,6 +347,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       t_theme +
       theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
       labs(title = sprintf("A. Neotropical Basin (Amazon LOBO Best, %s)", map_title_suffix))
+    p_amazon_lobo <- add_scale_bar(p_amazon_lobo, -47.0, -12.5)
       
     # Column 2 (AIC)
     p_amazon_aic <- ggplot() +
@@ -343,6 +363,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       t_theme +
       theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
       labs(title = sprintf("D. Neotropical Basin (Amazon AIC Best, %s)", map_title_suffix))
+    p_amazon_aic <- add_scale_bar(p_amazon_aic, -47.0, -12.5)
       
     # --- RENDER CONGO PANELS ---
     # Column 1 (LOBO)
@@ -359,6 +380,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       t_theme +
       theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
       labs(title = sprintf("B. Afrotropical Basin (Congo LOBO Best, %s)", map_title_suffix))
+    p_congo_lobo <- add_scale_bar(p_congo_lobo, 33.0, -12.5)
       
     # Column 2 (AIC)
     p_congo_aic <- ggplot() +
@@ -374,6 +396,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       t_theme +
       theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
       labs(title = sprintf("E. Afrotropical Basin (Congo AIC Best, %s)", map_title_suffix))
+    p_congo_aic <- add_scale_bar(p_congo_aic, 33.0, -12.5)
       
     # --- RENDER SE ASIA PANELS ---
     # Crop blank SE Asia protected areas
@@ -416,6 +439,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
         labs(title = sprintf("C. Indo-Malayan Basin (Southeast Asia LOBO Best, %s)", map_title_suffix))
     }
+    p_seasia_lobo <- add_scale_bar(p_seasia_lobo, 128.0, -12.5)
     
     # Column 2 (AIC)
     if (!is.null(r_pred_seasia_aic)) {
@@ -445,6 +469,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
         labs(title = sprintf("F. Indo-Malayan Basin (Southeast Asia AIC Best, %s)", map_title_suffix))
     }
+    p_seasia_aic <- add_scale_bar(p_seasia_aic, 128.0, -12.5)
     
     # --- 8. Combine Panels into a Symmetrical 3-Row x 2-Column Grid ---
     fig_grid <- cowplot::plot_grid(
