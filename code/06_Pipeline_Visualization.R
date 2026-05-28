@@ -260,6 +260,21 @@ p1_h <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
+# Robust custom legend extraction to prevent the ggplot2 >= 3.5.0 zeroGrob bug
+get_robust_legend <- function(plot) {
+  g <- ggplotGrob(plot)
+  grob_names <- sapply(g$grobs, function(x) x$name)
+  idx <- grep("guide-box", grob_names)
+  if (length(idx) > 0) {
+    for (i in idx) {
+      if (!inherits(g$grobs[[i]], "zeroGrob")) {
+        return(g$grobs[[i]])
+      }
+    }
+  }
+  return(NULL)
+}
+
 # --- Extract legends for neat sidebar panel ---
 p_uoi_legend_dummy <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
@@ -283,7 +298,7 @@ p_uoi_legend_dummy <- ggplot() +
     legend.title = element_text(size = 5.5, face = "bold"),
     legend.text = element_text(size = 4.5)
   )
-uoi_legend <- cowplot::get_legend(p_uoi_legend_dummy)
+uoi_legend <- get_robust_legend(p_uoi_legend_dummy)
 
 p_n_legend_dummy <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
@@ -310,7 +325,7 @@ p_n_legend_dummy <- ggplot() +
     legend.title = element_text(size = 5.5, face = "bold"),
     legend.text = element_text(size = 4.5)
   )
-n_legend <- cowplot::get_legend(p_n_legend_dummy)
+n_legend <- get_robust_legend(p_n_legend_dummy)
 
 # Extract robust Basin legend
 p_basin_legend_dummy <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
@@ -324,7 +339,7 @@ p_basin_legend_dummy <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin
     legend.key.height = unit(0.25, "cm"),
     legend.key.width = unit(0.3, "cm")
   )
-basin_legend <- cowplot::get_legend(p_basin_legend_dummy)
+basin_legend <- get_robust_legend(p_basin_legend_dummy)
 
 # Combine the 3x2 grid of maps (symmetrical like Figure 5)
 fig_grid_maps <- cowplot::plot_grid(
