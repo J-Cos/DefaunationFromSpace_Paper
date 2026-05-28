@@ -622,13 +622,13 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     is_aic = FALSE
   )
   
-  fig_png_path <- file.path(figures_dir, "figure4.png")
+  fig_png_path <- file.path(figures_dir, "figureS2.png")
   save_pnas(plot = fig_main, filename = fig_png_path, type = "double", height_cm = 12.5)
   fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
   save_pnas(plot = fig_main, filename = fig_pdf_path, type = "double", height_cm = 12.5)
   
-  # 2. Generate and save the alternate AIC Figure 4
-  cat("Generating alternate AIC-selected Figure 4...\n")
+  # 2. Generate and save the alternate AIC Figure S2
+  cat("Generating alternate AIC-selected Figure S2...\n")
   fig_alt <- generate_figure4_trio(
     model_name = best_model_name_aic,
     model_obj = best_model_aic,
@@ -638,7 +638,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     is_aic = TRUE
   )
   
-  fig_alt_png_path <- file.path(figures_dir, "figure4_alternate_aic_full.png")
+  fig_alt_png_path <- file.path(figures_dir, "figureS2_alternate_aic_full.png")
   save_pnas(plot = fig_alt, filename = fig_alt_png_path, type = "double", height_cm = 12.5)
   fig_alt_pdf_path <- sub("\\.png$", ".pdf", fig_alt_png_path)
   save_pnas(plot = fig_alt, filename = fig_alt_pdf_path, type = "double", height_cm = 12.5)
@@ -646,10 +646,10 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   # 3. Copy both to brain artifact directory if it exists
   brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
   if (file.exists(brain_artifact_dir)) {
-    file.copy(fig_png_path, file.path(brain_artifact_dir, "figure4.png"), overwrite = TRUE)
-    file.copy(fig_pdf_path, file.path(brain_artifact_dir, "figure4.pdf"), overwrite = TRUE)
-    file.copy(fig_alt_png_path, file.path(brain_artifact_dir, "figure4_alternate_aic_full.png"), overwrite = TRUE)
-    file.copy(fig_alt_pdf_path, file.path(brain_artifact_dir, "figure4_alternate_aic_full.pdf"), overwrite = TRUE)
+    file.copy(fig_png_path, file.path(brain_artifact_dir, "figureS2.png"), overwrite = TRUE)
+    file.copy(fig_pdf_path, file.path(brain_artifact_dir, "figureS2.pdf"), overwrite = TRUE)
+    file.copy(fig_alt_png_path, file.path(brain_artifact_dir, "figureS2_alternate_aic_full.png"), overwrite = TRUE)
+    file.copy(fig_alt_pdf_path, file.path(brain_artifact_dir, "figureS2_alternate_aic_full.pdf"), overwrite = TRUE)
     cat("✓ Copied both integrated figures to brain artifacts folder.\n")
   }
   

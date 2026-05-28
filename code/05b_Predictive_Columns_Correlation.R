@@ -190,14 +190,14 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
 
 # Save supplementary figures
 dir.create("figures", showWarnings = FALSE)
-ggsave("figures/figureS6.png", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
-ggsave("figures/figureS6.pdf", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
-cat("✓ Successfully saved supplementary figure to figures/figureS6.png and .pdf\n")
+ggsave("figures/figureS4.png", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
+ggsave("figures/figureS4.pdf", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
+cat("✓ Successfully saved supplementary figure to figures/figureS4.png and .pdf\n")
 
 # Copy to brain folder
 brain_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
 if (dir.exists(brain_dir)) {
-  file.copy("figures/figureS6.png", file.path(brain_dir, "figureS6.png"), overwrite = TRUE)
-  file.copy("figures/figureS6.pdf", file.path(brain_dir, "figureS6.pdf"), overwrite = TRUE)
+  file.copy("figures/figureS4.png", file.path(brain_dir, "figureS4.png"), overwrite = TRUE)
+  file.copy("figures/figureS4.pdf", file.path(brain_dir, "figureS4.pdf"), overwrite = TRUE)
   cat("✓ Copied supplementary figure to brain folder.\n")
 }

@@ -99,7 +99,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   
   # Map lookup table for filenames
   file_suffix_map <- list(
-    "5000" = list(name = "figureS5", title = "5 km"),
+    "5000" = list(name = "figureS3", title = "5 km"),
     "20000" = list(name = "figure5", title = "20 km")
   )
   
