@@ -156,6 +156,42 @@ load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
       }
     }
     
+    # Dynamic aggregation fallback from 5,000m real stack if target scale real file is missing
+    r_5000_basename <- sprintf("analysis_stack_5000_%s.tif", basin)
+    r_5000_candidates <- c(
+      file.path("outputs", "EOdata", r_5000_basename),
+      file.path(data_dir, r_5000_basename)
+    )
+    r_5000_filename <- NULL
+    for (cand in r_5000_candidates) {
+      if (file.exists(cand)) {
+        r_5000_filename <- cand
+        break
+      }
+    }
+    
+    is_real_file_missing <- !file.exists(file.path("outputs", "EOdata", basename)) && 
+                            !file.exists(file.path(data_dir, basename))
+    
+    if (is_real_file_missing && !is.null(r_5000_filename) && scale > 5000) {
+      fact <- scale / 5000
+      message(sprintf("✓ Dynamically aggregating real 5,000m stack by factor of %d to %d m: %s", fact, scale, basename))
+      r_5000 <- rast(r_5000_filename)
+      r <- terra::aggregate(r_5000, fact = fact, fun = "mean", na.rm = TRUE)
+      
+      num_layers <- nlyr(r)
+      if (num_layers == 12) {
+        names(r) <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
+                      "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+      } else if (num_layers == 11) {
+        names(r) <- c("frip", "frip_mk_tau", "uoi", "rh98", "gedi_n",
+                      "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+      }
+      
+      stacks[[as.character(scale)]] <- r
+      next
+    }
+    
     if (is.null(filename)) {
       stop("File does not exist in any candidate location: ", basename)
     }
