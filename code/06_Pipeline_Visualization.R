@@ -74,17 +74,19 @@ assign_native_names <- function(r) {
   return(r)
 }
 
-# Load 5km aggregated maps
-r_congo_5km <- assign_multiscale_names(rast("outputs/EOdata/analysis_stack_5000_Congo.tif"))
+# Load 5km aggregated maps for all three basins
+r_congo_5km  <- assign_multiscale_names(rast("outputs/EOdata/analysis_stack_5000_Congo.tif"))
 r_amazon_5km <- assign_multiscale_names(rast("outputs/EOdata/analysis_stack_5000_Amazon.tif"))
+r_seasia_5km <- assign_multiscale_names(rast("outputs/EOdata/analysis_stack_5000_SE_Asia.tif"))
 
 # Load country outlines and crop for background
 countries_v <- vect("data/world-administrative-boundaries")
 
 # Load camera trap cluster coordinates for overlay
 mcps <- vect("outputs/camera_traps_robust_buffered_mcps.geojson")
-mcps_congo <- mcps[mcps$region == "Congo", ]
-mcps_amazon <- mcps[mcps$region == "Amazon", ]
+mcps_congo  <- mcps[mcps$region == "Congo", ]
+mcps_amazon  <- mcps[mcps$region == "Amazon", ]
+mcps_seasia  <- mcps[mcps$region == "SE_Asia", ]
 
 # Set up study bounding boxes with padding
 ext_c <- ext(mcps_congo)
@@ -93,30 +95,39 @@ ext_c <- ext(xmin(ext_c)-1.0, xmax(ext_c)+1.0, ymin(ext_c)-1.0, ymax(ext_c)+1.0)
 ext_a <- ext(mcps_amazon)
 ext_a <- ext(xmin(ext_a)-1.0, xmax(ext_a)+1.0, ymin(ext_a)-1.0, ymax(ext_a)+1.0)
 
+ext_s <- ext(mcps_seasia)
+ext_s <- ext(xmin(ext_s)-1.0, xmax(ext_s)+1.0, ymin(ext_s)-1.0, ymax(ext_s)+1.0)
+
 r_c_crop <- crop(r_congo_5km, ext_c)
 r_a_crop <- crop(r_amazon_5km, ext_a)
+r_s_crop <- crop(r_seasia_5km, ext_s)
 
 # Scale GEDI shot density to raw shot count (number of GEDI footprints in 5km cell)
 r_c_crop$gedi_n <- r_c_crop$gedi_n * 40000
 r_a_crop$gedi_n <- r_a_crop$gedi_n * 40000
+r_s_crop$gedi_n <- r_s_crop$gedi_n * 40000
 
 countries_c <- crop(project(countries_v, crs(r_c_crop)), ext_c)
 countries_a <- crop(project(countries_v, crs(r_a_crop)), ext_a)
+countries_s <- crop(project(countries_v, crs(r_s_crop)), ext_s)
 
-# --- Figure 1 Panels A & B: Regional 5km UOI maps ---
 t_theme <- theme_pnas(base_size = 7.5)
 
+# --- UOI Fill Scale ---
+uoi_fill_scale <- scale_fill_viridis_c(
+  option = "plasma",
+  name = "GEDI Understory Openness (UOI)",
+  limits = c(0.92, 0.975),
+  oob = scales::squish,
+  na.value = "transparent"
+)
+
+# --- Figure 1 Panels A, B, C: Regional 5km UOI maps ---
 p1_a <- ggplot() +
-  geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
-  scale_fill_viridis_c(
-    option = "plasma",
-    name = "GEDI Understory Openness Index (UOI)",
-    limits = c(0.92, 0.975),
-    oob = scales::squish,
-    na.value = "transparent"
-  ) +
-  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  geom_spatraster(data = r_a_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
+  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   t_theme +
   theme(
     legend.position = "none",
@@ -126,53 +137,11 @@ p1_a <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "A. Congo Basin GEDI Openness (5 km)")
+  labs(title = "A. Amazon GEDI Openness (5 km)")
 
 p1_b <- ggplot() +
-  geom_spatraster(data = r_a_crop, aes(fill = uoi)) +
-  scale_fill_viridis_c(
-    option = "plasma",
-    name = "GEDI Understory Openness Index (UOI)",
-    limits = c(0.92, 0.975),
-    oob = scales::squish,
-    na.value = "transparent",
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      label.position = "bottom",
-      barwidth = unit(5.5, "cm"),
-      barheight = unit(0.12, "cm")
-    )
-  ) +
-  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
-  t_theme +
-  theme(
-    legend.position = "bottom",
-    legend.title = element_text(size = 5.5, face = "bold"),
-    legend.text = element_text(size = 4.5),
-    legend.margin = margin(t = -2, b = 2, unit = "pt"),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt")
-  ) +
-  labs(title = "B. Amazon Basin GEDI Openness (5 km)")
-
-# --- Figure 1 Panels C & D: Regional 5km GEDI Shot Density maps ---
-p1_c <- ggplot() +
-  geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
-  scale_fill_viridis_c(
-    option = "mako",
-    name = "GEDI Shot Count (log scale)",
-    trans = "log10",
-    limits = c(10, 6000),
-    breaks = c(10, 100, 1000, 6000),
-    labels = c("10", "100", "1,000", "6,000"),
-    oob = scales::squish,
-    na.value = "transparent"
-  ) +
+  geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
   geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.25) +
   geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   t_theme +
@@ -184,49 +153,93 @@ p1_c <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "C. Congo Basin GEDI Shot Count (5 km)")
+  labs(title = "B. Congo GEDI Openness (5 km)")
 
-p1_d <- ggplot() +
-  geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
-  scale_fill_viridis_c(
-    option = "mako",
-    name = "GEDI Shot Count (log scale)",
-    trans = "log10",
-    limits = c(10, 6000),
-    breaks = c(10, 100, 1000, 6000),
-    labels = c("10", "100", "1,000", "6,000"),
-    oob = scales::squish,
-    na.value = "transparent",
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      label.position = "bottom",
-      barwidth = unit(5.5, "cm"),
-      barheight = unit(0.12, "cm")
-    )
-  ) +
-  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+p1_c <- ggplot() +
+  geom_spatraster(data = r_s_crop, aes(fill = uoi)) +
+  uoi_fill_scale +
+  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   t_theme +
   theme(
-    legend.position = "bottom",
-    legend.title = element_text(size = 5.5, face = "bold"),
-    legend.text = element_text(size = 4.5),
-    legend.margin = margin(t = -2, b = 2, unit = "pt"),
+    legend.position = "none",
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     axis.title = element_blank(),
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "D. Amazon Basin GEDI Shot Count (5 km)")
+  labs(title = "C. SE Asia GEDI Openness (5 km)")
 
-# --- Figure 1 Panel E: Uncertainty Decay vs. GEDI Shot Density ---
+# --- Shot Count Fill Scale ---
+n_fill_scale <- scale_fill_viridis_c(
+  option = "mako",
+  name = "GEDI Shot Count",
+  trans = "log10",
+  limits = c(10, 6000),
+  breaks = c(10, 100, 1000, 6000),
+  labels = c("10", "100", "1K", "6K"),
+  oob = scales::squish,
+  na.value = "transparent"
+)
+
+# --- Figure 1 Panels D, E, F: Regional 5km GEDI Shot Count maps ---
+p1_d <- ggplot() +
+  geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
+  n_fill_scale +
+  geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  t_theme +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(2, 2, 2, 2, "pt")
+  ) +
+  labs(title = "D. Amazon GEDI Shot Count (5 km)")
+
+p1_e <- ggplot() +
+  geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
+  n_fill_scale +
+  geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  t_theme +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(2, 2, 2, 2, "pt")
+  ) +
+  labs(title = "E. Congo GEDI Shot Count (5 km)")
+
+p1_f <- ggplot() +
+  geom_spatraster(data = r_s_crop, aes(fill = gedi_n)) +
+  n_fill_scale +
+  geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.25) +
+  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
+  t_theme +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(2, 2, 2, 2, "pt")
+  ) +
+  labs(title = "F. SE Asia GEDI Shot Count (5 km)")
+
+# --- Figure 1 Panel G: Uncertainty Decay vs. GEDI Shot Density ---
 df_c_pts <- as.data.frame(r_c_crop[[c("uoi_sd", "gedi_n")]], na.rm = TRUE)
 df_c_pts$basin <- "Congo"
 df_a_pts <- as.data.frame(r_a_crop[[c("uoi_sd", "gedi_n")]], na.rm = TRUE)
 df_a_pts$basin <- "Amazon"
-df_pts <- rbind(df_c_pts, df_a_pts)
+df_s_pts <- as.data.frame(r_s_crop[[c("uoi_sd", "gedi_n")]], na.rm = TRUE)
+df_s_pts$basin <- "SE_Asia"
+df_pts <- rbind(df_c_pts, df_a_pts, df_s_pts)
 
 # Downsample for clean plotting density
 set.seed(42)
@@ -235,20 +248,20 @@ df_pts <- df_pts %>%
   slice_sample(n = 2000) %>%
   ungroup()
 
-p1_e <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
+p1_g <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point(alpha = 0.25, size = 0.5, stroke = 0) +
   geom_smooth(method = "gam", formula = y ~ s(x, k = 5), se = TRUE, linewidth = 0.75) +
-  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_color_manual(values = pal_basin, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Basin") +
   scale_x_continuous(trans = "log10", labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
-    title = "E. Uncertainty Decay vs. GEDI Shot Count",
+    title = "G. Uncertainty Decay vs. GEDI Shot Count",
     x = "GEDI Shot Count (log scale)",
     y = "GEDI UOI Standard Error (SE)"
   ) +
   t_theme +
   theme(
-    legend.position = c(0.76, 0.78),
+    legend.position = c(0.72, 0.76),
     legend.title = element_text(size = 5.5, face = "bold"),
     legend.text = element_text(size = 5.0),
     legend.key.height = unit(0.12, "cm"),
@@ -256,18 +269,19 @@ p1_e <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
-# --- Figure 1 Panel F: UOI Distribution divided by Continent ---
+# --- Figure 1 Panel H: UOI Distribution divided by Continent ---
 df_c_uoi <- data.frame(uoi = as.data.frame(r_c_crop[["uoi"]], na.rm = TRUE)$uoi, basin = "Congo")
 df_a_uoi <- data.frame(uoi = as.data.frame(r_a_crop[["uoi"]], na.rm = TRUE)$uoi, basin = "Amazon")
-df_uoi_dist <- rbind(df_c_uoi, df_a_uoi)
+df_s_uoi <- data.frame(uoi = as.data.frame(r_s_crop[["uoi"]], na.rm = TRUE)$uoi, basin = "SE_Asia")
+df_uoi_dist <- rbind(df_c_uoi, df_a_uoi, df_s_uoi)
 
-p1_f <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
+p1_h <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
   scale_fill_manual(values = pal_basin, name = "Basin") +
   scale_color_manual(values = pal_basin, name = "Basin") +
   scale_x_continuous(limits = c(0.92, 0.975), breaks = seq(0.92, 0.97, by = 0.01)) +
   labs(
-    title = "F. UOI Distribution by Continent",
+    title = "H. UOI Distribution by Continent",
     x = "GEDI Understory Openness Index (UOI)",
     y = "Probability Density"
   ) +
@@ -277,20 +291,114 @@ p1_f <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
-# Assemble Figure 1 (6 Panels arranged in a flat perfectly aligned 3x2 Grid)
+# --- Extract legends for neat sidebar panel ---
+p_uoi_legend_dummy <- ggplot() +
+  geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    name = "GEDI Understory Openness Index (UOI)",
+    limits = c(0.92, 0.975),
+    oob = scales::squish,
+    na.value = "transparent",
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      label.position = "bottom",
+      barwidth = unit(5.0, "cm"),
+      barheight = unit(0.12, "cm")
+    )
+  ) +
+  t_theme +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 5.5, face = "bold"),
+    legend.text = element_text(size = 4.5)
+  )
+uoi_legend <- cowplot::get_legend(p_uoi_legend_dummy)
+
+p_n_legend_dummy <- ggplot() +
+  geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
+  scale_fill_viridis_c(
+    option = "mako",
+    name = "GEDI Shot Count (5 km cell, log scale)",
+    trans = "log10",
+    limits = c(10, 6000),
+    breaks = c(10, 100, 1000, 6000),
+    labels = c("10", "100", "1K", "6K"),
+    oob = scales::squish,
+    na.value = "transparent",
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      label.position = "bottom",
+      barwidth = unit(5.0, "cm"),
+      barheight = unit(0.12, "cm")
+    )
+  ) +
+  t_theme +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 5.5, face = "bold"),
+    legend.text = element_text(size = 4.5)
+  )
+n_legend <- cowplot::get_legend(p_n_legend_dummy)
+
+# Stack the two legends neatly inside a single visual element
+p1_legends <- cowplot::plot_grid(
+  uoi_legend,
+  n_legend,
+  ncol = 1,
+  rel_heights = c(1.0, 1.0)
+)
+
+# Assemble Rows
+row1_maps <- cowplot::plot_grid(
+  p1_a, p1_b, p1_c,
+  ncol = 3,
+  align = "h",
+  axis = "tb"
+)
+
+row2_maps <- cowplot::plot_grid(
+  p1_d, p1_e, p1_f,
+  ncol = 3,
+  align = "h",
+  axis = "tb"
+)
+
+row3_plots <- cowplot::plot_grid(
+  p1_g, p1_h, p1_legends,
+  ncol = 3,
+  align = "h",
+  axis = "tb",
+  rel_widths = c(1.0, 1.0, 1.0)
+)
+
+# Assemble full 8-panel double-column PNAS Figure 1
 fig1_final <- cowplot::plot_grid(
-  p1_a, p1_b,
-  p1_c, p1_d,
-  p1_e, p1_f,
-  ncol = 2,
-  align = "hv",
-  axis = "tblr",
-  rel_heights = c(1.0, 1.0, 1.0)
+  row1_maps,
+  row2_maps,
+  row3_plots,
+  ncol = 1,
+  align = "v",
+  axis = "lr",
+  rel_heights = c(1.0, 1.0, 1.05)
 )
 
 fig1_png <- "figures/figure1_gedi_pipeline.png"
-ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 22.0, units = "cm", dpi = 600, bg = "white")
-cat("✓ 6-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
+ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 23.5, units = "cm", dpi = 600, bg = "white")
+cat("✓ 8-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
+
+# Copy figure to active brain artifacts folder
+brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
+if (file.exists(brain_artifacts_dir)) {
+  file.copy(fig1_png, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.png"), overwrite = TRUE)
+  # Also copy PDF version if generated
+  fig1_pdf <- sub("\\.png$", ".pdf", fig1_png)
+  ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 23.5, units = "cm", dpi = 600, bg = "white")
+  file.copy(fig1_pdf, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.pdf"), overwrite = TRUE)
+  cat("✓ Copied 8-Panel Figure 1 (PNG & PDF) to brain artifacts folder.\n")
+}
 
 
 # =============================================================================
@@ -298,10 +406,10 @@ cat("✓ 6-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 # =============================================================================
 cat("--- Drafting Figure 2: Camera Trap Wildlife Ingestion & Calibration (7 Panels) ---\n")
 
-# Load raw detections
-det_path <- "outputs/camera_traps_joint_detections.csv"
+# Load robust, GEDI-overlapping detections with pre-assigned cluster_id
+det_path <- "outputs/camera_traps_robust_detections.csv"
 if (!file.exists(det_path)) {
-  stop("Camera trap detections missing: ", det_path)
+  stop("Camera trap robust detections missing: ", det_path)
 }
 det_all <- read_csv(det_path, show_col_types = FALSE)
 
@@ -332,42 +440,15 @@ p2_a <- ggplot(df_binned_mass, aes(x = body_mass_kg, y = n_ind, color = region))
         legend.text = element_text(size = 5.5),
         plot.margin = margin(2, 4, 2, 4, "pt"))
 
-# --- Dynamic Haversine Clustering Maps Helper ---
-haversine_dist <- function(lon1, lat1, lon2, lat2) {
-  r <- 6371.0
-  rad <- pi / 180
-  dlon <- (lon2 - lon1) * rad
-  dlat <- (lat2 - lat1) * rad
-  lat1 <- lat1 * rad
-  lat2 <- lat2 * rad
-  a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
-  c <- 2 * asin(sqrt(a))
-  return(r * c)
-}
-
-get_clustered_deployments <- function(basin_name, buffer_val = 0.1) {
+get_clustered_deployments <- function(basin_name) {
   unique_deps <- det_all %>%
     filter(region == basin_name) %>%
-    select(longitude, latitude, deployment_id, trap_days) %>%
+    select(longitude, latitude, deployment_id, trap_days, cluster_id) %>%
     distinct()
   
-  n_deps <- nrow(unique_deps)
-  if (n_deps > 1) {
-    dist_mat <- matrix(0, nrow = n_deps, ncol = n_deps)
-    for (i in 1:n_deps) {
-      for (j in 1:n_deps) {
-        dist_mat[i,j] <- haversine_dist(unique_deps$longitude[i], unique_deps$latitude[i], unique_deps$longitude[j], unique_deps$latitude[j])
-      }
-    }
-    hc <- hclust(as.dist(dist_mat), method = "single")
-    unique_deps$cluster_num <- cutree(hc, h = CLUSTER_THRESHOLD_KM)
-  } else {
-    unique_deps$cluster_num <- 1
-  }
-  
-  # Calculate centroids and sum trap days per cluster
+  # Calculate centroids and sum trap days per cluster using pre-assigned cluster_id
   centroids <- unique_deps %>%
-    group_by(cluster_num) %>%
+    group_by(cluster_id) %>%
     summarise(
       lon = mean(longitude),
       lat = mean(latitude),
@@ -378,7 +459,7 @@ get_clustered_deployments <- function(basin_name, buffer_val = 0.1) {
   return(list(deps = unique_deps, centroids = centroids))
 }
 
-# Run Haversine Single-Linkage Clustering for all three basins
+# Load pre-clustered deployments for each basin
 congo_c_info <- get_clustered_deployments("Congo")
 amazon_c_info <- get_clustered_deployments("Amazon")
 seasia_c_info <- get_clustered_deployments("SE_Asia")
@@ -449,7 +530,7 @@ p2_g <- ggplot() +
 gedi_start <- as.Date("2019-04-17")
 
 cluster_temporal_spans <- det_all %>%
-  select(region, cluster_id_geo = project_id, deployment_id, start_date, end_date, trap_days) %>%
+  select(region, cluster_id_geo = cluster_id, deployment_id, start_date, end_date, trap_days) %>%
   distinct() %>%
   mutate(
     start_date = as.Date(start_date),
@@ -457,9 +538,9 @@ cluster_temporal_spans <- det_all %>%
     years_before_gedi = as.numeric(gedi_start - start_date) / 365.25,
     w_temp = case_when(
       years_before_gedi <= 1.0  ~ 1.0,
-      years_before_gedi <= 6.0  ~ 0.5,
-      years_before_gedi <= 11.0 ~ 0.25,
-      TRUE                      ~ 0.1
+      years_before_gedi <= 6.0  ~ 0.3,
+      years_before_gedi <= 11.0 ~ 0.1,
+      TRUE                      ~ 0.02
     )
   )
 
