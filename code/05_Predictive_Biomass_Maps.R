@@ -295,9 +295,9 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     # Build ggplot Panels
     t_theme <- theme_pnas(base_size = 8)
     
-    # Diverging Red-Grey-Blue color scale centered at 0.0 representing mean biomass
+    # Diverging Colorblind-Safe Brown-Grey-Teal (BrBG) color scale centered at 0.0 representing mean biomass
     fill_scale <- scale_fill_gradientn(
-      colors = c("#b2182b", "#ef8a62", "#f7f7f7", "#67a9cf", "#2166ac"),
+      colors = c("#8c510a", "#d8b365", "#f5f5f5", "#5ab4ac", "#01665e"),
       name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
       limits = c(-2.5, 2.5),
       breaks = c(-2.0, -1.0, 0, 1.0, 2.0),
@@ -457,9 +457,9 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     )
     
     # Unified Horizontal Shared Legend at the bottom
-    # We use a dummy plot containing the fill scale to draw the perfect legend object
-    legend_obj <- ggplot(congo_cells_lobo) +
-      geom_point(aes(x = uoi, y = pred, fill = zscore_mae)) +
+    # We use a dummy plot with geom_tile containing the fill scale to draw the perfect legend object
+    legend_obj <- ggplot(data.frame(x = 1, y = 1, z = 0)) +
+      geom_tile(aes(x = x, y = y, fill = z)) +
       fill_scale +
       theme_pnas(base_size = 7.5) +
       theme(
