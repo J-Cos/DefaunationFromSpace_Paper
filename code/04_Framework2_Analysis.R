@@ -365,7 +365,6 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
           title = "A. Standing Mammal Biomass vs. GEDI Openness",
-          subtitle = sprintf("Best Fit: %s", model_name),
           x = "GEDI Understory Openness Index (UOI)",
           y = "Total Mammal Biomass Index (log1p scale)"
         )
@@ -396,7 +395,6 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
           title = "A. Standing Mammal Biomass vs. GEDI Openness",
-          subtitle = sprintf("Best Fit: %s", model_name),
           x = "GEDI Understory Openness Index (UOI)",
           y = "Total Mammal Biomass Index (log1p scale)"
         )
@@ -418,7 +416,6 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
           title = "A. Standing Mammal Biomass vs. GEDI Openness",
-          subtitle = sprintf("Best Fit: %s", model_name),
           x = "GEDI Understory Openness Index (UOI)",
           y = "Total Mammal Biomass Index (log1p scale)"
         )
@@ -457,7 +454,6 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       scale_y_continuous(breaks = seq(-4, 4, by = 2), limits = c(-4.5, 4.5)) +
       labs(
         title = "B. Residual Independence & Temporal Stability",
-        subtitle = sprintf("log1p Residuals from %s", model_name),
         x = "Cluster Temporal Alignment Weight (W_temp)",
         y = "Best Model log1p Residuals"
       ) +

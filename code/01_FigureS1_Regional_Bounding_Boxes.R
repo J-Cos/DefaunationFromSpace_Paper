@@ -117,7 +117,7 @@ p_amazon <- ggplot() +
   # Draw a bold bounding box outline inside the plot
   geom_spatvector(data = bbox_amazon_v, fill = NA, color = "#E65100", linewidth = 1.0) +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = "A. Neotropical Basin (Amazon)") +
+  labs(title = "A") +
   map_theme +
   # Amazon has no wild proboscids; place a small text overlay acknowledging this
   annotate("text", x = -60, y = -12, label = "Neotropics: Megafauna Depleted (No Proboscids)", 
@@ -155,7 +155,7 @@ p_congo <- p_congo +
   # Draw a bold bounding box outline inside the plot
   geom_spatvector(data = bbox_congo_v, fill = NA, color = "#1B5E20", linewidth = 1.0) +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = "B. Afrotropical Basin (Congo)") +
+  labs(title = "B") +
   map_theme
 
 # Plot Panel C: Southeast Asia
@@ -190,7 +190,7 @@ p_sea <- p_sea +
   # Draw a bold bounding box outline inside the plot
   geom_spatvector(data = bbox_sea_v, fill = NA, color = "#0D47A1", linewidth = 1.0) +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = "C. Indo-Malayan Basin (Southeast Asia)") +
+  labs(title = "C") +
   map_theme
 
 # Combine into a single vertical column of 3 figures
@@ -207,8 +207,8 @@ fig_path_png_local <- "figures/figureS1.png"
 fig_path_pdf_local <- "figures/figureS1.pdf"
 
 # Save high-resolution publication-quality PNG and PDF (300 DPI)
-ggsave(fig_path_png_local, plot = col_figure, width = 12.0, height = 24.0, units = "cm", dpi = 300, bg = "white")
-ggsave(fig_path_pdf_local, plot = col_figure, width = 12.0, height = 24.0, units = "cm", dpi = 300, bg = "white")
+ggsave(fig_path_png_local, plot = col_figure, width = 11.0, height = 20.0, units = "cm", dpi = 300, bg = "white")
+ggsave(fig_path_pdf_local, plot = col_figure, width = 11.0, height = 20.0, units = "cm", dpi = 300, bg = "white")
 
 # Mirror in brain artifacts folder
 brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"

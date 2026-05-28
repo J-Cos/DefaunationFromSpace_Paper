@@ -153,7 +153,7 @@ p1_b <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "B. Congo GEDI Openness (5 km)")
+  labs(title = "C. Congo GEDI Openness (5 km)")
 
 p1_c <- ggplot() +
   geom_spatraster(data = r_s_crop, aes(fill = uoi)) +
@@ -169,7 +169,7 @@ p1_c <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "C. SE Asia GEDI Openness (5 km)")
+  labs(title = "E. SE Asia GEDI Openness (5 km)")
 
 # --- Shot Count Fill Scale ---
 n_fill_scale <- scale_fill_viridis_c(
@@ -198,7 +198,7 @@ p1_d <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "D. Amazon GEDI Shot Count (5 km)")
+  labs(title = "B. Amazon GEDI Shot Count (5 km)")
 
 p1_e <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
@@ -214,7 +214,7 @@ p1_e <- ggplot() +
     panel.grid = element_blank(),
     plot.margin = margin(2, 2, 2, 2, "pt")
   ) +
-  labs(title = "E. Congo GEDI Shot Count (5 km)")
+  labs(title = "D. Congo GEDI Shot Count (5 km)")
 
 p1_f <- ggplot() +
   geom_spatraster(data = r_s_crop, aes(fill = gedi_n)) +
@@ -351,42 +351,37 @@ p1_legends <- cowplot::plot_grid(
   rel_heights = c(1.0, 1.0)
 )
 
-# Assemble Rows
-row1_maps <- cowplot::plot_grid(
-  p1_a, p1_b, p1_c,
-  ncol = 3,
-  align = "h",
-  axis = "tb"
+# Combine the 3x2 grid of maps (symmetrical like Figure 5)
+fig_grid_maps <- cowplot::plot_grid(
+  p1_a, p1_d,  # Row 1: Amazon UOI, Amazon Shot Count
+  p1_b, p1_e,  # Row 2: Congo UOI, Congo Shot Count
+  p1_c, p1_f,  # Row 3: SE Asia UOI, SE Asia Shot Count
+  ncol = 2,
+  align = "vh",
+  axis = "tblr"
 )
 
-row2_maps <- cowplot::plot_grid(
-  p1_d, p1_e, p1_f,
-  ncol = 3,
-  align = "h",
-  axis = "tb"
-)
-
-row3_plots <- cowplot::plot_grid(
+# Row 4 underneath: G, H, and the stacked legends
+row4_plots <- cowplot::plot_grid(
   p1_g, p1_h, p1_legends,
   ncol = 3,
   align = "h",
   axis = "tb",
-  rel_widths = c(1.0, 1.0, 1.0)
+  rel_widths = c(1.0, 1.0, 0.8)
 )
 
 # Assemble full 8-panel double-column PNAS Figure 1
 fig1_final <- cowplot::plot_grid(
-  row1_maps,
-  row2_maps,
-  row3_plots,
+  fig_grid_maps,
+  row4_plots,
   ncol = 1,
   align = "v",
   axis = "lr",
-  rel_heights = c(1.0, 1.0, 1.05)
+  rel_heights = c(1.0, 0.35)
 )
 
 fig1_png <- "figures/figure1_gedi_pipeline.png"
-ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 23.5, units = "cm", dpi = 600, bg = "white")
+ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
 cat("✓ 8-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 
 # Copy figure to active brain artifacts folder
@@ -395,7 +390,7 @@ if (file.exists(brain_artifacts_dir)) {
   file.copy(fig1_png, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.png"), overwrite = TRUE)
   # Also copy PDF version if generated
   fig1_pdf <- sub("\\.png$", ".pdf", fig1_png)
-  ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 23.5, units = "cm", dpi = 600, bg = "white")
+  ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
   file.copy(fig1_pdf, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.pdf"), overwrite = TRUE)
   cat("✓ Copied 8-Panel Figure 1 (PNG & PDF) to brain artifacts folder.\n")
 }
@@ -430,7 +425,7 @@ p2_a <- ggplot(df_binned_mass, aes(x = body_mass_kg, y = n_ind, color = region))
   scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
   scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
   labs(
-    title = "A. Vertebrate Individual Size Distribution",
+    title = "D. Vertebrate Individual Size Distribution",
     x = "Mammal Body Mass (kg, log scale)",
     y = "Total Detections (log scale)"
   ) +
@@ -493,7 +488,7 @@ p2_b <- ggplot() +
              shape = 21, color = "black", fill = "#E65100", stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("B. Amazon Clusters (n = %d)", nrow(amazon_c_info$centroids))) +
+  labs(title = sprintf("A. Amazon Clusters (n = %d)", nrow(amazon_c_info$centroids))) +
   map_p_theme +
   theme(legend.position = "none")
 
@@ -504,7 +499,7 @@ p2_c <- ggplot() +
              shape = 21, color = "black", fill = "#1B5E20", stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("C. Congo Clusters (n = %d)", nrow(congo_c_info$centroids))) +
+  labs(title = sprintf("B. Congo Clusters (n = %d)", nrow(congo_c_info$centroids))) +
   map_p_theme +
   theme(legend.position = "none")
 
@@ -515,7 +510,7 @@ p2_g <- ggplot() +
              shape = 21, color = "black", fill = "#0D47A1", stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("D. SE Asia Clusters (n = %d)", nrow(seasia_c_info$centroids))) +
+  labs(title = sprintf("C. SE Asia Clusters (n = %d)", nrow(seasia_c_info$centroids))) +
   map_p_theme +
   theme(
     legend.position = c(0.18, 0.22),
