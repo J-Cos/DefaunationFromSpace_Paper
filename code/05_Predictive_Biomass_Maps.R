@@ -57,16 +57,23 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   # Load country outlines
   countries_v <- terra::vect("data/world-administrative-boundaries")
   
-  # Load Saved Best Framework 2 Model
+  # Load Saved Best Framework 2 Model (LOBO selected)
   model_path <- file.path(outputs_dir, "framework2_best_model.RDS")
   if (!file.exists(model_path)) {
     stop("Framework 2 best model RDS file missing: ", model_path)
   }
   m_best <- readRDS(model_path)
-  s_best <- summary(m_best)
   
-  cat("★ Loaded Best Framework 2 Model from RDS successfully.\n")
-  cat(sprintf("Formula: %s\n", paste(deparse(formula(m_best)), collapse = " ")))
+  # Load Saved Best Framework 2 Model (AIC selected)
+  model_path_aic <- file.path(outputs_dir, "framework2_best_model_aic.RDS")
+  if (!file.exists(model_path_aic)) {
+    stop("Framework 2 AIC best model RDS file missing: ", model_path_aic)
+  }
+  m_best_aic <- readRDS(model_path_aic)
+  
+  cat("★ Loaded both Best Framework 2 Models successfully.\n")
+  cat(sprintf("  LOBO Selected: %s\n", paste(deparse(formula(m_best)), collapse = " ")))
+  cat(sprintf("  AIC Selected:  %s\n", paste(deparse(formula(m_best_aic)), collapse = " ")))
   
   # Load Model Selection CSV to extract OOS MAE (log)
   sel_path <- file.path(outputs_dir, "framework2_covariate_model_selection.csv")
@@ -184,40 +191,80 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     }
     
     # Run Predictions on Rasters and transform to Z-score normalized OOS MAE units
-    covariate_bands <- c("uoi", "forest_fraction")
+    covariate_bands_lobo <- "uoi"
+    covariate_bands_aic  <- c("uoi", "elevation")
     
-    # Congo predictions
-    congo_cells <- as.data.frame(r_congo_cropped[[covariate_bands]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    congo_cells$pred <- predict(m_best, newdata = congo_cells, type = "response")
-    congo_cells$zscore_mae <- (log1p(congo_cells$pred) - mean_log_y_obs) / OOS_MAE_log
+    # --- Congo predictions ---
+    # LOBO prediction
+    congo_cells_lobo <- as.data.frame(r_congo_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+    congo_cells_lobo$pred <- predict(m_best, newdata = congo_cells_lobo, type = "response")
+    congo_cells_lobo$zscore_mae <- (log1p(congo_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
     
-    r_pred_congo <- rast(r_congo_cropped[["uoi"]])
-    names(r_pred_congo) <- "zscore_mae"
-    values(r_pred_congo) <- NA
-    r_pred_congo[congo_cells$cell] <- as.vector(congo_cells$zscore_mae)
+    r_pred_congo_lobo <- rast(r_congo_cropped[["uoi"]])
+    names(r_pred_congo_lobo) <- "zscore_mae"
+    values(r_pred_congo_lobo) <- NA
+    r_pred_congo_lobo[congo_cells_lobo$cell] <- as.vector(congo_cells_lobo$zscore_mae)
     
-    # Amazon predictions
-    amazon_cells <- as.data.frame(r_amazon_cropped[[covariate_bands]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-    amazon_cells$pred <- predict(m_best, newdata = amazon_cells, type = "response")
-    amazon_cells$zscore_mae <- (log1p(amazon_cells$pred) - mean_log_y_obs) / OOS_MAE_log
+    # AIC prediction
+    congo_cells_aic <- as.data.frame(r_congo_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+    congo_cells_aic$basin <- factor("Congo", levels = c("Amazon", "Congo", "SE_Asia"))
+    congo_cells_aic$pred <- predict(m_best_aic, newdata = congo_cells_aic, type = "response")
+    congo_cells_aic$zscore_mae <- (log1p(congo_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
     
-    r_pred_amazon <- rast(r_amazon_cropped[["uoi"]])
-    names(r_pred_amazon) <- "zscore_mae"
-    values(r_pred_amazon) <- NA
-    r_pred_amazon[amazon_cells$cell] <- as.vector(amazon_cells$zscore_mae)
+    r_pred_congo_aic <- rast(r_congo_cropped[["uoi"]])
+    names(r_pred_congo_aic) <- "zscore_mae"
+    values(r_pred_congo_aic) <- NA
+    r_pred_congo_aic[congo_cells_aic$cell] <- as.vector(congo_cells_aic$zscore_mae)
     
-    # SE Asia predictions
-    r_pred_seasia <- NULL
+    # --- Amazon predictions ---
+    # LOBO prediction
+    amazon_cells_lobo <- as.data.frame(r_amazon_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+    amazon_cells_lobo$pred <- predict(m_best, newdata = amazon_cells_lobo, type = "response")
+    amazon_cells_lobo$zscore_mae <- (log1p(amazon_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
+    
+    r_pred_amazon_lobo <- rast(r_amazon_cropped[["uoi"]])
+    names(r_pred_amazon_lobo) <- "zscore_mae"
+    values(r_pred_amazon_lobo) <- NA
+    r_pred_amazon_lobo[amazon_cells_lobo$cell] <- as.vector(amazon_cells_lobo$zscore_mae)
+    
+    # AIC prediction
+    amazon_cells_aic <- as.data.frame(r_amazon_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+    amazon_cells_aic$basin <- factor("Amazon", levels = c("Amazon", "Congo", "SE_Asia"))
+    amazon_cells_aic$pred <- predict(m_best_aic, newdata = amazon_cells_aic, type = "response")
+    amazon_cells_aic$zscore_mae <- (log1p(amazon_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
+    
+    r_pred_amazon_aic <- rast(r_amazon_cropped[["uoi"]])
+    names(r_pred_amazon_aic) <- "zscore_mae"
+    values(r_pred_amazon_aic) <- NA
+    r_pred_amazon_aic[amazon_cells_aic$cell] <- as.vector(amazon_cells_aic$zscore_mae)
+    
+    # --- SE Asia predictions ---
+    r_pred_seasia_lobo <- NULL
+    r_pred_seasia_aic <- NULL
     if (!is.null(r_seasia)) {
-      seasia_cells <- as.data.frame(r_seasia_cropped[[covariate_bands]], cells = TRUE, xy = TRUE, na.rm = TRUE)
-      if (nrow(seasia_cells) > 0) {
-        seasia_cells$pred <- predict(m_best, newdata = seasia_cells, type = "response")
-        seasia_cells$zscore_mae <- (log1p(seasia_cells$pred) - mean_log_y_obs) / OOS_MAE_log
+      # LOBO prediction
+      seasia_cells_lobo <- as.data.frame(r_seasia_cropped[[covariate_bands_lobo]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+      if (nrow(seasia_cells_lobo) > 0) {
+        seasia_cells_lobo$pred <- predict(m_best, newdata = seasia_cells_lobo, type = "response")
+        seasia_cells_lobo$zscore_mae <- (log1p(seasia_cells_lobo$pred) - mean_log_y_obs) / OOS_MAE_log
         
-        r_pred_seasia <- rast(r_seasia_cropped[["uoi"]])
-        names(r_pred_seasia) <- "zscore_mae"
-        values(r_pred_seasia) <- NA
-        r_pred_seasia[seasia_cells$cell] <- as.vector(seasia_cells$zscore_mae)
+        r_pred_seasia_lobo <- rast(r_seasia_cropped[["uoi"]])
+        names(r_pred_seasia_lobo) <- "zscore_mae"
+        values(r_pred_seasia_lobo) <- NA
+        r_pred_seasia_lobo[seasia_cells_lobo$cell] <- as.vector(seasia_cells_lobo$zscore_mae)
+      }
+      
+      # AIC prediction
+      seasia_cells_aic <- as.data.frame(r_seasia_cropped[[covariate_bands_aic]], cells = TRUE, xy = TRUE, na.rm = TRUE)
+      if (nrow(seasia_cells_aic) > 0) {
+        seasia_cells_aic$basin <- factor("SE_Asia", levels = c("Amazon", "Congo", "SE_Asia"))
+        seasia_cells_aic$pred <- predict(m_best_aic, newdata = seasia_cells_aic, type = "response")
+        seasia_cells_aic$zscore_mae <- (log1p(seasia_cells_aic$pred) - mean_log_y_obs) / OOS_MAE_log
+        
+        r_pred_seasia_aic <- rast(r_seasia_cropped[["uoi"]])
+        names(r_pred_seasia_aic) <- "zscore_mae"
+        values(r_pred_seasia_aic) <- NA
+        r_pred_seasia_aic[seasia_cells_aic$cell] <- as.vector(seasia_cells_aic$zscore_mae)
       }
     }
     
@@ -261,61 +308,74 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         title.position = "top",
         title.hjust = 0.5,
         label.position = "bottom",
-        barwidth = unit(8.5, "cm"),
+        barwidth = unit(10.0, "cm"),
         barheight = unit(0.24, "cm")
       )
     )
     
-    # Panel A: Amazon Map (with solid soft-grey land borders drawn first)
-    p_amazon <- ggplot() +
+    # --- RENDER AMAZON PANELS ---
+    # Column 1 (LOBO)
+    p_amazon_lobo <- ggplot() +
       geom_spatvector(data = countries_amazon, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
-      geom_spatraster(data = r_pred_amazon, aes(fill = zscore_mae)) +
+      geom_spatraster(data = r_pred_amazon_lobo, aes(fill = zscore_mae)) +
       fill_scale
-    
     if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
-      p_amazon <- p_amazon + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
+      p_amazon_lobo <- p_amazon_lobo + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
-    
-    p_amazon <- p_amazon +
+    p_amazon_lobo <- p_amazon_lobo +
       geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(
-        legend.position = "none",
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.grid = element_blank()
-      ) +
-      labs(
-        title = sprintf("A. Neotropical Basin (Amazon, %s)", map_title_suffix)
-      )
-    
-    # Panel B: Congo Map (with solid soft-grey land borders drawn first)
-    p_congo <- ggplot() +
-      geom_spatvector(data = countries_congo, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
-      geom_spatraster(data = r_pred_congo, aes(fill = zscore_mae)) +
+      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+      labs(title = sprintf("A. Neotropical Basin (Amazon LOBO Best, %s)", map_title_suffix))
+      
+    # Column 2 (AIC)
+    p_amazon_aic <- ggplot() +
+      geom_spatvector(data = countries_amazon, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatraster(data = r_pred_amazon_aic, aes(fill = zscore_mae)) +
       fill_scale
-    
-    if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
-      p_congo <- p_congo + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
+    if (!is.null(pas_amazon_cropped) && nrow(pas_amazon_cropped) > 0) {
+      p_amazon_aic <- p_amazon_aic + geom_spatvector(data = pas_amazon_cropped, fill = NA, color = "black", linewidth = 0.12)
     }
-    
-    p_congo <- p_congo +
+    p_amazon_aic <- p_amazon_aic +
+      geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
+      coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
+      t_theme +
+      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+      labs(title = sprintf("D. Neotropical Basin (Amazon AIC Best, %s)", map_title_suffix))
+      
+    # --- RENDER CONGO PANELS ---
+    # Column 1 (LOBO)
+    p_congo_lobo <- ggplot() +
+      geom_spatvector(data = countries_congo, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatraster(data = r_pred_congo_lobo, aes(fill = zscore_mae)) +
+      fill_scale
+    if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
+      p_congo_lobo <- p_congo_lobo + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
+    }
+    p_congo_lobo <- p_congo_lobo +
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      theme(
-        legend.position = "none",
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.grid = element_blank()
-      ) +
-      labs(
-        title = sprintf("B. Afrotropical Basin (Congo, %s)", map_title_suffix)
-      )
+      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+      labs(title = sprintf("B. Afrotropical Basin (Congo LOBO Best, %s)", map_title_suffix))
       
+    # Column 2 (AIC)
+    p_congo_aic <- ggplot() +
+      geom_spatvector(data = countries_congo, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+      geom_spatraster(data = r_pred_congo_aic, aes(fill = zscore_mae)) +
+      fill_scale
+    if (!is.null(pas_congo_cropped) && nrow(pas_congo_cropped) > 0) {
+      p_congo_aic <- p_congo_aic + geom_spatvector(data = pas_congo_cropped, fill = NA, color = "black", linewidth = 0.12)
+    }
+    p_congo_aic <- p_congo_aic +
+      geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
+      coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
+      t_theme +
+      theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+      labs(title = sprintf("E. Afrotropical Basin (Congo AIC Best, %s)", map_title_suffix))
+      
+    # --- RENDER SE ASIA PANELS ---
     # Crop blank SE Asia protected areas
     pa_seasia_file <- file.path(outputs_dir, "WDPA_seasia_500km2.gpkg")
     pas_seasia_cropped <- NULL
@@ -328,73 +388,101 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       }
     }
     
-    # Panel C: SE Asia Map (with solid soft-grey land borders drawn first)
-    if (!is.null(r_pred_seasia)) {
-      p_seasia <- ggplot() +
+    # Column 1 (LOBO)
+    if (!is.null(r_pred_seasia_lobo)) {
+      p_seasia_lobo <- ggplot() +
         geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
-        geom_spatraster(data = r_pred_seasia, aes(fill = zscore_mae)) +
+        geom_spatraster(data = r_pred_seasia_lobo, aes(fill = zscore_mae)) +
         fill_scale
-      
       if (!is.null(pas_seasia_cropped) && nrow(pas_seasia_cropped) > 0) {
-        p_seasia <- p_seasia + geom_spatvector(data = pas_seasia_cropped, fill = NA, color = "black", linewidth = 0.12)
+        p_seasia_lobo <- p_seasia_lobo + geom_spatvector(data = pas_seasia_cropped, fill = NA, color = "black", linewidth = 0.12)
       }
-      
       mcps_seasia <- mcps[mcps$region == "SE_Asia", ]
       if (nrow(mcps_seasia) > 0) {
-        p_seasia <- p_seasia + geom_spatvector(data = mcps_seasia, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed")
+        p_seasia_lobo <- p_seasia_lobo + geom_spatvector(data = mcps_seasia, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed")
       }
-      
-      p_seasia <- p_seasia +
+      p_seasia_lobo <- p_seasia_lobo +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(
-          legend.position = "bottom",
-          legend.title = element_text(size = 6.5, face = "bold"),
-          legend.text = element_text(size = 5.5),
-          legend.margin = margin(t = 2, b = 2, unit = "pt"),
-          axis.text = element_blank(),
-          axis.ticks = element_blank(),
-          axis.title = element_blank(),
-          panel.grid = element_blank()
-        ) +
-        labs(
-          title = sprintf("C. Indo-Malayan Basin (Southeast Asia, %s)", map_title_suffix)
-        )
+        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+        labs(title = sprintf("C. Indo-Malayan Basin (Southeast Asia LOBO Best, %s)", map_title_suffix))
     } else {
       countries_seasia <- crop(project(countries_v, crs(r_congo_cropped)), ext_seasia_map)
-      p_seasia <- ggplot() +
+      p_seasia_lobo <- ggplot() +
         geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        theme(
-          legend.position = "none",
-          axis.text = element_blank(),
-          axis.ticks = element_blank(),
-          axis.title = element_blank(),
-          panel.grid = element_blank(),
-          panel.background = element_rect(fill = "#FFFFFF", color = NA)
-        ) +
+        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank(), panel.background = element_rect(fill = "#FFFFFF", color = NA)) +
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
-        labs(
-          title = sprintf("C. Indo-Malayan Basin (Southeast Asia, %s)", map_title_suffix)
-        )
+        labs(title = sprintf("C. Indo-Malayan Basin (Southeast Asia LOBO Best, %s)", map_title_suffix))
     }
     
-    # Combine maps vertically
-    fig_combined <- cowplot::plot_grid(
-      p_amazon, p_congo, p_seasia,
+    # Column 2 (AIC)
+    if (!is.null(r_pred_seasia_aic)) {
+      p_seasia_aic <- ggplot() +
+        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        geom_spatraster(data = r_pred_seasia_aic, aes(fill = zscore_mae)) +
+        fill_scale
+      if (!is.null(pas_seasia_cropped) && nrow(pas_seasia_cropped) > 0) {
+        p_seasia_aic <- p_seasia_aic + geom_spatvector(data = pas_seasia_cropped, fill = NA, color = "black", linewidth = 0.12)
+      }
+      mcps_seasia <- mcps[mcps$region == "SE_Asia", ]
+      if (nrow(mcps_seasia) > 0) {
+        p_seasia_aic <- p_seasia_aic + geom_spatvector(data = mcps_seasia, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed")
+      }
+      p_seasia_aic <- p_seasia_aic +
+        coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
+        t_theme +
+        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()) +
+        labs(title = sprintf("F. Indo-Malayan Basin (Southeast Asia AIC Best, %s)", map_title_suffix))
+    } else {
+      countries_seasia <- crop(project(countries_v, crs(r_congo_cropped)), ext_seasia_map)
+      p_seasia_aic <- ggplot() +
+        geom_spatvector(data = countries_seasia, fill = "#F2F4F4", color = "grey80", linewidth = 0.25) +
+        coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
+        t_theme +
+        theme(legend.position = "none", axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank(), panel.background = element_rect(fill = "#FFFFFF", color = NA)) +
+        annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
+        labs(title = sprintf("F. Indo-Malayan Basin (Southeast Asia AIC Best, %s)", map_title_suffix))
+    }
+    
+    # --- 8. Combine Panels into a Symmetrical 3-Row x 2-Column Grid ---
+    fig_grid <- cowplot::plot_grid(
+      p_amazon_lobo, p_amazon_aic,
+      p_congo_lobo,  p_congo_aic,
+      p_seasia_lobo, p_seasia_aic,
+      ncol = 2,
+      align = "vh",
+      axis = "tblr"
+    )
+    
+    # Unified Horizontal Shared Legend at the bottom
+    # We use a dummy plot containing the fill scale to draw the perfect legend object
+    legend_obj <- ggplot(congo_cells_lobo) +
+      geom_point(aes(x = uoi, y = pred, fill = zscore_mae)) +
+      fill_scale +
+      theme_pnas(base_size = 7.5) +
+      theme(
+        legend.position = "bottom",
+        legend.title = element_text(size = 7.0, face = "bold"),
+        legend.text = element_text(size = 6.0)
+      )
+    shared_legend <- cowplot::get_legend(legend_obj)
+    
+    # Assemble final double-column figure (Grid + Legend)
+    fig_final <- cowplot::plot_grid(
+      fig_grid,
+      shared_legend,
       ncol = 1,
-      align = "v",
-      axis = "lr",
-      rel_heights = c(1.0, 1.0, 1.15)
+      rel_heights = c(1.0, 0.08)
     )
     
     # Save PNG and PDF
     png_file <- file.path(figures_dir, sprintf("%s.png", output_base_name))
     pdf_file <- file.path(figures_dir, sprintf("%s.pdf", output_base_name))
     
-    ggsave(filename = png_file, plot = fig_combined, width = 12.0, height = 24.0, units = "cm", dpi = 600, bg = "white")
-    ggsave(filename = pdf_file, plot = fig_combined, width = 12.0, height = 24.0, units = "cm", dpi = 600, bg = "white")
+    ggsave(filename = png_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
+    ggsave(filename = pdf_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
     
     # Mirror to active brain artifacts folder
     brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
@@ -406,7 +494,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     
     cat(sprintf("✓ Successfully saved map figure to: %s\n\n", png_file))
     
-    return(list(congo = r_pred_congo, amazon = r_pred_amazon))
+    return(list(congo = r_pred_congo_lobo, amazon = r_pred_amazon_lobo))
   }
   
   # --- 3. Run Map Projections for each scale ---

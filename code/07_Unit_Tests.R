@@ -177,9 +177,15 @@ run_test("run_predictive_biomass_mapping signature check", quote({
 }))
 
 run_test("run_predictive_biomass_mapping successfully projects and outputs rasters and figures", quote({
-  # Copy the best model RDS to the temp folder first so mapping function can read it
+  # Copy the best model RDS, AIC best model RDS, and selection table to the outputs folder first so mapping function can read it
   file.copy(file.path(temp_out_dir, "framework2_best_model.RDS"),
             file.path("outputs", "framework2_best_model.RDS"),
+            overwrite = TRUE)
+  file.copy(file.path(temp_out_dir, "framework2_best_model_aic.RDS"),
+            file.path("outputs", "framework2_best_model_aic.RDS"),
+            overwrite = TRUE)
+  file.copy(file.path(temp_out_dir, "framework2_covariate_model_selection.csv"),
+            file.path("outputs", "framework2_covariate_model_selection.csv"),
             overwrite = TRUE)
   
   rasts <- run_predictive_biomass_mapping(scales = c(5000, 20000), outputs_dir = "outputs", figures_dir = temp_fig_dir)

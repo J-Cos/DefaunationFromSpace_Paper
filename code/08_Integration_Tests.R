@@ -47,6 +47,8 @@ unlink("figures/figure3.png")
 unlink("figures/figure3.pdf")
 unlink("figures/figure4.png")
 unlink("figures/figure4.pdf")
+unlink("figures/figure4_alternate_aic_full.png")
+unlink("figures/figure4_alternate_aic_full.pdf")
 unlink("figures/figureS5.png")
 unlink("figures/figureS5.pdf")
 unlink("figures/figure5.png")
@@ -111,6 +113,7 @@ checks <- c(
   verify_file("figures/figureS1.png", "Manuscript Figure S1 (Bounding Boxes)"),
   verify_file("figures/figure3.png", "Manuscript Figure 3 (F1)"),
   verify_file("figures/figure4.png", "Manuscript Figure 4 (F2)"),
+  verify_file("figures/figure4_alternate_aic_full.png", "Manuscript Figure 4 Alternate (AIC-selected)"),
   verify_file("figures/figureS5.png", "Predicted Biomass Map (5km, Fig S5)"),
   verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)"),
   verify_file("figures/figure1_gedi_pipeline.png", "Manuscript Figure 1 (GEDI Pipeline)"),

@@ -387,32 +387,15 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   ordered_exprs <- plot_sel_df$plotmath_label[match(levels(plot_sel_df$CleanName), plot_sel_df$CleanName)]
   parsed_labels <- parse(text = ordered_exprs)
   
-  p_b <- ggplot(plot_sel_df, aes(x = R2, y = CleanName, fill = delta_AIC)) +
-    geom_bar(stat = "identity", width = 0.7, color = "black", linewidth = 0.2) +
-    scale_y_discrete(labels = parsed_labels) +
-    scale_fill_gradientn(
-      colors = c("#0D47A1", "#1976D2", "#64B5F6", "#FFA726", "#F57C00", "#D84315"),
-      name = "Delta AIC"
-    ) +
-    labs(
-      title = "C. Covariate Model Selection (Beta Regression)",
-      x = "Adjusted Pseudo-R² (Goodness of Fit)",
-      y = "Model Formulation"
-    ) +
-    theme_pnas(base_size = 7.5) +
-    theme(
-      legend.position = "right",
-      plot.title = element_text(face = "bold", size = 8.5, margin = margin(b = 6, t = 4)),
-      axis.text.y = element_text(size = 6.5),
-      axis.title.x = element_text(margin = margin(t = 4)),
-      axis.title.y = element_text(margin = margin(r = 4)),
-      legend.title = element_text(size = 6.0, face = "bold"),
-      legend.text = element_text(size = 5.5),
-      legend.key.width = unit(0.15, "cm"),
-      legend.key.height = unit(0.35, "cm"),
-      legend.margin = margin(l = 2, r = 2, unit = "pt"),
-      plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
-    )
+  p_b <- plot_model_selection_bars(
+    plot_df = plot_sel_df,
+    x_var = "R2",
+    fill_var = "delta_AIC",
+    fill_label = "Delta AIC",
+    x_label = "Adjusted Pseudo-R² (Goodness of Fit)",
+    plot_title = "C. Covariate Model Selection (Beta Regression)",
+    parsed_labels = parsed_labels
+  )
   
   # --- Panel C: Residual Diagnostic vs Temporal Offset ---
   joined_data$residuals <- residuals(best_model, type = "deviance")

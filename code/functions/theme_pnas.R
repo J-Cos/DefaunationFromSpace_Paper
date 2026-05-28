@@ -242,3 +242,55 @@ save_pnas <- function(plot, filename, type = c("single", "double"),
   
   invisible(filename)
 }
+
+#' Plot Model Selection Bar Chart
+#'
+#' A unified, highly DRY plotting function to render model selection bar charts
+#' for both Framework 1 and Framework 2 (LOBO and AIC variants).
+#'
+#' @param plot_df Data frame containing the models to display.
+#' @param x_var Character. Name of the column to map to the x-axis (e.g., "R2", "Full_DevExpl", "delta_AIC").
+#' @param fill_var Character. Name of the column to map to the fill color (e.g., "delta_AIC", "OOS_MAE_log", "Full_DevExpl").
+#' @param fill_label Character. Title for the fill color legend.
+#' @param x_label Character. Title for the x-axis.
+#' @param plot_title Character. Title for the panel.
+#' @param colors Character vector. Colors for the gradient (default is the standard deep blue to red palette).
+#' @param parsed_labels Parsed plotmath expressions for the y-axis labels.
+#'
+#' @return A ggplot2 plot object.
+#' @export
+plot_model_selection_bars <- function(plot_df, x_var, fill_var, fill_label, x_label, plot_title,
+                                      colors = c("#0D47A1", "#1976D2", "#64B5F6", "#FFA726", "#F57C00", "#D84315"),
+                                      parsed_labels = NULL) {
+  p <- ggplot(plot_df, aes(x = .data[[x_var]], y = CleanName, fill = .data[[fill_var]])) +
+    geom_bar(stat = "identity", width = 0.7, color = "black", linewidth = 0.2)
+  
+  if (!is.null(parsed_labels)) {
+    p <- p + scale_y_discrete(labels = parsed_labels)
+  }
+  
+  p <- p +
+    scale_fill_gradientn(colors = colors, name = fill_label) +
+    labs(
+      title = plot_title,
+      x = x_label,
+      y = "Model Formulation"
+    ) +
+    theme_pnas(base_size = 7.5) +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(face = "bold", size = 8.5, margin = margin(b = 6, t = 4)),
+      axis.text.y = element_text(size = 6.5),
+      axis.title.x = element_text(margin = margin(t = 4)),
+      axis.title.y = element_text(margin = margin(r = 4)),
+      legend.title = element_text(size = 6.0, face = "bold"),
+      legend.text = element_text(size = 5.0),
+      legend.key.width = unit(0.15, "cm"),
+      legend.key.height = unit(0.25, "cm"),
+      legend.margin = margin(l = 2, r = 2, unit = "pt"),
+      plot.margin = margin(t = 6, r = 4, b = 6, l = 4, unit = "pt")
+    )
+  
+  return(p)
+}
+
