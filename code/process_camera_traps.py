@@ -492,6 +492,7 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
     # Large mammal contributions
     usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
     usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
+    usable["biomass_contrib_gt1000"] = np.where(usable["body_mass_kg"] > 1000.0, usable["biomass_contrib"], 0.0)
 
     agg_dict = {
         "n_species": ("taxon_key", "nunique"),
@@ -500,6 +501,7 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
         "M_H_index": ("metabolism_contrib", "sum"),
         "B_H_gt50": ("biomass_contrib_gt50", "sum"),
         "B_H_gt100": ("biomass_contrib_gt100", "sum"),
+        "B_H_gt1000": ("biomass_contrib_gt1000", "sum"),
         "dominant_species": ("common_name", lambda x: str(x.dropna().mode().iloc[0]) if len(x.dropna().mode()) > 0 else ""),
         "species_list": ("common_name", lambda x: "; ".join(sorted(x.dropna().astype(str).unique()))),
     }
@@ -526,6 +528,7 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
     site["M_H_index"] = site["M_H_index"].fillna(0.0)
     site["B_H_gt50"] = site["B_H_gt50"].fillna(0.0)
     site["B_H_gt100"] = site["B_H_gt100"].fillna(0.0)
+    site["B_H_gt1000"] = site["B_H_gt1000"].fillna(0.0)
     site["megafauna_fraction"] = site["megafauna_fraction"].fillna(0.0)
     site["dominant_species"] = site["dominant_species"].fillna("")
     site["species_list"] = site["species_list"].fillna("")
@@ -655,6 +658,7 @@ def main():
         print(f"  Metabolism Index range: {sub['M_H_index'].min():.2f} – {sub['M_H_index'].max():.2f}")
         print(f"  Median Biomass >50kg:   {sub['B_H_gt50'].median():.2f}")
         print(f"  Median Biomass >100kg:  {sub['B_H_gt100'].median():.2f}")
+        print(f"  Median Biomass >1000kg: {sub['B_H_gt1000'].median():.2f}")
         print(f"  Mean Megafauna %:       {sub['megafauna_fraction'].mean():.1f}%")
     print(f"{'='*60}")
 
