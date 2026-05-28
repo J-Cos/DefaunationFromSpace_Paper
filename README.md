@@ -48,6 +48,7 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 03_Framework1_Analysis.R              --> Fits Beta Regressions (UOI ~ Biomass) -> generates Figure 3 (figure3.png).
 04_Framework2_Analysis.R              --> Fits Tweedie GLMs (Biomass ~ UOI) -> generates Figure 4 (figure4.png).
 05_Predictive_Biomass_Maps.R          --> Standing biomass projection mapping at 5 km (figureS5.png) and 20 km (figure5.png).
+05b_Predictive_Columns_Correlation.R  --> Generates Supplementary Figure S6 correlating template vs. calibrated models.
 06_Pipeline_Visualization.R           --> Generates GEDI & camera trap pipeline summary Figures 1 and 2.
 ```
 
@@ -63,11 +64,13 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
     Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across **52 formulations** (evaluating combinations of understory openness, elevation, and basin interactions, dynamically expanded to include all 15 regional basin variants). Integrates both **LOBOCV parsimonious** and **standard AIC** selection pathways in a unified framework, automatically skipping out-of-sample folds containing `basin` levels to prevent runtime errors. Generates both the main generalizability **Figure 4** (`figures/figure4.png` / `figure4.pdf`) and the alternate absolute fit **Figure 4** (`figures/figure4_alternate_aic_full.png` / `figure4_alternate_aic_full.pdf`) using a DRY, highly parametric plotting pipeline, and saves both best models as RDS objects.
 5.  **[code/05_Predictive_Biomass_Maps.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/05_Predictive_Biomass_Maps.R):**  
     Consolidates biomass prediction mapping. Projects both the LOBO-selected parsimonious best model (`M2.1: UOI Only`) and the AIC-selected basin-calibrated best model (`M2.17b: UOI * Basin + Elev`) across the tropical forest landscapes at both the **5 km** (supplementary map, **Figure S5 / figureS5.png**) and **20 km** (peak predictive scale, **Figure 5 / figure5.png**) resolutions in a side-by-side, symmetrical two-column layout. Standardizes all predictions in out-of-sample log-scale MAE units to allow direct comparison of the universal biophysical footprint (Column 1) vs. basin-calibrated biogeographical shift models (Column 2).
-6.  **[code/06_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Pipeline_Visualization.R):**  
+6.  **[code/05b_Predictive_Columns_Correlation.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/05b_Predictive_Columns_Correlation.R):**  
+    Generates Supplementary Figure S6 (`figures/figureS6.png` and `figures/figureS6.pdf`) correlating the predictions from the LOBO-selected template model and the AIC-selected basin-calibrated model across all tropical forest pixels at the 20 km scale. Computes and displays both Pearson and Spearman rank correlation coefficients, providing quantitative insights into regional predictive shifts.
+7.  **[code/06_Pipeline_Visualization.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/06_Pipeline_Visualization.R):**  
     Generates premium, PNAS-style multipanel manuscript **Figure 1 (figure1_gedi_pipeline.png)** and **Figure 2 (figure2_camera_trap_pipeline.png)**, which visually synthesize log-scale GEDI Shot Count distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
-7.  **[code/07_Unit_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Unit_Tests.R):**  
+8.  **[code/07_Unit_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/07_Unit_Tests.R):**  
     A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
-8.  **[code/08_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/08_Integration_Tests.R):**  
+9.  **[code/08_Integration_Tests.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/08_Integration_Tests.R):**  
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `06`) sequentially on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, vector GPKGs, CSV tables, and manuscript figures.
 9.  **[code/process_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/process_camera_traps.py):**  
     Ingests and cleans raw Wildlife Insights camera trap packages from Congo and Amazon basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, and computes corrected Relative Abundance Indices (RAI) and site-level standing mammal biomass ($B_H$) and metabolism ($M_H$) indices, including sub-components above 100 kg (`B_H_gt100`) and 1000 kg (`B_H_gt1000`).
@@ -147,6 +150,7 @@ pip install earthengine-api geemap numpy pandas
 | **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `06`) executing completely warning-free. |
 | **Principled Weighting Scenarios** | ✅ Complete | Combined precision-temporal weights (`w_combined_norm`) validated as statistically superior to raw shot count (`gedi_n`). |
 | **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3**, **Figure 4**, and alternate **Figure 4 (AIC-selected)**, 6-panel **Figures 1 and 2**, predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Figure S5**), and regional bounding boxes (**Figure S1**) successfully generated. |
+| **Figure S6 (Correlation Plot)** | ✅ Complete | Regional faceted Pearson and Spearman rank correlation plot between template and calibrated model predictions successfully generated as `figureS6.png/pdf`. |
 | **Figure S1 (Regional Bounding Boxes)** | ✅ Complete | Shows $15^\circ\text{S}$ to $15^\circ\text{N}$ bounding boxes with IUCN elephant range overlays colored by status, saving `figureS1.png/pdf` and `outputs/elephant_ranges.gpkg`. |
 | **Functional Unit Testing Suite** | ✅ Complete | 19 functional assertions covering 100% of pipeline modules in `code/07_Unit_Tests.R` passing 100% successfully. |
 | **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/08_Integration_Tests.R`. |

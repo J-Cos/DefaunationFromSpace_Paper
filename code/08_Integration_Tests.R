@@ -53,6 +53,8 @@ unlink("figures/figureS5.png")
 unlink("figures/figureS5.pdf")
 unlink("figures/figure5.png")
 unlink("figures/figure5.pdf")
+unlink("figures/figureS6.png")
+unlink("figures/figureS6.pdf")
 unlink("figures/figure1_gedi_pipeline.png")
 unlink("figures/figure2_camera_trap_pipeline.png")
 cat("  Old files cleaned successfully.\n\n")
@@ -86,6 +88,11 @@ cat("--- Step 5: Running Predictive Biomass Mapping (05_Predictive_Biomass_Maps.
 source("code/05_Predictive_Biomass_Maps.R")
 cat("Step 5 Completed successfully.\n\n")
 
+# Step 5b: Predictive columns correlation plotting (Supplementary Figure S6)
+cat("--- Step 5b: Running Model Predictions Correlation Plotting (05b_Predictive_Columns_Correlation.R) ---\n")
+source("code/05b_Predictive_Columns_Correlation.R")
+cat("Step 5b Completed successfully.\n\n")
+
 # Step 6: Pipeline Visualization
 cat("--- Step 6: Running Pipeline Visualization (06_Pipeline_Visualization.R) ---\n")
 source("code/06_Pipeline_Visualization.R")
@@ -116,6 +123,7 @@ checks <- c(
   verify_file("figures/figure4_alternate_aic_full.png", "Manuscript Figure 4 Alternate (AIC-selected)"),
   verify_file("figures/figureS5.png", "Predicted Biomass Map (5km, Fig S5)"),
   verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)"),
+  verify_file("figures/figureS6.png", "Predictive Columns Correlation Plot (Fig S6)"),
   verify_file("figures/figure1_gedi_pipeline.png", "Manuscript Figure 1 (GEDI Pipeline)"),
   verify_file("figures/figure2_camera_trap_pipeline.png", "Manuscript Figure 2 (Camera Trap Pipeline)")
 )
