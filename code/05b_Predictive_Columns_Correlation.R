@@ -117,7 +117,7 @@ predict_basin_df <- function(r_stack, basin_name) {
     select(x, y, z_lobo) %>%
     inner_join(df_aic %>% select(x, y, z_aic), by = c("x", "y"))
   
-  res_df$basin <- factor(basin_name, levels = c("Amazon", "Congo", "SE_Asia"))
+  res_df$basin <- factor(basin_name, levels = c("Congo", "Amazon", "SE_Asia"))
   return(res_df[, c("basin", "z_lobo", "z_aic")])
 }
 
@@ -143,7 +143,7 @@ rho_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], 
 
 # Create annotation data frame for regional correlations (placed in top-left corner)
 anno_df <- data.frame(
-  basin = factor(c("Congo", "Amazon", "SE_Asia"), levels = c("Amazon", "Congo", "SE_Asia")),
+  basin = factor(c("Congo", "Amazon", "SE_Asia"), levels = c("Congo", "Amazon", "SE_Asia")),
   z_lobo = c(-2.3, -2.3, -2.3),
   z_aic = c(2.3, 2.3, 2.3),
   label = c(
@@ -170,7 +170,7 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
     fontface = "bold",
     size = 2.8
   ) +
-  scale_color_manual(values = c("Amazon" = "#2980b9", "Congo" = "#27ae60", "SE_Asia" = "#d35400")) +
+  scale_color_manual(values = c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")) +
   facet_wrap(~ basin, ncol = 3) +
   labs(
     title = "Correlation Between Biophysical Template & Basin-Calibrated Models",

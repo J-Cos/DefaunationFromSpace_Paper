@@ -332,7 +332,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         axis.ticks = element_blank(),
         axis.title = element_blank(),
         panel.grid = element_blank(),
-        panel.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "#EBF5FB", color = NA),
         plot.background = element_rect(fill = "white", color = NA)
       )
     
@@ -383,7 +383,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_amazon, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      labs(title = "D")
+      labs(title = "B")
       
     # --- RENDER CONGO PANELS ---
     # Column 1 (LOBO)
@@ -399,7 +399,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      labs(title = "B")
+      labs(title = "C")
       
     # Column 2 (AIC)
     p_congo_aic <- ggplot() +
@@ -414,7 +414,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       geom_spatvector(data = mcps_congo, fill = NA, color = "black", linewidth = 0.4, linetype = "dashed") +
       coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
       t_theme +
-      labs(title = "E")
+      labs(title = "D")
       
     # --- RENDER SE ASIA PANELS ---
     # Crop blank SE Asia protected areas
@@ -442,7 +442,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       p_seasia_lobo <- p_seasia_lobo +
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
-        labs(title = "C")
+        labs(title = "E")
     } else {
       countries_seasia <- crop(project(countries_v, crs(r_congo_cropped)), ext_seasia_map)
       p_seasia_lobo <- ggplot() +
@@ -450,7 +450,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
         t_theme +
         annotate("text", x = 115, y = 0, label = "Southeast Asia: Stack Data Missing", fontface = "italic", size = 2.4, color = "grey40") +
-        labs(title = "C")
+        labs(title = "E")
     }
     
     # Column 2 (AIC)

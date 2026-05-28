@@ -91,7 +91,7 @@ if (!is.null(combined_proboscids)) {
   cat("✓ Successfully saved combined elephant range vector to outputs/elephant_ranges.gpkg\n")
   
   # Mirror GPKG in brain artifacts folder
-  brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
+  brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
   if (file.exists(brain_artifacts_dir)) {
     file.copy(gpkg_path, file.path(brain_artifacts_dir, "elephant_ranges.gpkg"), overwrite = TRUE)
     cat("✓ Mirrored elephant_ranges.gpkg to brain artifacts folder.\n")
@@ -211,7 +211,7 @@ ggsave(fig_path_png_local, plot = col_figure, width = 12.0, height = 24.0, units
 ggsave(fig_path_pdf_local, plot = col_figure, width = 12.0, height = 24.0, units = "cm", dpi = 300, bg = "white")
 
 # Mirror in brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/913e5cea-7c99-4b21-8124-ea8455da8457"
+brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
 if (file.exists(brain_artifacts_dir)) {
   file.copy(fig_path_png_local, file.path(brain_artifacts_dir, "figureS1.png"), overwrite = TRUE)
   file.copy(fig_path_pdf_local, file.path(brain_artifacts_dir, "figureS1.pdf"), overwrite = TRUE)
