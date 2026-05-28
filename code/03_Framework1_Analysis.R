@@ -72,10 +72,32 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     "M38: Biomass * Basin + Forest"          = uoi ~ B_H_index * basin + forest_fraction
   )
 
-  # Dynamically construct models_list with two alternatives added for each base model
-  models_list <- list()
+  # Dynamically construct full set of base formulas, adding elephant alternates for any basin models
+  expanded_base_formulas <- list()
   for (name in names(base_formulas)) {
     f <- base_formulas[[name]]
+    expanded_base_formulas[[name]] <- f
+    
+    # If the formula contains 'basin', create the ElephantPossible and ElephantStrict alternates
+    if ("basin" %in% all.vars(f)) {
+      # 1. Elephant Possible
+      name_possible <- gsub("Basin", "ElephantPossible", name)
+      f_str_possible <- deparse(f)
+      f_str_possible <- gsub("basin", "elephant_present_possible", f_str_possible)
+      expanded_base_formulas[[name_possible]] <- as.formula(f_str_possible)
+      
+      # 2. Elephant Strict
+      name_strict <- gsub("Basin", "ElephantStrict", name)
+      f_str_strict <- deparse(f)
+      f_str_strict <- gsub("basin", "elephant_present_strict", f_str_strict)
+      expanded_base_formulas[[name_strict]] <- as.formula(f_str_strict)
+    }
+  }
+
+  # Dynamically construct models_list with two alternatives added for each expanded base model
+  models_list <- list()
+  for (name in names(expanded_base_formulas)) {
+    f <- expanded_base_formulas[[name]]
     
     # Base model
     models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
@@ -232,8 +254,21 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       )
     
   } else {
+    # Detect which elephant variable is in the formula
+    uses_ele_strict <- "elephant_present_strict" %in% best_formula_vars
+    uses_ele_possible <- "elephant_present_possible" %in% best_formula_vars
+    
+    ele_col <- if (uses_ele_strict) {
+      "elephant_present_strict"
+    } else if (uses_ele_possible) {
+      "elephant_present_possible"
+    } else {
+      "elephant_present"
+    }
+    
     # --- Elephant-based fit lines (2 lines: Absent, Present) ---
-    pred_df_absent <- data.frame(B_H_index = biomass_seq, elephant_present = factor("Absent", levels = c("Absent", "Present")))
+    pred_df_absent <- data.frame(B_H_index = biomass_seq)
+    pred_df_absent[[ele_col]] <- factor("Absent", levels = c("Absent", "Present"))
     pred_df_absent$basin <- factor("Amazon", levels = levels(joined_data$basin))
     pred_df_absent$megafaunaHistory <- factor("NewWorld", levels = levels(joined_data$megafaunaHistory))
     for (cv in covs_to_fill) {
@@ -242,7 +277,8 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     pred_df_absent$fit_link <- predict(best_model, newdata = pred_df_absent, type = "link")
     pred_df_absent$fit <- plogis(pred_df_absent$fit_link)
     
-    pred_df_present <- data.frame(B_H_index = biomass_seq, elephant_present = factor("Present", levels = c("Absent", "Present")))
+    pred_df_present <- data.frame(B_H_index = biomass_seq)
+    pred_df_present[[ele_col]] <- factor("Present", levels = c("Absent", "Present"))
     pred_df_present$basin <- factor("Congo", levels = levels(joined_data$basin))
     pred_df_present$megafaunaHistory <- factor("OldWorld", levels = levels(joined_data$megafaunaHistory))
     for (cv in covs_to_fill) {
@@ -254,9 +290,9 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     pred_plot <- rbind(pred_df_absent, pred_df_present)
     
     p_a <- ggplot() +
-      geom_point(data = joined_data, aes(x = B_H_index, y = uoi, fill = elephant_present, size = trap_days, alpha = w_temp_cluster, shape = basin),
+      geom_point(data = joined_data, aes(x = B_H_index, y = uoi, fill = .data[[ele_col]], size = trap_days, alpha = w_temp_cluster, shape = basin),
                  color = "black", stroke = 0.3) +
-      geom_line(data = pred_plot, aes(x = B_H_index, y = fit, color = elephant_present), linewidth = 0.75) +
+      geom_line(data = pred_plot, aes(x = B_H_index, y = fit, color = .data[[ele_col]]), linewidth = 0.75) +
       
       scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
       scale_color_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
@@ -283,7 +319,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   # --- Panel B: Model Selection Bar Plot ---
   # Helper function for dynamic plotmath bolding of significant variables
   format_model_label <- function(model_name, model_obj) {
-    clean_name <- gsub("^M[0-9\\.]+[a-z]*: ", "", model_name)
+    clean_name <- gsub("^M[0-9\\.]+[a-z_]*: ", "", model_name)
     clean_name <- gsub(" (Shared)", "", clean_name, fixed = TRUE)
     
     tokens <- strsplit(clean_name, "\\s+")[[1]]
@@ -292,21 +328,24 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     p_table <- summary(model_obj)$p.table
     
     var_map <- list(
-      "Biomass"       = "B_H_index",
-      "Megafauna"     = "B_H_gt100",
-      "Megafauna1000" = "B_H_gt1000",
-      "Basin"         = c("basinCongo", "basinSE_Asia"),
-      "UOI"           = "uoi",
-      "Elevation"     = "elevation",
-      "Elev"          = "elevation",
-      "Slope"         = "slope",
-      "HAND"          = "hnd",
-      "Precipitation" = "precip",
-      "Precip"        = "precip",
-      "Clay"          = "clay",
-      "Forest"        = "forest_fraction",
-      "UOI:Basin"     = "uoi:basinCongo",
-      "Biomass:Basin" = c("B_H_index:basinCongo", "B_H_index:basinSE_Asia")
+      "Biomass"          = "B_H_index",
+      "Megafauna"        = "B_H_gt100",
+      "Megafauna1000"    = "B_H_gt1000",
+      "Basin"            = c("basinCongo", "basinSE_Asia"),
+      "ElephantPossible" = "elephant_present_possiblePresent",
+      "ElephantStrict"   = "elephant_present_strictPresent",
+      "Elephant"         = "elephant_presentPresent",
+      "UOI"              = "uoi",
+      "Elevation"        = "elevation",
+      "Elev"             = "elevation",
+      "Slope"            = "slope",
+      "HAND"             = "hnd",
+      "Precipitation"    = "precip",
+      "Precip"           = "precip",
+      "Clay"             = "clay",
+      "Forest"           = "forest_fraction",
+      "UOI:Basin"        = "uoi:basinCongo",
+      "Biomass:Basin"    = c("B_H_index:basinCongo", "B_H_index:basinSE_Asia")
     )
     
     plotmath_tokens <- sapply(tokens, function(tok) {
