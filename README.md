@@ -27,7 +27,11 @@ In this work, we test two primary hypotheses:
 
 ## 2. Pipeline Architecture & Sequential Run Order
 
-The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion, geographical/temporal calibration, and statistical modeling:
+The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion, geographical/temporal calibration, and statistical modeling.
+
+> [!NOTE]
+> **One-Command R Execution**: While R scripts `01` through `06` can be run manually in sequence, **`code/08_Integration_Tests.R`** acts as a master orchestrator. Executing this single test script automatically cleans up previous deliverables, runs all R analysis steps sequentially via `source()`, and verifies the mathematical integrity of every single model output and figure.
+
 
 ```
 [Google Earth Engine Cloud Processing]
@@ -117,13 +121,13 @@ The unit test suite (`code/07_Unit_Tests.R`) verifies the behavior of all core f
     *   Model fitting functions (`fit_framework1_model`, `fit_framework2_model`) using dynamically loaded formulas.
     *   High-level script runners (`run_framework1_analysis`, `run_framework2_analysis`, `run_predictive_biomass_mapping`) ensuring correct models are outputted and figures are cleanly populated in `figures/`.
 
-### End-to-End Integration Testing
-The integration test suite (`code/08_Integration_Tests.R`) validates the end-to-end sequential pipeline by unlinking old deliverables and executing the entire processing flow sequentially on the real GEE GeoTIFF stack exports located in `outputs/EOdata/`.
-*   **Run Command**:
+### End-to-End Integration Testing & Pipeline Orchestration
+The integration test suite (**`code/08_Integration_Tests.R`**) serves as both a master pipeline runner and a validation framework. It deletes old outputs and executes the entire local processing flow sequentially (`01` through `06`) on the GEE GeoTIFF stack exports located in `outputs/EOdata/`.
+*   **Run Command (Executes Entire R Pipeline)**:
     ```bash
     Rscript code/08_Integration_Tests.R
     ```
-*   **Integrity Checks**: Verifies that all expected model parameters, elephant range GPKGs, goodness-of-fit tables, and publication-ready figures are successfully generated sequentially with non-zero sizes in `outputs/` and `figures/`.
+*   **Integrity Checks**: After execution, it performs mathematical and existence checks to verify that all regression models, elephant range GPKGs, goodness-of-fit tables, and PNAS/Supplementary figures are successfully populated in `outputs/` and `figures/` with non-zero file sizes.
 
 ---
 
