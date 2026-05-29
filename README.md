@@ -30,7 +30,9 @@ In this work, we test two primary hypotheses:
 The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion, geographical/temporal calibration, and statistical modeling.
 
 > [!NOTE]
-> **One-Command R Execution**: While R scripts `01` through `06` can be run manually in sequence, **`code/08_Integration_Tests.R`** acts as a master orchestrator. Executing this single test script automatically cleans up previous deliverables, runs all R analysis steps sequentially via `source()`, and verifies the mathematical integrity of every single model output and figure.
+> **Pipeline Verification Workflow**: 
+> 1. **Unit Testing (`code/07_Unit_Tests.R`)**: Verifies the behavioral and mathematical correctness of individual core algorithms (such as pixel extraction matrices, temporal weights, and regression formulas) in isolation. It should be run first to ensure code stability.
+> 2. **One-Command R Orchestration (`code/08_Integration_Tests.R`)**: While R scripts `01` through `06` can be run manually in sequence, `code/08_Integration_Tests.R` acts as a master orchestrator. Executing this single test script automatically cleans up previous deliverables, runs all R analysis steps sequentially via `source()`, and verifies the mathematical integrity of every single model output and figure.
 
 
 ```
