@@ -25,14 +25,7 @@ In this work, we test two primary hypotheses:
 
 ---
 
-## 2. The Multi-Scale GEDI Shot-Noise Averaging Law
-
-A central finding of this synthesis is the scale dependency of spaceborne wildlife detection:
-1.  **Native 500m Sparsity:** GEDI is a spaceborne orbital track lidar. At its raw $500\text{ m}$ native scale, track-level sampling sparsity introduces severe shot noise. While GEDI UOI and mammal biomass are biophysically coupled, standard errors at 500m are inflated, rendering local canopy relationships statistically non-significant.
-2.  **Noise-Averaging Aggregation ($5-15\text{ km}$):** Aggregating GEDI UOI to intermediate grid cells averages out fine-scale GEDI orbital shot noise and camera trap positioning variance. This noise reduction reveals highly significant biophysical relationships, matching the biological home-range scales at which mammal engineering operates.
-3.  **Spatial Dilution ($>20\text{ km}$):** Beyond $20\text{ km}$, the biotic footprint is diluted as regional environmental gradients (precipitation, soil texture, elevation) dominate canopy variance.
-
----## 3. Pipeline Architecture & Sequential Run Order
+## 2. Pipeline Architecture & Sequential Run Order
 
 The repository is structured as a fully sequential, modular, and non-hardcoded pipeline. Data processing flows from GEE cloud composite building to camera trap ingestion, geographical/temporal calibration, and statistical modeling:
 
@@ -40,7 +33,7 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 [Google Earth Engine Cloud Processing]
 01_BaseStack_GEE.ipynb (NB1)  --> Exports raw 25m GEDI L2B PAVD tiles and masks.
 02_GEDI_ForestStructure_...   --> Applies 3-layer native quality masking before aggregating to 463m.
-03_FRIP_Signals_And_Exports   --> Computes Spearman correlation and exports multi-scale GeoTIFFs to Drive.
+03_FRIP_Signals_And_Exports   --> Computes Spearman correlation and exports aggregated GeoTIFFs to Drive.
       │
       ▼
 [Local R Analysis Pipeline (code/)]
@@ -54,12 +47,12 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 09_Metabolic_Scaling_Analysis.R       --> Performs comparative Metabolic Scaling Theory (MST) and index robustness analysis.
 ```
 
-### **Script Catalog (code/)**
+### Script Catalog (code/)
 
 1.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/01_FigureS1_Regional_Bounding_Boxes.R):**  
     Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
 2.  **[code/02_Load_And_Join.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/02_Load_And_Join.R):**  
-    Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, loads the prepared elephant range GeoPackage, and saves a consolidated multi-scale environmental composite `loaded_data.rds`.
+    Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, loads the prepared elephant range GeoPackage, and saves a consolidated environmental composite `loaded_data.rds`.
 3.  **[code/03_Framework1_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/03_Framework1_Analysis.R):**  
     Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across **expanded candidate formulations** (incorporating environmental covariates, regional basin boundaries, standing biomass sub-components, and specific elephant presence alternates such as `ElephantPossible` and `ElephantStrict`). The selected best-fitting model is **`M26_possible: Biomass + ElephantPossible + Elev + Megafauna`** (`uoi ~ B_H_index + elephant_present_possible + elevation + B_H_gt100`), showing that the specific presence of large ecological engineers (elephants) is a stronger biophysical predictor of understory openness than generic regional basin boundaries. Generates the publication-quality **Figure 3 (figure3.png)** with a continuous, vibrant model selection bar plot.
 4.  **[code/04_Framework2_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/04_Framework2_Analysis.R):**  
@@ -100,7 +93,7 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 
 ---
 
-## 4. Testing Suite & Verification
+## 3. Testing Suite & Verification
 
 To guarantee scientific reproducibility and statistical rigor, the pipeline is covered by a two-tiered testing framework:
 
@@ -113,7 +106,7 @@ The unit test suite (`code/07_Unit_Tests.R`) verifies the behavior of all core f
     ```
 *   **Assertions Verified**:
     *   Pixel extraction matrices (`extract_scale_pixels`) and region bounding coordinates.
-    *   Multi-scale data calibration (`extract_scale_data`), including proper derivation of normalized precision weights (`w_uoi_norm`) and spatial homogeneity scores.
+    *   Data calibration (`extract_scale_data`), including proper derivation of normalized precision weights (`w_uoi_norm`) and spatial homogeneity scores.
     *   Survey temporal alignment weighting (`calculate_temporal_weights`).
     *   Model fitting functions (`fit_framework1_model`, `fit_framework2_model`) using dynamically loaded formulas.
     *   High-level script runners (`run_framework1_analysis`, `run_framework2_analysis`, `run_predictive_biomass_mapping`) ensuring correct models are outputted and figures are cleanly populated in `figures/`.
@@ -128,7 +121,7 @@ The integration test suite (`code/08_Integration_Tests.R`) validates the end-to-
 
 ---
 
-## 5. Requirements & Installation
+## 4. Requirements & Installation
 
 ### R Environment
 Ensure you have R version $\ge 4.1.0$ installed with the following packages:
@@ -144,14 +137,14 @@ pip install earthengine-api geemap numpy pandas
 
 ---
 
-## 6. Current Implementation Status
+## 5. Current Implementation Status
 
 | Component | Status | Verification & Deliverables |
 | :--- | :---: | :--- |
 | **01_BaseStack_GEE.ipynb** | ✅ Complete | GEDI, NPP, and Covariate stacks successfully pre-materialized in cloud assets. |
 | **02_GEDI_Aggregation_GEE.ipynb** | ✅ Complete | 3-layer high-fidelity GEDI shot-quality and slope filtering applied at 25m. |
-| **03_FRIP_Signals_Exports_GEE.ipynb** | ✅ Complete | Multi-scale GeoTIFFs successfully exported to Drive. |
-| **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `06`) executing completely warning-free. |
+| **03_FRIP_Signals_Exports_GEE.ipynb** | ✅ Complete | Aggregated GeoTIFFs successfully exported to Drive. |
+| **R Sequential Analysis Pipeline** | ✅ Complete | Clean sequential pipeline (`01` to `06` and `09`) executing completely warning-free. |
 | **Principled Weighting Scenarios** | ✅ Complete | Combined precision-temporal weights (`w_combined_norm`) validated as statistically superior to raw shot count (`gedi_n`). |
 | **Manuscript-Ready Figures** | ✅ Complete | Double-column **Figure 3**, **Supplementary Figure S2**, and alternate **Supplementary Figure S2 (AIC-selected)**, 6-panel **Figures 1 and 2**, predicted biomass maps at 20 km (**Figure 5**) and 5 km (**Supplementary Figure S3**), and regional bounding boxes (**Supplementary Figure S1**) successfully generated. |
 | **Figure S4 (Correlation Plot)** | ✅ Complete | Regional faceted Pearson and Spearman rank correlation plot between template and calibrated model predictions successfully generated as `figureS4.png/pdf`. |
@@ -161,4 +154,4 @@ pip install earthengine-api geemap numpy pandas
 | **End-to-End Integration Runner** | ✅ Complete | Validates end-to-end sequential flow on real GEE datasets and verifies all output sizes and shapes in `code/08_Integration_Tests.R`. |
 
 ---
-*Defaunation synthesis modeling completed successfully. All outputs are fully reproducible and verified.*producible and verified.*
+*Defaunation synthesis modeling completed successfully. All outputs are fully reproducible and verified.*
