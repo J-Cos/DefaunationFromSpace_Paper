@@ -1,26 +1,27 @@
 # Detecting Heterotroph Biomass from Space
 
 **Official Title**: *Detecting heterotroph biomass from space: heterotrophs leave detectable signal in GEDI plant area volume density profiles*  
-**Target Journal**: *PNAS*
+**Target Journal**: *Nature Ecology & Evolution*
 
 ---
 
-## 1. Scientific Overview & Principled Hypotheses
+## 1. Scientific Overview, Hypotheses & Key Findings
 
-This repository contains the complete R and Google Earth Engine (GEE) analysis pipeline designed to test whether **tropical forest defaunation is detectable from space**. 
+This repository contains the complete, reproducible R and Google Earth Engine (GEE) analysis pipeline designed to test whether **tropical forest defaunation is detectable from space**. 
 
-We evaluate two independent satellite signals of defaunation across the Congo and Amazon basins, grounded in the theoretical premise that the Amazon is more heavily depleted of large megaherbivores (such as forest elephants) than the Congo:
+By combining spaceborne canopy vertical structures (measured by NASA's Global Ecosystem Dynamics Investigation (GEDI) LiDAR mission) with ground-based camera trap surveys across 101 sites in the Amazon, Congo, and Southeast Asian basins, we establish a robust bidirectional biophysical relationship between forest canopy architecture and standing mammal biomass.
 
-| Signal | Metric | Dataset | Biophysical Mechanism |
-| :--- | :--- | :--- | :--- |
-| **Structural** | Understory Openness Index (UOI) | GEDI L2B PAVD | Direct: physical disturbance, trampling, and understory browsing open the canopy understory (Congo > Amazon UOI sensitivity). |
-| **Functional** | Flooding Role in Productivity (FRIP) | MODIS NPP × JRC GLOFAS | Indirect: animal nutrient pump redistribution breaks, making productivity highly dependent on seasonal flood dynamics. |
+### Core Hypotheses
+In this work, we test two primary hypotheses:
+1.  **Hypothesis 1 (Predictability):** The standing biomass of large terrestrial mammals is predictable from satellite-measured vertical forest canopy structure (specifically understory openness) at ecologically meaningful spatial scales.
+2.  **Hypothesis 2 (Megafaunal Ecosystem Engineering):** Large-bodied megafauna, specifically forest elephants (*Loxodonta cyclotis*) and Asian elephants (*Elephas maximus*), play a distinctive, disproportionate role in generating this spaceborne-detectable structural canopy signal.
 
-### Principled Core Hypotheses
-*   **H1 (Structural Canopy Response):** Understories are significantly more open (higher UOI) where mammal standing biomass ($B_H$) is intact.
-*   **H2 (Functional Ecosystem Response):** Flooding more strongly predicts net primary productivity (FRIP) where mammal populations are depleted (the animal nutrient pump is broken).
-*   **H3 (Canopy Convergence):** Intact forest patches (high UOI) converge with intact ecosystem function (low FRIP).
-*   **H4 (Decadal Trends):** The functional defaunation signal (FRIP) has systematically strengthened over time where defaunation has intensified.
+### Key Quantitative Findings
+*   **Bidirectional Predictability:** Establish a robust, bidirectional biophysical relationship between spaceborne GEDI understory structure and ground-measured mammal community traits.
+*   **Structural Predictive Power:** Spaceborne understory openness (UOI) alone explains **35%** of the cross-continental variance in heterotroph biomass under leave-one-region-out cross-validation (LORO-CV).
+*   **Megafaunal Restructuring:** Calibrating predicted biomass by local elephant range presence raises the explained variance to **48%**, mathematically quantifying the disproportionate structural disturbance signature left by these large-bodied ecosystem engineers.
+*   **Energetic Trophic Coupling:** Substituting static standing biomass ($B_H$) with metabolic-scaled energy flux ($M_H$, scaling as $M^{0.75}$ under Metabolic Scaling Theory) consistently improves model deviance explained (up to **52.2%**), demonstrating that satellite-derived vertical forest structure is tightly coupled with community-level metabolism.
+*   **Formulation Robustness:** All model selection pathways (AIC, LORO-CV, and Beta regressions) select the *exact same* best-performing environmental and biogeographical covariate formulations under both standing biomass ($B_H$) and metabolic rate ($M_H$) traits, showing that the underlying biophysical signals are highly robust.
 
 ---
 
