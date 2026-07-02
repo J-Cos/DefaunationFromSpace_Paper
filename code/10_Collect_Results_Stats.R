@@ -59,6 +59,42 @@ add <- function(sec, id, desc, val,
   ))
 }
 
+# Helper to compute profile likelihood confidence intervals (CIs) for Tweedie GLMs.
+# Profile-likelihood CIs are statistically superior to standard Wald-based CIs 
+# (estimate +/- 1.96 * SE) under log links and moderate sample sizes (N ~ 100), 
+# preventing coverage distortion.
+#
+# Arguments:
+#   model_obj: A fitted gam object containing a Tweedie family.
+#
+# Returns:
+#   A matrix containing the 2.5% and 97.5% confidence intervals. If profiling 
+#   fails to converge, falls back gracefully to Wald intervals.
+get_profile_cis <- function(model_obj) {
+  tryCatch({
+    p_val <- model_obj$family$getTheta(TRUE)
+    df <- model_obj$model
+    df$weights_var <- model_obj$prior.weights
+    glm_fit <- glm(
+      formula(model_obj),
+      data = df,
+      family = tweedie(var.power = p_val, link.power = 0),
+      weights = weights_var,
+      start = coef(model_obj),
+      control = glm.control(maxit = 500)
+    )
+    suppressMessages(confint(glm_fit))
+  }, error = function(e) {
+    ptab <- summary(model_obj)$p.table
+    ci <- cbind(
+      ptab[, "Estimate"] - 1.96 * ptab[, "Std. Error"],
+      ptab[, "Estimate"] + 1.96 * ptab[, "Std. Error"]
+    )
+    colnames(ci) <- c("2.5 %", "97.5 %")
+    ci
+  })
+}
+
 # ───────────────────────────────────────────────────────────────────────────
 # SECTION 2 — Camera trap datasets
 # ───────────────────────────────────────────────────────────────────────────
@@ -316,31 +352,7 @@ add("4", "fw2_aic_best_aicc",
     "AICc-selected model AICc value",
     aicc_best_row$Full_AICc, src = SRC_F2, unit = "AICc")
 
-# Helper to compute profile likelihood CIs for Tweedie GLMs
-get_profile_cis <- function(model_obj) {
-  tryCatch({
-    p_val <- model_obj$family$getTheta(TRUE)
-    df <- model_obj$model
-    df$weights_var <- model_obj$prior.weights
-    glm_fit <- glm(
-      formula(model_obj),
-      data = df,
-      family = tweedie(var.power = p_val, link.power = 0),
-      weights = weights_var,
-      start = coef(model_obj),
-      control = glm.control(maxit = 500)
-    )
-    suppressMessages(confint(glm_fit))
-  }, error = function(e) {
-    ptab <- summary(model_obj)$p.table
-    ci <- cbind(
-      ptab[, "Estimate"] - 1.96 * ptab[, "Std. Error"],
-      ptab[, "Estimate"] + 1.96 * ptab[, "Std. Error"]
-    )
-    colnames(ci) <- c("2.5 %", "97.5 %")
-    ci
-  })
-}
+
 
 # AIC model coefficients
 ptab_aic  <- summary(fw2_aic)$p.table
@@ -401,6 +413,9 @@ add("4", "fw2_lobo_oos_rmse_log",
 add("4", "fw2_lobo_oos_mae_log",
     "LORO-CV out-of-sample MAE (log scale)",
     lobo_best_row$OOS_MAE_log, src = SRC_F2, unit = "log-scale MAE")
+add("4", "fw2_lobo_oos_r2_log",
+    "LORO-CV out-of-sample R2 (log scale)",
+    lobo_best_row$OOS_R2_log, src = SRC_F2, unit = "R2")
 
 # LOBO model coefficients
 ptab_lobo <- summary(fw2_mod)$p.table
