@@ -5,8 +5,8 @@ generate_citations_table.py
 Extracts camera trap citation data and cross-references with the processed outputs
 (camera_traps_joint_metrics.csv, camera_traps_cluster_level_metrics_robust.csv,
 and camera_traps_joint_detections.csv) to only include projects actually used in the
-final models. Computes sample sizes: deployments provided vs. used, and images provided vs. used,
-sorting the final publication-quality table by size.
+final models. Computes sample sizes: deployments provided vs. used, sorting the final
+publication-quality table by used deployments.
 """
 
 import os
@@ -38,40 +38,27 @@ def main():
     robust_cluster_ids = set(robust_clusters_df["cluster_id"].astype(str))
     print(f"Loaded {len(robust_cluster_ids)} robust cluster IDs used in the models.")
 
-    # 2. Load joint detections to map deployments to cluster_id and count images
+    # 2. Load joint detections to map deployments to cluster_id
     detections_path = Path("outputs/camera_traps_joint_detections.csv")
     if not detections_path.exists():
         print(f"Error: {detections_path} is missing.")
         return
     
     print("Loading event-level joint detections...")
-    # Load columns needed for mapping and image counting
-    det_cols = ["project_id", "deployment_id", "cluster_id", "n_detections", "taxon_quality"]
+    # Load columns needed for mapping
+    det_cols = ["project_id", "deployment_id", "cluster_id"]
     det_df = pd.read_csv(detections_path, usecols=det_cols, keep_default_na=False)
     
-    # Standardize column types and clean numeric values
+    # Standardize column types
     det_df["project_id"] = det_df["project_id"].astype(str).str.strip()
     det_df["deployment_id"] = det_df["deployment_id"].astype(str).str.strip()
     det_df["cluster_id"] = det_df["cluster_id"].astype(str).str.strip()
-    det_df["n_detections"] = pd.to_numeric(det_df["n_detections"], errors='coerce').fillna(0).astype(int)
     
     # Map deployments to their cluster ID
     dep_to_cluster = {}
     for dep_id, cl_id in zip(det_df["deployment_id"], det_df["cluster_id"]):
         if dep_id and cl_id:
             dep_to_cluster[dep_id] = cl_id
-            
-    # Calculate Total Images Provided per project
-    project_images_provided = det_df.groupby("project_id")["n_detections"].sum().to_dict()
-            
-    # Calculate Mammal Images Used in robust clusters per project
-    # (Valid wild mammals have taxon_quality in species, genus, or family)
-    valid_taxa = ["species", "genus", "family"]
-    robust_dets = det_df[
-        (det_df["cluster_id"].isin(robust_cluster_ids)) &
-        (det_df["taxon_quality"].isin(valid_taxa))
-    ]
-    project_images_used = robust_dets.groupby("project_id")["n_detections"].sum().to_dict()
 
     # 3. Find and scan all raw packages to get provided deployments and citations
     data_dir = Path("data")
@@ -152,8 +139,6 @@ def main():
     records = []
     total_provided_deps = 0
     total_used_deps = 0
-    total_provided_imgs = 0
-    total_used_imgs = 0
     
     for pid, meta in project_metadata.items():
         # Only include if deployments were actually used in final robust models
@@ -162,13 +147,9 @@ def main():
         
         if used_deps_count > 0:
             provided_deps_count = len(meta.get("provided_deps", set()))
-            provided_imgs_count = project_images_provided.get(pid, 0)
-            used_imgs_count = project_images_used.get(pid, 0)
             
             total_provided_deps += provided_deps_count
             total_used_deps += used_deps_count
-            total_provided_imgs += provided_imgs_count
-            total_used_imgs += used_imgs_count
             
             records.append({
                 "Basin": meta["basin"],
@@ -176,8 +157,6 @@ def main():
                 "Project ID": pid,
                 "Deployments (Provided)": provided_deps_count,
                 "Deployments (Used)": used_deps_count,
-                "Images (Provided)": provided_imgs_count,
-                "Images (Used)": used_imgs_count,
                 "Citation": meta["citation"]
             })
             
@@ -187,28 +166,26 @@ def main():
         
     df_citations = pd.DataFrame(records)
     
-    # 5. Sort by Deployments Used (descending), then Images Used (descending)
+    # 5. Sort by Deployments Used (descending), then Project Name
     df_citations = df_citations.sort_values(
-        by=["Deployments (Used)", "Images (Used)", "Project Name"],
-        ascending=[False, False, True]
+        by=["Deployments (Used)", "Project Name"],
+        ascending=[False, True]
     ).reset_index(drop=True)
     
     print(f"\nFinal statistics across used datasets:")
     print(f"  Unique Projects Used: {len(df_citations)} (out of {len(project_metadata)} total provided)")
     print(f"  Deployments Provided: {total_provided_deps} | Used: {total_used_deps}")
-    print(f"  Images Provided:      {total_provided_imgs} | Used: {total_used_imgs}")
     
     # 6. Generate Markdown publication-quality document
     md_content = "# Camera Trap Data Citations & Sample Sizes\n\n"
     md_content += "This table lists all camera trap datasets actually used in the standing mammal biomass calibration models, "
-    md_content += "sorted by the number of used deployments. It compares the number of deployments and images provided by "
-    md_content += "each project to those retained in robust clusters for final RAI calibrations.\n\n"
+    md_content += "sorted by the number of used deployments. It compares the number of deployments provided by each project "
+    md_content += "to those retained in robust clusters for final RAI calibrations.\n\n"
     
     # Create a nice summary header block
     md_content += "### Data Summary\n"
     md_content += f"- **Total Projects Used**: {len(df_citations)}\n"
-    md_content += f"- **Deployments Provided**: {total_provided_deps:,} | **Deployments Used**: {total_used_deps:,}\n"
-    md_content += f"- **Images Provided**: {total_provided_imgs:,} | **Images Used**: {total_used_imgs:,}\n\n"
+    md_content += f"- **Deployments Provided**: {total_provided_deps:,} | **Deployments Used**: {total_used_deps:,}\n\n"
     
     # Append the main markdown table
     md_content += make_markdown_table(df_citations)
