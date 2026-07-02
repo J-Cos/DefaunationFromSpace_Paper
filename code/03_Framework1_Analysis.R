@@ -367,7 +367,8 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     head(20) %>%
     mutate(
       CleanName = gsub("^M[0-9\\.]+[a-z_]*: ", "", Model),
-      CleanName = factor(CleanName, levels = rev(CleanName))
+      CleanName = factor(CleanName, levels = rev(CleanName)),
+      dev_expl_pct = dev_expl * 100
     )
   
   ordered_exprs <- plot_sel_df$plotmath_label[match(levels(plot_sel_df$CleanName), plot_sel_df$CleanName)]
@@ -375,10 +376,10 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   p_b <- plot_model_selection_bars(
     plot_df = plot_sel_df,
-    x_var = "dev_expl",
+    x_var = "dev_expl_pct",
     fill_var = "delta_AICc",
     fill_label = "Delta AICc",
-    x_label = "Model Deviance Explained",
+    x_label = "Model Deviance Explained (%)",
     plot_title = "C. Covariate Model Selection (Beta Regression)",
     parsed_labels = parsed_labels
   )
