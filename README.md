@@ -5,7 +5,7 @@
 
 ---
 
-## 1. Scientific Overview, Hypotheses & Key Findings
+## 1. Scientific Overview & Core Hypotheses
 
 This repository contains the complete, reproducible R and Google Earth Engine (GEE) analysis pipeline designed to test whether **tropical forest defaunation is detectable from space**. 
 
@@ -15,13 +15,6 @@ By combining spaceborne canopy vertical structures (measured by NASA's Global Ec
 In this work, we test two primary hypotheses:
 1.  **Hypothesis 1 (Predictability):** The standing biomass of large terrestrial mammals is predictable from satellite-measured vertical forest canopy structure (specifically understory openness) at ecologically meaningful spatial scales.
 2.  **Hypothesis 2 (Megafaunal Ecosystem Engineering):** Large-bodied megafauna, specifically forest elephants (*Loxodonta cyclotis*) and Asian elephants (*Elephas maximus*), play a distinctive, disproportionate role in generating this spaceborne-detectable structural canopy signal.
-
-### Key Scientific Findings
-*   **Bidirectional Predictability:** Establishes a robust, bidirectional biophysical relationship between spaceborne GEDI understory structure and ground-measured mammal community traits.
-*   **Structural Predictive Power:** Spaceborne understory openness (UOI) is a strong predictor of cross-continental variance in heterotroph biomass under leave-one-region-out cross-validation (LORO-CV).
-*   **Megafaunal Restructuring:** Calibrating predicted biomass by local elephant range presence increases the explained variance, mathematically capturing the disproportionate structural canopy disturbance signature left by these large-bodied ecosystem engineers.
-*   **Energetic Trophic Coupling:** Substituting static standing biomass ($B_H$) with metabolic-scaled energy flux ($M_H$, scaling as $M^{0.75}$ under Metabolic Scaling Theory) consistently improves model deviance explained, demonstrating that satellite-derived vertical forest structure is tightly coupled with community-level metabolism.
-*   **Formulation Robustness:** All model selection pathways (AIC, LORO-CV, and Beta regressions) select consistent best-performing environmental and biogeographical covariate formulations under both standing biomass ($B_H$) and metabolic rate ($M_H$) traits, showing that the underlying biophysical signals are highly robust.
 
 ---
 
