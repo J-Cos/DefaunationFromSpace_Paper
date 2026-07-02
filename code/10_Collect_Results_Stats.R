@@ -19,6 +19,7 @@ library(dplyr)
 library(mgcv)
 library(terra)
 library(jsonlite)
+library(statmod)
 
 config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
 config <- jsonlite::read_json(config_path)
@@ -315,16 +316,42 @@ add("4", "fw2_aic_best_aicc",
     "AICc-selected model AICc value",
     aicc_best_row$Full_AICc, src = SRC_F2, unit = "AICc")
 
+# Helper to compute profile likelihood CIs for Tweedie GLMs
+get_profile_cis <- function(model_obj) {
+  tryCatch({
+    p_val <- model_obj$family$getTheta(TRUE)
+    df <- model_obj$model
+    df$weights_var <- model_obj$prior.weights
+    glm_fit <- glm(
+      formula(model_obj),
+      data = df,
+      family = tweedie(var.power = p_val, link.power = 0),
+      weights = weights_var,
+      start = coef(model_obj),
+      control = glm.control(maxit = 500)
+    )
+    suppressMessages(confint(glm_fit))
+  }, error = function(e) {
+    ptab <- summary(model_obj)$p.table
+    ci <- cbind(
+      ptab[, "Estimate"] - 1.96 * ptab[, "Std. Error"],
+      ptab[, "Estimate"] + 1.96 * ptab[, "Std. Error"]
+    )
+    colnames(ci) <- c("2.5 %", "97.5 %")
+    ci
+  })
+}
+
 # AIC model coefficients
 ptab_aic  <- summary(fw2_aic)$p.table
 vcov_aic  <- vcov(fw2_aic)
+prof_cis_aic <- get_profile_cis(fw2_aic)
 
 for (cn in rownames(ptab_aic)) {
   est  <- ptab_aic[cn, "Estimate"]
-  se   <- ptab_aic[cn, "Std. Error"]
   pv   <- ptab_aic[cn, "Pr(>|t|)"]
-  ci_l <- est - 1.96 * se
-  ci_u <- est + 1.96 * se
+  ci_l <- prof_cis_aic[cn, 1]
+  ci_u <- prof_cis_aic[cn, 2]
 
   clean <- gsub("elephant_present_possiblePresent", "ElephantPossible",
            gsub("uoi:elephant_present_possiblePresent", "UOI_x_ElephantPossible",
@@ -377,13 +404,13 @@ add("4", "fw2_lobo_oos_mae_log",
 
 # LOBO model coefficients
 ptab_lobo <- summary(fw2_mod)$p.table
+prof_cis_lobo <- get_profile_cis(fw2_mod)
 
 for (cn in rownames(ptab_lobo)) {
   est  <- ptab_lobo[cn, "Estimate"]
-  se   <- ptab_lobo[cn, "Std. Error"]
   pv   <- ptab_lobo[cn, "Pr(>|t|)"]
-  ci_l <- est - 1.96 * se
-  ci_u <- est + 1.96 * se
+  ci_l <- prof_cis_lobo[cn, 1]
+  ci_u <- prof_cis_lobo[cn, 2]
 
   clean <- gsub("\\(Intercept\\)", "intercept", cn)
 
@@ -396,12 +423,11 @@ for (cn in rownames(ptab_lobo)) {
 # Fold-change per 0.01 UOI increase (Tweedie log-link: exp(beta * delta))
 if ("uoi" %in% rownames(ptab_lobo)) {
   b_uoi_lobo <- ptab_lobo["uoi", "Estimate"]
-  se_uoi     <- ptab_lobo["uoi", "Std. Error"]
   delta      <- 0.01
 
   fold_change    <- exp(b_uoi_lobo * delta)
-  fold_change_lo <- exp((b_uoi_lobo - 1.96 * se_uoi) * delta)
-  fold_change_hi <- exp((b_uoi_lobo + 1.96 * se_uoi) * delta)
+  fold_change_lo <- exp(prof_cis_lobo["uoi", 1] * delta)
+  fold_change_hi <- exp(prof_cis_lobo["uoi", 2] * delta)
 
   add("4", "fw2_fold_change_per_001_uoi",
       "Fold-change in expected biomass per 0.01 UOI increase",
