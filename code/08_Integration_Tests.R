@@ -47,8 +47,6 @@ unlink("figures/figure3.png")
 unlink("figures/figure3.pdf")
 unlink("figures/figureS2.png")
 unlink("figures/figureS2.pdf")
-unlink("figures/figureS2_alternate_aic_full.png")
-unlink("figures/figureS2_alternate_aic_full.pdf")
 unlink("figures/figureS3.png")
 unlink("figures/figureS3.pdf")
 unlink("figures/figure5.png")
@@ -120,7 +118,6 @@ checks <- c(
   verify_file("figures/figureS1.png", "Manuscript Figure S1 (Bounding Boxes)"),
   verify_file("figures/figure3.png", "Manuscript Figure 3 (F1)"),
   verify_file("figures/figureS2.png", "Manuscript Figure S2 (F2 / Supp S2)"),
-  verify_file("figures/figureS2_alternate_aic_full.png", "Manuscript Figure S2 Alternate (AIC-selected)"),
   verify_file("figures/figureS3.png", "Predicted Biomass Map (5km, Fig S3)"),
   verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)"),
   verify_file("figures/figureS4.png", "Predictive Columns Correlation Plot (Fig S4)"),
