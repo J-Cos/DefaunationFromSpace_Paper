@@ -126,8 +126,12 @@ compute_prediction_correlations <- function(ptab_lobo, ptab_aic) {
     # Aggregate 5 km → 20 km (factor 4)
     r_20 <- aggregate(r, fact = 4, fun = "mean", na.rm = TRUE)
 
-    # Band 3 is UOI in the analysis stacks
-    uoi_vals <- values(r_20[[3]])
+    # Assign band names for reliable access (band 3 = uoi in 12-band stacks)
+    band_names <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
+                    "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
+    if (nlyr(r_20) == 12) names(r_20) <- band_names
+    if (nlyr(r_20) == 11) names(r_20) <- band_names[-4]  # no uoi_sd
+    uoi_vals <- values(r_20[["uoi"]])
     valid    <- !is.na(uoi_vals)
     uoi_v    <- uoi_vals[valid]
 
@@ -403,7 +407,6 @@ cat("  ✓ Section 3 done.\n")
 cat("Section 4: Framework 2 model results...\n")
 
 fw2_sel  <- read_csv("outputs/framework2_covariate_model_selection.csv",  show_col_types = FALSE)
-fw2_lobo <- read_csv("outputs/framework2_lobo_model_selection.csv",       show_col_types = FALSE)
 fw2_mod  <- readRDS("outputs/framework2_best_model.RDS")       # LOBO-selected
 fw2_aic  <- readRDS("outputs/framework2_best_model_aic.RDS")   # AIC-selected
 SRC_F2   <- "04_Framework2_Analysis.R"
@@ -472,8 +475,8 @@ if ("uoi" %in% rownames(ptab_aic) &&
 }
 
 # --- LOBO-selected (parsimonious) model ---
-lobo_best_row <- fw2_lobo[grepl("Parsimonious Selected", fw2_lobo$Parsimony_Status), ]
-if (nrow(lobo_best_row) == 0) lobo_best_row <- fw2_lobo[1, ]
+lobo_best_row <- fw2_sel[grepl("Parsimonious Selected", fw2_sel$Parsimony_Status), ]
+if (nrow(lobo_best_row) == 0) lobo_best_row <- fw2_sel[1, ]
 
 add("4", "fw2_lobo_best_dev_expl",
     "LORO-CV parsimonious model deviance explained",
