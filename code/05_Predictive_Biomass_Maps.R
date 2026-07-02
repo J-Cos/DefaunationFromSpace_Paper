@@ -57,6 +57,15 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   # Load country outlines
   countries_v <- terra::vect("data/world-administrative-boundaries")
   
+  # ───────────────────────────────────────────────────────────────────────────
+  # RATIONALE FOR DUAL MODEL COMPARISON (HI-7):
+  # We project and map both models side-by-side to compare:
+  # 1. LOBO-selected model (Column 1): Represents the generalizable, universal 
+  #    biophysical baseline (UOI only).
+  # 2. AIC-selected model (Column 2): Represents the local, basin-calibrated 
+  #    biogeographic shift (incorporating regional covariates and elephant presence).
+  # ───────────────────────────────────────────────────────────────────────────
+
   # Load Saved Best Framework 2 Model (LOBO selected)
   model_path <- file.path(outputs_dir, "framework2_best_model.RDS")
   if (!file.exists(model_path)) {

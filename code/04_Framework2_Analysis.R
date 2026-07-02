@@ -306,6 +306,26 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   write_csv(results_df, file.path(outputs_dir, "framework2_covariate_model_selection.csv"))
   
+  # ───────────────────────────────────────────────────────────────────────────
+  # RATIONALE FOR DUAL MODEL RETENTION (HI-7):
+  # The pipeline evaluates models using two distinct criteria for different purposes:
+  #
+  # 1. Leave-One-Basin-Out Cross-Validation (LOBO-CV) / LOROCV:
+  #    - Purpose: Identifies generalizability across unseen geographic basins.
+  #    - Behavior: Selects the most parsimonious model (e.g. M2.1: UOI Only) 
+  #      under a 1-SE rule. This represents the universal biophysical baseline.
+  #
+  # 2. Standard AICc Model Selection:
+  #    - Purpose: Identifies the best fitting model locally within the sampled 
+  #      basins, incorporating regional interactions (e.g. UOI * Basin + Elev).
+  #    - Behavior: Captures biogeographical shifts and local ecological modifiers 
+  #      (e.g., presence of elephants in Congo/SE_Asia vs absence in Amazon).
+  #
+  # Retaining both allows side-by-side comparison (e.g., Column 1 vs Column 2 
+  # in predictive biomass mapping) of universal baseline vs local biogeographic 
+  # calibration.
+  # ───────────────────────────────────────────────────────────────────────────
+
   # Save RDS best model objects (LOBOCV parsimonious model) — refit with REML for inference
   best_model_name <- results_df$Model[which(results_df$Parsimony_Status == "Parsimonious Selected Best")]
   best_model <- gam(formula(full_models[[best_model_name]]), family = tw(),
