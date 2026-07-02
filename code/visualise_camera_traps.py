@@ -1004,7 +1004,16 @@ def main():
     print("Building coordinate cluster mapping...")
     cluster_map = get_coordinate_cluster_map(robust_det)
 
-    print(f"\nTotal GEDI-valid clusters: {len(cluster_metrics)} | Robust clusters (>100 trap-days): {len(robust_cluster_metrics)}")
+    # Load config file for min_trap_days
+    config_path = Path(__file__).resolve().parent / "config.json"
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        min_trap_days = config.get("clustering", {}).get("min_trap_days", 10)
+    else:
+        min_trap_days = 10
+
+    print(f"\nTotal GEDI-valid clusters: {len(cluster_metrics)} | Robust clusters (>= {min_trap_days} trap-days): {len(robust_cluster_metrics)}")
 
     print("\nGenerating Figure 1: Detections & Diversity Comparison (with Buffered MCPs)...")
     make_figure1(robust_det, robust_cluster_metrics, cluster_map, args.fig_dir)
