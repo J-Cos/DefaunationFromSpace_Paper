@@ -748,7 +748,10 @@ def check_gedi_5km_overlap(region, buffered_polygon):
         raster_path = OUTPUT_DIR / "synthetic_EOdata" / f"analysis_stack_5000_{region}.tif"
     
     if not raster_path.exists():
-        return False
+        raise FileNotFoundError(
+            f"Critical GEDI raster stack for {region} is missing! "
+            f"Expected at outputs/EOdata/analysis_stack_5000_{region}.tif or outputs/synthetic_EOdata/analysis_stack_5000_{region}.tif"
+        )
         
     try:
         with rasterio.open(raster_path) as src:
