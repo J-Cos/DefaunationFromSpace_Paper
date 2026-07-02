@@ -236,7 +236,7 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
     summarise(
       n_pixels = n(),
       uoi_sd = ifelse(is.na(sd(uoi, na.rm = TRUE)), 0, sd(uoi, na.rm = TRUE)),
-      uoi = mean(uoi, na.rm = TRUE),
+      uoi = pmax(pmin(mean(uoi, na.rm = TRUE), 1 - 1e-5), 1e-5),
       elevation = mean(elevation, na.rm = TRUE),
       slope = mean(slope, na.rm = TRUE),
       hnd = mean(hnd, na.rm = TRUE),

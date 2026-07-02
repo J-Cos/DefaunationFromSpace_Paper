@@ -122,7 +122,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       non_intercept_rows <- which(rownames(p_table) != "(Intercept)")
       if (length(non_intercept_rows) == 0) return(FALSE)
       p_vals <- p_table[non_intercept_rows, ncol(p_table), drop = TRUE]
-      all(p_vals < 0.05)
+      any(p_vals < 0.05)
     }),
     stringsAsFactors = FALSE
   )
