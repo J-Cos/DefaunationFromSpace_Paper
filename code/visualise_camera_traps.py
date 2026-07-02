@@ -40,9 +40,10 @@ import matplotlib.colors as colors
 from pathlib import Path
 from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, fcluster
-from shapely.geometry import MultiPoint
+from shapely.geometry import MultiPoint, shape
 import rasterio
 from rasterio.mask import mask
+import json
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -145,7 +146,7 @@ def _compute_region_extent(det: pd.DataFrame, region: str, pad: float = 1.0) -> 
 
 # ── Figure 1: Camera Trap Detections & Diversity ───────────────────────────
 
-def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: pd.DataFrame, fig_dir: Path):
+def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, geojson_features: list, fig_dir: Path):
     """
     4-panel summary of camera trap detections and diversity across basins.
     (A) Deployment maps using Minimum Convex Polygons + 11.1km buffer colored by effort
@@ -160,17 +161,6 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     except ImportError:
         cartopy_available = False
 
-    # Extract coordinates by deployment and map cluster ids
-    dep = (det.groupby(["region", "project_id", "deployment_id"])
-           .agg(lon=("longitude", "first"),
-                lat=("latitude", "first"),
-                trap_days=("trap_days", "first"))
-           .reset_index())
-    dep['cluster_id'] = dep.apply(
-        lambda r: cluster_map.get((r['region'], r['lon'], r['lat']), ""),
-        axis=1
-    )
-
     fig = plt.figure(figsize=(DOUBLE_COL, DOUBLE_COL * 0.98))
     gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.05], hspace=0.45, wspace=0.35)
 
@@ -184,16 +174,12 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     ]
 
     # Shared log-scaled effort normalization across all clusters globally
-    cluster_days = dep.groupby(['region', 'cluster_id'])['trap_days'].sum()
-    min_days = max(10, cluster_days.min())
-    max_days = cluster_days.max()
+    min_days = max(10, cluster_metrics['trap_days'].min())
+    max_days = cluster_metrics['trap_days'].max()
     norm = colors.LogNorm(vmin=min_days, vmax=max_days)
     cmap = plt.cm.viridis
 
     for idx, reg in enumerate(regions_info):
-        sub_dep = dep[dep["region"] == reg["name"]]
-        unique_c_ids = sub_dep["cluster_id"].unique()
-        
         if cartopy_available:
             ax_map = fig.add_subplot(reg["gs"], projection=ccrs.PlateCarree())
             ax_map.set_extent(reg["extent"], crs=ccrs.PlateCarree())
@@ -218,22 +204,18 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
             ax_map.set_ylabel("Latitude (°N)", fontsize=5.5)
             ax_map.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0")
 
-        # Plot fuzzed MCP + 5.55km (0.05 degree) buffers for each cluster
-        for c_id in unique_c_ids:
-            c_dep = sub_dep[sub_dep["cluster_id"] == c_id]
-            points = list(zip(c_dep["lon"], c_dep["lat"]))
-            if len(points) == 0:
+        # Plot pre-computed projection-safe buffered MCPs from GeoJSON
+        n_clusters = 0
+        for feat in geojson_features:
+            if feat["region"] != reg["name"]:
                 continue
+            n_clusters += 1
+            
+            buffered = feat["geometry"]
+            c_days = feat["trap_days"]
+            color = cmap(norm(c_days))
             
             try:
-                # Minimum Convex Polygon via Shapely + 0.05 degree buffer
-                mp = MultiPoint(points)
-                hull = mp.convex_hull
-                buffered = hull.buffer(0.05)  # 0.05 deg ≈ 5.55 km
-                
-                c_days = c_dep["trap_days"].sum()
-                color = cmap(norm(c_days))
-                
                 if cartopy_available:
                     ax_map.add_geometries(
                         [buffered], crs=ccrs.PlateCarree(),
@@ -249,9 +231,9 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
                             x, y = poly.exterior.xy
                             ax_map.fill(x, y, facecolor=color, edgecolor="black", linewidth=0.3, alpha=0.6, zorder=3)
             except Exception as e:
-                print(f"      Warning: Shapely buffer failed for {c_id}: {e}")
+                print(f"      Warning: Drawing geometry failed: {e}")
 
-        ax_map.set_title(f"{reg['name']} Basin ({len(unique_c_ids)} clusters)", fontsize=7.5, pad=3)
+        ax_map.set_title(f"{reg['name']} Basin ({n_clusters} clusters)", fontsize=7.5, pad=3)
         if idx == 0:
             panel_label(ax_map, "A", x=-0.08, y=1.05)
 
@@ -496,7 +478,6 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
     med_mc = np.median(logM_congo)
     med_ma = np.median(logM_amazon)
     med_ms = np.median(logM_seasia)
-    
     ax.axvline(med_mc, color=PAL["Congo"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_ma, color=PAL["Amazon"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_ms, color=PAL["SE_Asia"], ls="--", lw=0.8, zorder=4)
@@ -522,7 +503,7 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
 
 # ── Figure 3: Vertebrate Body Size & Megafauna ─────────────────────────────
 
-def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: pd.DataFrame, fig_dir: Path):
+def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, geojson_features: list, fig_dir: Path):
     """
     5-panel body size and megafaunal comparison (Landscape Cluster-level).
     (A) Geographic maps of megafauna biomass ($B_{H, >50}$) for Congo & Amazon clusters using buffered MCPs (0.05 degree)
@@ -538,22 +519,11 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     except ImportError:
         cartopy_available = False
 
-    # Extract coordinates by deployment and map cluster ids
-    dep = (det.groupby(["region", "project_id", "deployment_id"])
-           .agg(lon=("longitude", "first"),
-                lat=("latitude", "first"),
-                trap_days=("trap_days", "first"))
-           .reset_index())
-    dep['cluster_id'] = dep.apply(
-        lambda r: cluster_map.get((r['region'], r['lon'], r['lat']), ""),
-        axis=1
-    )
-
     # 5-panel layout
     fig = plt.figure(figsize=(DOUBLE_COL, DOUBLE_COL * 1.35))
     gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 1.0], hspace=0.4, wspace=0.3)
 
-    # ── (A) Geographic Maps (MCPs + 0.05 deg Buffers colored by B_H_gt50) ────
+    # ── (A) Geographic Maps (Buffered MCPs from GeoJSON colored by B_H_gt50) ────
     gs_maps = gs[0, :].subgridspec(1, 3, wspace=0.15)
     
     regions_info = [
@@ -575,9 +545,6 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     cmap = plt.cm.plasma
 
     for idx, reg in enumerate(regions_info):
-        sub_dep = dep[dep["region"] == reg["name"]]
-        unique_c_ids = sub_dep["cluster_id"].unique()
-        
         if cartopy_available:
             ax_map = fig.add_subplot(reg["gs"], projection=ccrs.PlateCarree())
             ax_map.set_extent(reg["extent"], crs=ccrs.PlateCarree())
@@ -602,25 +569,25 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
             ax_map.set_ylabel("Latitude (°N)", fontsize=5.5)
             ax_map.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0")
 
-        # Plot fuzzed MCP + 5.55km (0.05 degree) buffers for each cluster
-        for c_id in unique_c_ids:
-            c_dep = sub_dep[sub_dep["cluster_id"] == c_id]
-            points = list(zip(c_dep["lon"], c_dep["lat"]))
-            if len(points) == 0:
+        # Plot pre-computed projection-safe buffered MCPs from GeoJSON
+        n_clusters = 0
+        for feat in geojson_features:
+            if feat["region"] != reg["name"]:
                 continue
+            n_clusters += 1
+            
+            c_id = feat["cluster_id"]
+            buffered = feat["geometry"]
+            
+            c_id_int = int(c_id) if isinstance(c_id, str) and c_id.isdigit() else c_id
+            c_biomass = biomass_map.get((reg["name"], c_id), biomass_map.get((reg["name"], c_id_int), 0.0))
+            
+            if c_biomass > 0.0:
+                color = cmap(norm(c_biomass))
+            else:
+                color = "#E0E0E0"  # light grey for absence
             
             try:
-                # Minimum Convex Polygon via Shapely + 0.05 degree buffer
-                mp = MultiPoint(points)
-                hull = mp.convex_hull
-                buffered = hull.buffer(0.05)  # 0.05 deg ≈ 5.55 km
-                
-                c_biomass = biomass_map.get((reg["name"], c_id), 0.0)
-                if c_biomass > 0.0:
-                    color = cmap(norm(c_biomass))
-                else:
-                    color = "#E0E0E0"  # light grey for absence
-                
                 if cartopy_available:
                     ax_map.add_geometries(
                         [buffered], crs=ccrs.PlateCarree(),
@@ -1001,8 +968,23 @@ def main():
     robust_cluster_metrics = pd.read_csv(robust_metrics_path)
     cluster_metrics = pd.read_csv(full_metrics_path)
 
-    print("Building coordinate cluster mapping...")
-    cluster_map = get_coordinate_cluster_map(robust_det)
+    print("Loading pre-computed spatial cluster geometries from GeoJSON...")
+    geojson_path = OUTPUT_DIR / "camera_traps_robust_buffered_mcps.geojson"
+    if not geojson_path.exists():
+        raise FileNotFoundError(
+            f"Pre-processed GeoJSON is missing: {geojson_path}. Please run code/process_camera_traps.py first."
+        )
+    with open(geojson_path, "w" if False else "r") as f:
+        geojson_data = json.load(f)
+    
+    geojson_features = []
+    for feat in geojson_data["features"]:
+        geojson_features.append({
+            "cluster_id": feat["properties"]["cluster_id"],
+            "region": feat["properties"]["region"],
+            "geometry": shape(feat["geometry"]),
+            "trap_days": feat["properties"]["trap_days"]
+        })
 
     # Load config file for min_trap_days
     config_path = Path(__file__).resolve().parent / "config.json"
@@ -1016,13 +998,13 @@ def main():
     print(f"\nTotal GEDI-valid clusters: {len(cluster_metrics)} | Robust clusters (>= {min_trap_days} trap-days): {len(robust_cluster_metrics)}")
 
     print("\nGenerating Figure 1: Detections & Diversity Comparison (with Buffered MCPs)...")
-    make_figure1(robust_det, robust_cluster_metrics, cluster_map, args.fig_dir)
+    make_figure1(robust_det, robust_cluster_metrics, geojson_features, args.fig_dir)
 
     print("\nGenerating Figure 2: Biophysical Scaling & Energetics Comparison...")
     make_figure2(robust_cluster_metrics, args.fig_dir)
 
     print("\nGenerating Figure 3: Vertebrate Body Size & Megafauna Comparison...")
-    make_figure3(robust_det, robust_cluster_metrics, cluster_map, args.fig_dir)
+    make_figure3(robust_det, robust_cluster_metrics, geojson_features, args.fig_dir)
 
     print("\nGenerating Figure 4: Effort-Bias Diagnostics Comparison...")
     make_figure4(cluster_metrics, args.fig_dir)
