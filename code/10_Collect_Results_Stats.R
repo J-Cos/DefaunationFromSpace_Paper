@@ -266,9 +266,9 @@ add("3", "fw1_n_candidate_models",
     nrow(fw1_sel), src = SRC_F1, unit = "count")
 
 # Best model
-add("3", "fw1_best_aic",
-    "Best model AIC",
-    fw1_sel$AIC[1], src = SRC_F1, unit = "AIC")
+add("3", "fw1_best_aicc",
+    "Best model AICc",
+    fw1_sel$AICc[1], src = SRC_F1, unit = "AICc")
 add("3", "fw1_best_dev_expl",
     "Best model deviance explained",
     fw1_sel$dev_expl[1], src = SRC_F1, unit = "proportion")
@@ -335,16 +335,16 @@ add("4", "fw2_n_candidate_models",
     "Number of candidate models evaluated",
     nrow(fw2_sel), src = SRC_F2, unit = "count")
 
-# --- AIC-selected model ---
-# Find the AIC-best row (lowest Full_AIC in the full selection table)
-aic_best_row <- fw2_sel[which.min(fw2_sel$Full_AIC), ]
+# --- AICc-selected model ---
+# Find the AICc-best row (lowest Full_AICc in the full selection table)
+aicc_best_row <- fw2_sel[which.min(fw2_sel$Full_AICc), ]
 
 add("4", "fw2_aic_best_dev_expl",
-    "AIC-selected model deviance explained",
-    aic_best_row$Full_DevExpl, src = SRC_F2, unit = "proportion")
-add("4", "fw2_aic_best_aic",
-    "AIC-selected model AIC value",
-    aic_best_row$Full_AIC, src = SRC_F2, unit = "AIC")
+    "AICc-selected model deviance explained",
+    aicc_best_row$Full_DevExpl, src = SRC_F2, unit = "proportion")
+add("4", "fw2_aic_best_aicc",
+    "AICc-selected model AICc value",
+    aicc_best_row$Full_AICc, src = SRC_F2, unit = "AICc")
 
 # AIC model coefficients
 ptab_aic  <- summary(fw2_aic)$p.table
@@ -444,7 +444,7 @@ if ("uoi" %in% rownames(ptab_lobo)) {
 # Deviance explained difference (AIC vs LOBO)
 add("4", "fw2_dev_expl_difference",
     "Additional deviance explained by AIC model vs LOBO model",
-    as.numeric(aic_best_row$Full_DevExpl) - as.numeric(lobo_best_row$Full_DevExpl),
+    as.numeric(aicc_best_row$Full_DevExpl) - as.numeric(lobo_best_row$Full_DevExpl),
     src = SRC_F2, unit = "proportion")
 
 # --- Weighting sensitivity (Framework 2) ---

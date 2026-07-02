@@ -97,10 +97,15 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "ML")
   }
   
-  # Compile results table
+  # Compile results table (models fitted with ML for valid AICc comparison)
+  n_obs <- nrow(joined_data)
   results_df <- data.frame(
     Model = names(models_list),
-    AIC = sapply(models_list, AIC),
+    AICc = sapply(models_list, function(m) {
+      aic_val <- AIC(m)
+      k <- attr(logLik(m), "df")
+      aic_val + (2 * k * (k + 1)) / (n_obs - k - 1)
+    }),
     LogLik = sapply(models_list, function(m) as.numeric(logLik(m))),
     edf = sapply(models_list, function(m) sum(m$edf)),
     R2 = sapply(models_list, function(m) {
@@ -120,8 +125,8 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   )
   
   results_df <- results_df %>%
-    mutate(delta_AIC = AIC - min(AIC)) %>%
-    arrange(AIC)
+    mutate(delta_AICc = AICc - min(AICc)) %>%
+    arrange(AICc)
   
   print(results_df)
   
@@ -130,13 +135,13 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   write_csv(results_df, file.path(outputs_dir, "framework1_covariate_model_selection.csv"))
   
-  # Identify the best model (by AIC rank) and refit with REML for inference
+  # Identify the best model (by AICc rank) and refit with REML for inference
   best_model_name <- results_df$Model[1]
   best_model_ml <- models_list[[best_model_name]]
   best_model <- gam(formula(best_model_ml), family = betar(link = "logit"),
                     weights = w_combined_norm, data = joined_data, method = "REML")
-  cat(sprintf("\n★ Selected Best-Fitting Model: %s (AIC: %.2f, d_AIC: 0.00)\n", best_model_name, AIC(best_model)))
-  cat("  (Selection via ML; coefficients from REML refit)\n\n")
+  cat(sprintf("\n★ Selected Best-Fitting Model: %s (AICc: %.2f, d_AICc: 0.00)\n", best_model_name, results_df$AICc[1]))
+  cat("  (Selection via ML/AICc; coefficients from REML refit)\n\n")
   
   # Save best model RDS objects to outputs
   saveRDS(formula(best_model), file.path(outputs_dir, "framework1_best_formula.RDS"))
@@ -371,8 +376,8 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   p_b <- plot_model_selection_bars(
     plot_df = plot_sel_df,
     x_var = "R2",
-    fill_var = "delta_AIC",
-    fill_label = "Delta AIC",
+    fill_var = "delta_AICc",
+    fill_label = "Delta AICc",
     x_label = "Adjusted Pseudo-R² (Goodness of Fit)",
     plot_title = "C. Covariate Model Selection (Beta Regression)",
     parsed_labels = parsed_labels

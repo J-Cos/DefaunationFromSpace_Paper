@@ -82,9 +82,10 @@ f1_templates <- list(
 )
 
 run_f1_selection <- function(index_name) {
-  best_aic <- Inf
+  best_aicc <- Inf
   best_name <- ""
   best_formula <- NULL
+  n_obs <- nrow(joined_data)
   
   for (n in names(f1_templates)) {
     f_str <- gsub("\\{Index\\}", index_name, f1_templates[[n]])
@@ -95,38 +96,40 @@ run_f1_selection <- function(index_name) {
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
-      a <- AIC(fit)
+      aic_val <- AIC(fit)
+      k <- attr(logLik(fit), "df")
+      aicc_val <- aic_val + (2 * k * (k + 1)) / (n_obs - k - 1)
       dev_expl <- summary(fit)$dev.expl
       
       # Record all model fits for complete tracking
       comparison_records[[length(comparison_records) + 1]] <<- list(
         Framework = "Framework 1",
-        Metric = "AIC & DevExpl",
+        Metric = "AICc & DevExpl",
         ModelLabel = n,
         IndexUsed = index_name,
         Formula = f_str,
-        FullAIC = a,
+        FullAICc = aicc_val,
         DevianceExplained = dev_expl,
         OOS_MAE = NA
       )
       
-      if (a < best_aic) {
-        best_aic <- a
+      if (aicc_val < best_aicc) {
+        best_aicc <- aicc_val
         best_name <- n
         best_formula <- f_str
       }
     }
   }
-  return(list(name = best_name, formula = best_formula, aic = best_aic))
+  return(list(name = best_name, formula = best_formula, aicc = best_aicc))
 }
 
 sel_f1_biomass <- run_f1_selection("B_H_index")
 sel_f1_metabolism <- run_f1_selection("M_H_index")
 
-cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f1_biomass$name, sel_f1_biomass$aic, sel_f1_biomass$formula))
-cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f1_metabolism$name, sel_f1_metabolism$aic, sel_f1_metabolism$formula))
+cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f1_biomass$name, sel_f1_biomass$aicc, sel_f1_biomass$formula))
+cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f1_metabolism$name, sel_f1_metabolism$aicc, sel_f1_metabolism$formula))
 
 # -----------------------------------------------------------------------------
 # 3. Framework 2: Tweedie GLMs
@@ -164,11 +167,12 @@ f2_templates <- list(
   "UOI * ElephantStrict + Forest"        = "{Index} ~ uoi * elephant_present_strict + forest_fraction"
 )
 
-# A. Standard AIC Selection Pathway (Full Sample Fit)
+# A. Standard AICc Selection Pathway (Full Sample Fit)
 run_f2_aic_selection <- function(index_name) {
-  best_aic <- Inf
+  best_aicc <- Inf
   best_name <- ""
   best_formula <- NULL
+  n_obs <- nrow(joined_data)
   
   for (n in names(f2_templates)) {
     f_str <- gsub("\\{Index\\}", index_name, f2_templates[[n]])
@@ -179,38 +183,40 @@ run_f2_aic_selection <- function(index_name) {
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
-      a <- AIC(fit)
+      aic_val <- AIC(fit)
+      k <- attr(logLik(fit), "df")
+      aicc_val <- aic_val + (2 * k * (k + 1)) / (n_obs - k - 1)
       dev_expl <- summary(fit)$dev.expl
       
       comparison_records[[length(comparison_records) + 1]] <<- list(
-        Framework = "Framework 2 AIC",
-        Metric = "AIC & DevExpl",
+        Framework = "Framework 2 AICc",
+        Metric = "AICc & DevExpl",
         ModelLabel = n,
         IndexUsed = index_name,
         Formula = f_str,
-        FullAIC = a,
+        FullAICc = aicc_val,
         DevianceExplained = dev_expl,
         OOS_MAE = NA
       )
       
-      if (a < best_aic) {
-        best_aic <- a
+      if (aicc_val < best_aicc) {
+        best_aicc <- aicc_val
         best_name <- n
         best_formula <- f_str
       }
     }
   }
-  return(list(name = best_name, formula = best_formula, aic = best_aic))
+  return(list(name = best_name, formula = best_formula, aicc = best_aicc))
 }
 
 sel_f2_aic_biomass <- run_f2_aic_selection("B_H_index")
 sel_f2_aic_metabolism <- run_f2_aic_selection("M_H_index")
 
-cat("A. Standard AIC Selection Pathway (Full Sample Fit):\n")
-cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f2_aic_biomass$name, sel_f2_aic_biomass$aic, sel_f2_aic_biomass$formula))
-cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f2_aic_metabolism$name, sel_f2_aic_metabolism$aic, sel_f2_aic_metabolism$formula))
+cat("A. Standard AICc Selection Pathway (Full Sample Fit):\n")
+cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f2_aic_biomass$name, sel_f2_aic_biomass$aicc, sel_f2_aic_biomass$formula))
+cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f2_aic_metabolism$name, sel_f2_aic_metabolism$aicc, sel_f2_aic_metabolism$formula))
 
 # B. LORO-CV Generalizability Selection Pathway (Out-of-Sample CV MAE)
 run_f2_lobo_selection <- function(index_name) {
@@ -250,7 +256,14 @@ run_f2_lobo_selection <- function(index_name) {
         gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
       }, error = function(e) NULL)
       dev_expl <- if (!is.null(fit_full)) summary(fit_full)$dev.expl else NA
-      full_aic <- if (!is.null(fit_full)) AIC(fit_full) else NA
+      
+      full_aicc <- if (!is.null(fit_full)) {
+        aic_val <- AIC(fit_full)
+        k <- attr(logLik(fit_full), "df")
+        aic_val + (2 * k * (k + 1)) / (nrow(joined_data) - k - 1)
+      } else {
+        NA
+      }
       
       comparison_records[[length(comparison_records) + 1]] <<- list(
         Framework = "Framework 2 LORO-CV",
@@ -258,7 +271,7 @@ run_f2_lobo_selection <- function(index_name) {
         ModelLabel = n,
         IndexUsed = index_name,
         Formula = f_str,
-        FullAIC = full_aic,
+        FullAICc = full_aicc,
         DevianceExplained = dev_expl,
         OOS_MAE = avg_mae
       )

@@ -99,9 +99,10 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   cat(sprintf("Fitting all %d models on the full dataset...\n", num_models))
   full_models <- list()
-  full_AIC <- numeric(num_models)
+  full_AICc <- numeric(num_models)
   full_edf <- numeric(num_models)
   full_dev_expl <- numeric(num_models)
+  n_obs <- nrow(joined_data)
   
   for (m_idx in 1:num_models) {
     m_name <- model_names[m_idx]
@@ -110,7 +111,9 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     m_full <- gam(m_form, family = tw(), weights = w_combined_norm, data = joined_data, method = "ML")
     full_models[[m_name]] <- m_full
     
-    full_AIC[m_idx] <- AIC(m_full)
+    aic_val <- AIC(m_full)
+    k_m <- attr(logLik(m_full), "df")
+    full_AICc[m_idx] <- aic_val + (2 * k_m * (k_m + 1)) / (n_obs - k_m - 1)
     full_edf[m_idx] <- sum(m_full$edf)
     full_dev_expl[m_idx] <- summary(m_full)$dev.expl
   }
@@ -242,25 +245,25 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     }
   })
   
-  # Calculate AIC delta and status for all candidate models
+  # Calculate AICc delta and status for all candidate models
   results_df_aic <- data.frame(
     Model = model_names,
-    AIC = full_AIC,
+    AICc = full_AICc,
     edf = full_edf,
     stringsAsFactors = FALSE
   )
-  results_df_aic$delta_AIC <- results_df_aic$AIC - min(results_df_aic$AIC)
-  best_aic_idx <- which.min(results_df_aic$AIC)
+  results_df_aic$delta_AICc <- results_df_aic$AICc - min(results_df_aic$AICc)
+  best_aic_idx <- which.min(results_df_aic$AICc)
   
   AIC_status <- sapply(1:num_models, function(m_idx) {
     if (m_idx == best_aic_idx) {
-      return("AIC Selected Best")
-    } else if (results_df_aic$delta_AIC[m_idx] <= 2) {
-      return("AIC Equivalent (delta <= 2)")
-    } else if (results_df_aic$delta_AIC[m_idx] <= 7) {
-      return("AIC Suboptimal (delta <= 7)")
+      return("AICc Selected Best")
+    } else if (results_df_aic$delta_AICc[m_idx] <= 2) {
+      return("AICc Equivalent (delta <= 2)")
+    } else if (results_df_aic$delta_AICc[m_idx] <= 7) {
+      return("AICc Suboptimal (delta <= 7)")
     } else {
-      return("AIC Poor (delta > 7)")
+      return("AICc Poor (delta > 7)")
     }
   })
   
@@ -273,12 +276,12 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     OOS_R2_log = oos_R2_log,
     OOS_RMSE_raw = oos_RMSE_raw,
     OOS_MAE_raw = oos_MAE_raw,
-    Full_AIC = full_AIC,
-    delta_AIC = results_df_aic$delta_AIC,
+    Full_AICc = full_AICc,
+    delta_AICc = results_df_aic$delta_AICc,
     Full_edf = full_edf,
     Full_DevExpl = full_dev_expl,
     Parsimony_Status = parsimony_status,
-    AIC_Status = AIC_status,
+    AICc_Status = AIC_status,
     stringsAsFactors = FALSE
   )
   
@@ -527,7 +530,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     
     if (is_aic) {
       plot_df <- results_df %>%
-        arrange(Full_AIC) %>%
+        arrange(Full_AICc) %>%
         head(15)
     } else {
       plot_df <- results_df %>%
@@ -556,10 +559,10 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       p_c <- plot_model_selection_bars(
         plot_df = plot_sel_df,
         x_var = "Full_DevExpl_Pct",
-        fill_var = "delta_AIC",
-        fill_label = "Delta AIC",
+        fill_var = "delta_AICc",
+        fill_label = "Delta AICc",
         x_label = "Model Deviance Explained (%)",
-        plot_title = sprintf("C. Standard AIC Model Selection (All %d Candidates)", nrow(plot_sel_df)),
+        plot_title = sprintf("C. Standard AICc Model Selection (All %d Candidates)", nrow(plot_sel_df)),
         parsed_labels = parsed_labels
       )
     } else {
