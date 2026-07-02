@@ -43,9 +43,9 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
       │
       ▼
 [Local Camera Trap Ingestion & Trait Processing (Python)]
-process_camera_traps.py       --> Ingests raw WI camera trap packages, joins with EltonTraits databases,
-                                  computes deployment-level biomass (B_H) and metabolism (M_H) indices.
-visualise_camera_traps.py     --> Generates exploratory vertebrate community & scaling figures.
+process_camera_traps.py       --> Ingests raw WI camera trap packages, joins with EltonTraits, performs 11.1km spatial
+                                  clustering, geodesic buffering, GEDI checks, and writes all spatial GeoJSON outputs.
+visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory vertebrate community & scaling figures.
       │
       ▼
 [Local R Analysis Pipeline (code/)]
@@ -62,9 +62,9 @@ visualise_camera_traps.py     --> Generates exploratory vertebrate community & s
 ### Script Catalog (code/)
 
 1.  **[code/process_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/process_camera_traps.py):**  
-    Ingests and cleans raw Wildlife Insights camera trap packages from Congo and Amazon basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, and computes corrected Relative Abundance Indices (RAI) and site-level standing mammal biomass ($B_H$) and metabolism ($M_H$) indices, including sub-components above 100 kg (`B_H_gt100`) and 1000 kg (`B_H_gt1000`).
+    Ingests and cleans raw Wildlife Insights camera trap packages from Congo, Amazon, and SE Asia basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, performs 11.1km spatial clustering, filters clusters by GEDI grid overlap, computes taxonomic keep proportions (`p_keep`) and temporal weights (`w_temp_cluster`), generates buffered convex hulls using geodesic projections to avoid distortion, and writes all GeoJSON/CSV products.
 2.  **[code/visualise_camera_traps.py](file:///home/j/AgenticProjects/DefaunationSynthesis/code/visualise_camera_traps.py):**  
-    Generates initial publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the 11.1 km cluster level.
+    Strictly graphics-only script. Loads pre-processed outputs and generates publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the spatial cluster level.
 3.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/01_FigureS1_Regional_Bounding_Boxes.R):**  
     Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
 4.  **[code/02_Load_And_Join.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/02_Load_And_Join.R):**  
@@ -97,8 +97,7 @@ visualise_camera_traps.py     --> Generates exploratory vertebrate community & s
 *   **[code/functions/calibration_helpers.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/functions/calibration_helpers.R):**  
     Defines all shared mathematical operations, ensuring strict DRY compliance:
     *   `extract_scale_pixels()`: Performs raw pixel extraction within buffered MCP polygons.
-    *   `extract_scale_data()`: Aggregates pixels, computes empirical GEDI standard error (`uoi_se`), and derives normalized precision weights (`w_uoi_norm = w_uoi / mean(w_uoi)`) and spatial homogeneity (`homogeneity`). It joins temporal weights (`w_temp_cluster`) and computes normalized combined weights (`w_combined_norm = w_combined / mean(w_combined)`) as `w_uoi * w_temp_cluster`.
-    *   `calculate_temporal_weights()`: Runs geographical single-linkage clustering (11.1km threshold) on camera trap coordinates and computes deployment temporal alignment weights (`w_temp_cluster`) to account for GEDI temporal offset. The temporal weights account for historical GEDI offset: Contemporary ($\le 1\text{ yr}$ offset) = `1.0`, Recent ($\le 6\text{ yr}$ offset) = `0.5`, Older ($\le 11\text{ yr}$ offset) = `0.25`, and Historical ($> 11\text{ yr}$ offset) = `0.1`.
+    *   `extract_scale_data()`: Aggregates pixels, computes empirical GEDI standard error (`uoi_se`), and derives normalized precision weights (`w_uoi_norm = w_uoi / mean(w_uoi)`) and spatial homogeneity (`homogeneity`). It reads temporal weights (`w_temp_cluster`) and keep proportions (`p_keep`) directly from the pre-computed GeoJSON attributes, and computes combined weights (`w_combined_norm = w_combined / mean(w_combined)`).
     *   `fit_framework1_model()` / `fit_framework2_model()`: Dynamically loads fitted model formulas and coefficients from outputs RDS files, ensuring downstream code remains completely parameterization-independent.
 *   **[code/functions/theme_pnas.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/functions/theme_pnas.R):**  
     Centralizes all aesthetic parameters, PNAS column-width specifications, and standardizes color scales (`pal_basin`).

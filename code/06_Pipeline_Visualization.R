@@ -30,6 +30,12 @@ library(readr)
 library(sf)
 library(scales)
 library(tidyr)
+library(jsonlite)
+
+config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
+config <- jsonlite::read_json(config_path)
+brackets <- unlist(config$temporal_decay$brackets)
+weights <- unlist(config$temporal_decay$weights)
 
 cat("============================================================\n")
 cat("=== Generating 6-Panel Manuscript Figures 1 and 2 (Pipeline Summary) ===\n")
@@ -531,10 +537,10 @@ cluster_temporal_spans <- det_all %>%
     end_date = as.Date(end_date),
     years_before_gedi = as.numeric(gedi_start - start_date) / 365.25,
     w_temp = case_when(
-      years_before_gedi <= 1.0  ~ 1.0,
-      years_before_gedi <= 6.0  ~ 0.3,
-      years_before_gedi <= 11.0 ~ 0.1,
-      TRUE                      ~ 0.02
+      years_before_gedi <= brackets[1] ~ weights[1],
+      years_before_gedi <= brackets[2] ~ weights[2],
+      years_before_gedi <= brackets[3] ~ weights[3],
+      TRUE                             ~ weights[4]
     )
   )
 

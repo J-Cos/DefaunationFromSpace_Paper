@@ -18,6 +18,12 @@ library(readr)
 library(dplyr)
 library(mgcv)
 library(terra)
+library(jsonlite)
+
+config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
+config <- jsonlite::read_json(config_path)
+day_range_coeff <- config$allometric_scaling$day_range_coeff
+day_range_exp   <- config$allometric_scaling$day_range_exp
 
 cat("=== 10: Collecting Results Statistics ===\n\n")
 
@@ -87,42 +93,8 @@ add("2", "total_trap_days_retained_clusters",
     "Total survey effort in retained clusters (trap-days)",
     sum(clus$trap_days, na.rm = TRUE), src = SRC_CLU, unit = "trap-days")
 
-# --- Clusters (pre-filter) via re-clustering ---
-# Re-cluster from unique deployment coords (identical algorithm to
-# visualise_camera_traps.py and calibration_helpers.R: haversine,
-# single-linkage, 11.1 km threshold).
-haversine_dist <- function(lon1, lat1, lon2, lat2) {
-  r   <- 6371.0
-  rad <- pi / 180
-  dlon <- (lon2 - lon1) * rad
-  dlat <- (lat2 - lat1) * rad
-  lat1r <- lat1 * rad; lat2r <- lat2 * rad
-  a <- sin(dlat / 2)^2 + cos(lat1r) * cos(lat2r) * sin(dlon / 2)^2
-  r * 2 * asin(sqrt(a))
-}
-
-coords_df <- det %>%
-  select(region, longitude, latitude) %>%
-  distinct() %>%
-  mutate(cluster_id_geo = "")
-
-for (reg in unique(coords_df$region)) {
-  idx <- which(coords_df$region == reg)
-  sub <- coords_df[idx, ]
-  n   <- nrow(sub)
-  if (n > 1) {
-    dm <- matrix(0, n, n)
-    for (i in 1:n) for (j in 1:n)
-      dm[i, j] <- haversine_dist(sub$longitude[i], sub$latitude[i],
-                                  sub$longitude[j], sub$latitude[j])
-    hc     <- hclust(as.dist(dm), method = "single")
-    labels <- cutree(hc, h = 11.1)
-  } else {
-    labels <- 1
-  }
-  coords_df$cluster_id_geo[idx] <- paste0(reg, "_", sprintf("%02d", labels))
-}
-n_clusters_prefilter <- n_distinct(coords_df$cluster_id_geo)
+# --- Clusters (pre-filter) ---
+n_clusters_prefilter <- n_distinct(det$cluster_id)
 
 add("2", "n_clusters_prefilter",
     "Spatially independent camera-trap clusters (before GEDI overlap filter)",
@@ -224,8 +196,7 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
     next
   }
 
-  # day-range corrected biomass contribution per detection row
-  sub_det$day_range_km <- 1.2 * (sub_det$body_mass_kg ^ 0.26)
+  sub_det$day_range_km <- day_range_coeff * (sub_det$body_mass_kg ^ day_range_exp)
   # cluster-level trap_days from the cluster file
   sub_det <- sub_det %>%
     left_join(

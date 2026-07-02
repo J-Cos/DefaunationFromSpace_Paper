@@ -2,27 +2,48 @@
 """
 process_camera_traps.py
 =======================
-Ingests both Amazon Basin and Congo Basin Wildlife Insights datasets,
+Ingests Congo, Amazon, and Southeast Asia camera trapping data,
 collapses image-level data to independent events (30-min threshold),
-matches taxa to EltonTraits body-mass databases, calculates biophysical
-metrics (B_H and M_H indices) at the deployment level, and exports
-joint tidy datasets.
+matches taxa to EltonTraits body-mass databases, performs 11.1km
+spatial clustering, filters clusters by GEDI grid overlap, computes
+cluster-level Relative Abundance Indices (RAI), Biomass Index (B_H),
+Metabolism Index (M_H), temporal weights, and taxonomic keep proportions.
+Saves all CSV and GeoJSON spatial products.
 
 Input:  - data/CongoCameraTrapping/wildlife-insights_* (Congo Basin packages)
         - data/AmazonCameraTrapping/wildlife-insights_* (Amazon Basin packages)
+        - data/SEAsiaCameraTrapping/wildlife-insights_* (SE Asia packages)
         - data/trait_databases/MamFuncDat.txt           (EltonTraits Mammals)
         - data/trait_databases/BirdFuncDat.txt          (EltonTraits Birds)
 
-Output: - outputs/camera_traps_joint_detections.csv     (Event-level joint detections)
+Output: - outputs/camera_traps_joint_detections.csv     (Event-level joint detections with cluster assignments)
         - outputs/camera_traps_joint_metrics.csv        (Deployment-level joint metrics)
+        - outputs/camera_traps_cluster_level_metrics.csv (GEDI-valid cluster-level metrics)
+        - outputs/camera_traps_cluster_level_metrics_robust.csv (Robust cluster-level metrics, trap_days >= min_trap_days from config)
+        - outputs/camera_traps_robust_detections.csv    (Event-level detections in robust clusters only)
+        - outputs/camera_traps_robust_buffered_mcps.geojson (Robust cluster buffered MCP geometries with attributes)
 """
 
 import os
+import json
 import argparse
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from datetime import datetime
+
+# Optional dependencies for spatial operations (will be checked in main)
+try:
+    from scipy.spatial.distance import pdist
+    from scipy.cluster.hierarchy import linkage, fcluster
+    from shapely.geometry import MultiPoint, mapping
+    from shapely.ops import transform
+    from pyproj import Transformer
+    import rasterio
+    from rasterio.mask import mask
+    SPATIAL_LIBS_AVAILABLE = True
+except ImportError:
+    SPATIAL_LIBS_AVAILABLE = False
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -36,17 +57,40 @@ AMAZON_DIR = DATA_DIR / "AmazonCameraTrapping"
 SEASIA_DIR = DATA_DIR / "SEAsiaCameraTrapping"
 TRAIT_DIR = DATA_DIR / "trait_databases"
 
-# ── Allometric & Biophysical Constants ──────────────────────────────────────
-# Day range (km/day) from body mass (kg): Carbone et al. 2005
-DAY_RANGE_COEFF = 1.2
-DAY_RANGE_EXP = 0.26
+# ── Load Config File ────────────────────────────────────────────────────────
+CONFIG_PATH = SCRIPT_DIR / "config.json"
+if CONFIG_PATH.exists():
+    with open(CONFIG_PATH, "r") as f:
+        CONFIG = json.load(f)
+else:
+    # Fallback default values
+    CONFIG = {
+        "allometric_scaling": {
+            "day_range_coeff": 1.2,
+            "day_range_exp": 0.26,
+            "fmr_coeff": 5.7,
+            "fmr_exp": 0.75
+        },
+        "clustering": {
+            "threshold_km": 11.1,
+            "buffer_meters": 5500,
+            "min_trap_days": 10
+        },
+        "temporal_decay": {
+            "brackets": [1.0, 6.0, 11.0],
+            "weights": [1.0, 0.5, 0.25, 0.1]
+        }
+    }
 
-# Field metabolic rate (Watts) from body mass (kg): Nagy 2005
-FMR_COEFF = 10.0  # Watts
-FMR_EXP = 0.75
+DAY_RANGE_COEFF = CONFIG["allometric_scaling"]["day_range_coeff"]
+DAY_RANGE_EXP = CONFIG["allometric_scaling"]["day_range_exp"]
+FMR_COEFF = CONFIG["allometric_scaling"]["fmr_coeff"]
+FMR_EXP = CONFIG["allometric_scaling"]["fmr_exp"]
+CLUSTER_THRESHOLD_KM = CONFIG["clustering"]["threshold_km"]
+BUFFER_METERS = CONFIG["clustering"]["buffer_meters"]
+MIN_TRAP_DAYS = CONFIG["clustering"]["min_trap_days"]
 
 # ── Fallback Body Masses (kg) by Family for Taxa not in EltonTraits ─────────
-# Updated to cover both African and South American tropical forest species
 FALLBACK_FAMILY_MASS_KG = {
     # African / Global Fallbacks
     "Viverridae": 2.5,
@@ -76,7 +120,7 @@ FALLBACK_FAMILY_MASS_KG = {
     "Hominidae": 70.0,
     
     # Neotropical Fallbacks (Amazon)
-    "Myrmecophagidae": 15.0,   # Sloths and anteaters
+    "Myrmecophagidae": 15.0,   # Anteaters
     "Bradypodidae": 4.5,
     "Megalonychidae": 6.0,
     "Dasypodidae": 4.5,       # Armadillos
@@ -114,7 +158,7 @@ EXCLUDE_COMMON_NAMES = {
 # ── Ingestion Helpers ────────────────────────────────────────────────────────
 
 def discover_wi_packages(region_dir: Path) -> list[Path]:
-    """Find all unzipped WI data package directories under a folder (supporting nesting)."""
+    """Find all unzipped WI data package directories under a folder."""
     packages = []
     if not region_dir.exists():
         return packages
@@ -127,24 +171,18 @@ def discover_wi_packages(region_dir: Path) -> list[Path]:
 def load_deployments(package_dir: Path) -> pd.DataFrame:
     """Load and clean the deployments table from a single WI package."""
     df = pd.read_csv(package_dir / "deployments.csv")
-    # Clean column names
     df.columns = df.columns.str.strip().str.lower()
     
-    # Parse dates
     df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
     df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce")
-    
-    # Compute trap-days
     df["trap_days"] = (df["end_date"] - df["start_date"]).dt.total_seconds() / 86400
     
-    # Drop deployments with missing or invalid dates or locations
     df = df.dropna(subset=["start_date", "end_date", "longitude", "latitude"])
     df = df[df["trap_days"] > 0].copy()
     df = df.drop_duplicates(subset=["project_id", "deployment_id"]).copy()
     
     cols = ["project_id", "deployment_id", "longitude", "latitude",
             "start_date", "end_date", "trap_days"]
-    # Check if optional project name/subproject exists
     for col in ["project_name", "subproject_name", "feature_type"]:
         if col in df.columns:
             cols.append(col)
@@ -153,7 +191,7 @@ def load_deployments(package_dir: Path) -> pd.DataFrame:
 
 
 def _parse_wi_timestamp(ts_series: pd.Series) -> pd.Series:
-    """Parse Wildlife Insights timestamps supporting standard ISO or GMT string formats."""
+    """Parse Wildlife Insights timestamps supporting ISO or GMT string formats."""
     result = pd.to_datetime(ts_series, errors="coerce", utc=True)
     mask = result.isna() & ts_series.notna()
     if mask.any():
@@ -168,16 +206,12 @@ def _collapse_to_independent_events(
     df: pd.DataFrame,
     threshold_minutes: float = 30.0,
 ) -> pd.DataFrame:
-    """
-    Collapse image-level detections into sequence-level independent events.
-    Groups images of the same taxon at the same deployment within a threshold.
-    """
+    """Collapse image-level detections into sequence-level independent events."""
     keep_cols = ["project_id", "deployment_id", "genus", "species",
                  "common_name", "class", "order", "family",
                  "number_of_objects", "timestamp"]
     keep_cols = [c for c in keep_cols if c in df.columns]
 
-    # Split by sequence_id presence
     has_seq_id = "sequence_id" in df.columns
     if has_seq_id:
         with_seq = df[df["sequence_id"].notna()].copy()
@@ -189,7 +223,6 @@ def _collapse_to_independent_events(
     events = []
 
     if len(with_seq) > 0:
-        # Collapse using sequence_id, grouping by taxon to preserve separate species/families inside the sequence
         grp_cols_seq = ["project_id", "deployment_id", "sequence_id"]
         for c in ["class", "order", "family", "genus", "species"]:
             if c in with_seq.columns:
@@ -207,10 +240,8 @@ def _collapse_to_independent_events(
         events.append(seq_events)
 
     if len(without_seq) > 0 and "timestamp" in without_seq.columns:
-        # Collapse using temporal threshold
         without_seq["_ts"] = _parse_wi_timestamp(without_seq["timestamp"])
         
-        # Sort and group by deployment x taxon hierarchy to keep different families/genera separate
         grp_cols = ["project_id", "deployment_id"]
         for c in ["class", "order", "family", "genus", "species"]:
             if c in without_seq.columns:
@@ -257,7 +288,6 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
     img_parts = sorted(package_dir.glob("images_*.csv"))
 
     if seq_path.exists():
-        # Sequences exists: pre-collapsed event-level data
         df = pd.read_csv(seq_path, low_memory=False)
         df.columns = df.columns.str.strip().str.lower()
 
@@ -282,7 +312,6 @@ def load_images(package_dir: Path, independence_threshold_min: float = 30.0) -> 
         return df
 
     elif img_path.exists() or len(img_parts) > 0:
-        # Images exists (single or split): requires event collapsing
         if img_path.exists():
             df = pd.read_csv(img_path, low_memory=False)
         else:
@@ -325,7 +354,6 @@ def assign_taxon_quality(row: pd.Series) -> str:
     genus_lower = genus.lower()
     family_lower = family.lower()
 
-    # Check for human detections
     is_human = (
         genus_lower == "homo" or
         "human" in cn_lower or
@@ -353,7 +381,6 @@ def assign_taxon_quality(row: pd.Series) -> str:
     if family and family != "" and family_lower != "unknown":
         return "family"
     return "higher"
-
 
 
 def compute_detection_rates(deployments: pd.DataFrame,
@@ -396,7 +423,6 @@ def load_eltontraits(trait_dir: Path) -> pd.DataFrame:
     """Load EltonTraits mammal and bird body-mass databases."""
     frames = []
 
-    # Mammals
     mam_path = trait_dir / "MamFuncDat.txt"
     if mam_path.exists():
         mam = pd.read_csv(mam_path, sep="\t", encoding="latin-1")
@@ -411,7 +437,6 @@ def load_eltontraits(trait_dir: Path) -> pd.DataFrame:
                 frames.append(mam[["genus", "species", "body_mass_kg", "class", "taxon_source"]])
                 print(f"  Loaded {len(mam)} mammal species from EltonTraits")
 
-    # Birds
     bird_path = trait_dir / "BirdFuncDat.txt"
     if bird_path.exists():
         bird = pd.read_csv(bird_path, sep="\t", encoding="latin-1")
@@ -451,19 +476,16 @@ def match_body_mass(det: pd.DataFrame, traits: pd.DataFrame) -> pd.DataFrame:
         s = safe_str(row.get("species", ""))
         fam = safe_str(row.get("family", ""))
 
-        # 1. Exact species match
         if g and s and (g, s) in species_mass:
             det.at[idx, "body_mass_kg"] = species_mass[(g, s)]
             det.at[idx, "mass_match_level"] = "species"
             continue
 
-        # 2. Genus median fallback
         if g and g in genus_mass:
             det.at[idx, "body_mass_kg"] = genus_mass[g]
             det.at[idx, "mass_match_level"] = "genus"
             continue
 
-        # 3. Family fallback
         if fam and fam in FALLBACK_FAMILY_MASS_KG:
             det.at[idx, "body_mass_kg"] = FALLBACK_FAMILY_MASS_KG[fam]
             det.at[idx, "mass_match_level"] = "family_fallback"
@@ -473,7 +495,7 @@ def match_body_mass(det: pd.DataFrame, traits: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
-    """Calculate site-level heterotroph biomass and metabolism indices using Carbone & Nagy corrections."""
+    """Calculate site-level heterotroph biomass and metabolism indices at deployment level."""
     usable = det[
         (det["taxon_quality"].isin(["species", "genus", "family"])) &
         (~det["taxon_quality"].isin(["blank", "human", "domestic"])) &
@@ -481,15 +503,12 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
         (det["body_mass_kg"] > 0)
     ].copy()
 
-    # Day-range correction
     usable["day_range_km"] = DAY_RANGE_COEFF * (usable["body_mass_kg"] ** DAY_RANGE_EXP)
     usable["corrected_RAI"] = usable["RAI"] / usable["day_range_km"]
 
-    # Biophysical contributions
     usable["biomass_contrib"] = usable["corrected_RAI"] * usable["body_mass_kg"]
     usable["metabolism_contrib"] = usable["corrected_RAI"] * FMR_COEFF * (usable["body_mass_kg"] ** FMR_EXP)
 
-    # Large mammal contributions
     usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
     usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
     usable["biomass_contrib_gt1000"] = np.where(usable["body_mass_kg"] > 1000.0, usable["biomass_contrib"], 0.0)
@@ -511,10 +530,8 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
             .agg(**agg_dict)
             .reset_index())
 
-    # Calculate fraction
     site["megafauna_fraction"] = np.where(site["B_H_index"] > 0, (site["B_H_gt50"] / site["B_H_index"]) * 100, 0.0)
 
-    # Retain all deployments (even those with zero wild species)
     meta_cols = ["project_id", "deployment_id", "longitude", "latitude", "trap_days"]
     if "project_name" in det.columns:
         meta_cols.append("project_name")
@@ -523,60 +540,32 @@ def compute_site_heterotroph_metrics(det: pd.DataFrame) -> pd.DataFrame:
     site = all_deps.merge(site, on=["project_id", "deployment_id"], how="left")
 
     site["n_species"] = site["n_species"].fillna(0).astype(int)
-    site["n_detections_total"] = site["n_detections_total"].fillna(0).astype(int)
-    site["B_H_index"] = site["B_H_index"].fillna(0.0)
-    site["M_H_index"] = site["M_H_index"].fillna(0.0)
-    site["B_H_gt50"] = site["B_H_gt50"].fillna(0.0)
-    site["B_H_gt100"] = site["B_H_gt100"].fillna(0.0)
-    site["B_H_gt1000"] = site["B_H_gt1000"].fillna(0.0)
-    site["megafauna_fraction"] = site["megafauna_fraction"].fillna(0.0)
-    site["dominant_species"] = site["dominant_species"].fillna("")
-    site["species_list"] = site["species_list"].fillna("")
-
     return site
 
 
-# ── Pipeline Driver ──────────────────────────────────────────────────────────
-
 def process_region(region_dir: Path, region_name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Discover, load, and compute metrics for all packages in a given region."""
+    """Iterate packages under a region and return clean detection and event frames."""
+    print(f"\nProcessing region {region_name}...")
     packages = discover_wi_packages(region_dir)
-    print(f"\nProcessing {region_name} Basin ({len(packages)} packages):")
+    print(f"  Discovered {len(packages)} packages")
     
     all_deployments = []
     all_events = []
     
-    for pkg in packages:
-        print(f"  Ingesting {pkg.name}...")
-        dep = load_deployments(pkg)
-        evt = load_images(pkg, independence_threshold_min=30.0)
-        
-        # Merge project name from projects.csv if available
-        proj_csv = pkg / "projects.csv"
-        if proj_csv.exists():
-            try:
-                proj_df = pd.read_csv(proj_csv)
-                proj_df.columns = proj_df.columns.str.strip().str.lower()
-                if "project_name" in proj_df.columns and "project_id" in proj_df.columns:
-                    name_map = proj_df.set_index("project_id")["project_name"].to_dict()
-                    dep["project_name"] = dep["project_id"].map(name_map)
-            except Exception as e:
-                print(f"    Warning: Could not parse projects.csv: {e}")
-        
-        if "project_name" not in dep.columns:
-            dep["project_name"] = pkg.name
+    for idx, p_dir in enumerate(packages):
+        print(f"    [{idx+1}/{len(packages)}] Package: {p_dir.name}")
+        try:
+            deps = load_deployments(p_dir)
+            evts = load_images(p_dir)
+            all_deployments.append(deps)
+            all_events.append(evts)
+        except Exception as e:
+            print(f"      ERROR loading package {p_dir.name}: {e}")
             
-        all_deployments.append(dep)
-        all_events.append(evt)
-        print(f"    - {len(dep)} deployments, {len(evt)} independent events")
-
     if not all_deployments:
-        print(f"  No packages found for {region_name} Basin.")
         return pd.DataFrame(), pd.DataFrame()
-
-    deployments = pd.concat(all_deployments, ignore_index=True)
-    deployments = deployments.drop_duplicates(subset=["project_id", "deployment_id"])
-
+        
+    deployments = pd.concat(all_deployments, ignore_index=True).drop_duplicates(subset=["project_id", "deployment_id"])
     events = pd.concat(all_events, ignore_index=True)
     dedup_cols = ["project_id", "deployment_id", "genus", "species", "timestamp", "number_of_objects"]
     dedup_cols = [c for c in dedup_cols if c in events.columns]
@@ -590,9 +579,253 @@ def process_region(region_dir: Path, region_name: str) -> tuple[pd.DataFrame, pd
     return det, events
 
 
+# ── Spatial Clustering, Aggregation & GIS Preprocessing ────────────────────
+
+def buffer_in_meters(geom, distance_meters):
+    """Buffer a shapely geometry in meters using a local AEQD projection to avoid distortion."""
+    centroid = geom.centroid
+    lon, lat = centroid.x, centroid.y
+    aeqd_proj = f"+proj=aeqd +lat_0={lat} +lon_0={lon} +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs"
+    to_aeqd = Transformer.from_crs("EPSG:4326", aeqd_proj, always_xy=True)
+    from_aeqd = Transformer.from_crs(aeqd_proj, "EPSG:4326", always_xy=True)
+    geom_projected = transform(to_aeqd.transform, geom)
+    geom_buffered_projected = geom_projected.buffer(distance_meters)
+    return transform(from_aeqd.transform, geom_buffered_projected)
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    """Calculate Haversine distance between two coordinates in km."""
+    r = 6371.0
+    rad = np.pi / 180
+    dlon = (lon2 - lon1) * rad
+    dlat = (lat2 - lat1) * rad
+    lat1_r = lat1 * rad
+    lat2_r = lat2 * rad
+    a = np.sin(dlat / 2)**2 + np.cos(lat1_r) * np.cos(lat2_r) * np.sin(dlon / 2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return r * c
+
+
+def get_master_cluster_map(df, threshold_km=None):
+    """Create coordinate-to-cluster_id map using scipy single-linkage clustering."""
+    if threshold_km is None:
+        threshold_km = CLUSTER_THRESHOLD_KM
+    unique_coords = df[['region', 'longitude', 'latitude']].drop_duplicates().reset_index(drop=True)
+    unique_coords['cluster_id'] = ""
+    
+    for reg in unique_coords['region'].unique():
+        sub = unique_coords[unique_coords['region'] == reg].copy()
+        n = len(sub)
+        if n == 0:
+            continue
+        
+        if n > 1:
+            coords = sub[['longitude', 'latitude']].values
+            dist_matrix = np.zeros((n, n))
+            for i in range(n):
+                for j in range(i+1, n):
+                    d = haversine(coords[i,0], coords[i,1], coords[j,0], coords[j,1])
+                    dist_matrix[i,j] = d
+                    dist_matrix[j,i] = d
+            condensed = dist_matrix[np.triu_indices(n, k=1)]
+            Z = linkage(condensed, method='single')
+            labels = fcluster(Z, threshold_km, criterion='distance')
+        else:
+            labels = np.array([1])
+            
+        sub['c_num'] = labels
+        sub['cluster_id'] = reg + "_" + sub['c_num'].astype(str).str.zfill(2)
+        unique_coords.loc[unique_coords['region'] == reg, 'cluster_id'] = sub['cluster_id'].values
+        
+    return unique_coords.set_index(['region', 'longitude', 'latitude'])['cluster_id'].to_dict()
+
+
+def aggregate_to_clusters(det, cluster_map):
+    """Aggregate detections to cluster level and calculate biomass indices."""
+    det = det.copy()
+    det['cluster_id'] = det.apply(
+        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+        axis=1
+    )
+    det = det[det['cluster_id'] != ""].copy()
+    
+    # Calculate total trap days per cluster
+    deps = det[['region', 'cluster_id', 'project_id', 'deployment_id', 'trap_days']].drop_duplicates()
+    cluster_trap_days = deps.groupby(['region', 'cluster_id'])['trap_days'].sum().to_dict()
+    
+    # Group detections by cluster and taxon key
+    grp_cols = ["region", "cluster_id", "taxon_key", "class", "order", "family", "genus", "species", "taxon_quality"]
+    agg_dict = {"n_detections": "sum"}
+    for col in ["body_mass_kg", "common_name"]:
+        if col in det.columns:
+            agg_dict[col] = "first"
+            
+    clustered_det = det.groupby(grp_cols, dropna=False).agg(agg_dict).reset_index()
+    clustered_det['cluster_trap_days'] = clustered_det.apply(
+        lambda r: cluster_trap_days.get((r['region'], r['cluster_id']), 1.0),
+        axis=1
+    )
+    
+    # Cluster RAI
+    clustered_det['RAI'] = (clustered_det['n_detections'] / clustered_det['cluster_trap_days']) * 100
+    
+    # Biophysical estimations
+    usable = clustered_det[
+        (clustered_det["taxon_quality"].isin(["species", "genus", "family"])) &
+        (~clustered_det["taxon_quality"].isin(["blank", "human", "domestic"])) &
+        (clustered_det["body_mass_kg"].notna()) &
+        (clustered_det["body_mass_kg"] > 0)
+    ].copy()
+    
+    usable["day_range_km"] = DAY_RANGE_COEFF * (usable["body_mass_kg"] ** DAY_RANGE_EXP)
+    usable["corrected_RAI"] = usable["RAI"] / usable["day_range_km"]
+    
+    usable["biomass_contrib"] = usable["corrected_RAI"] * usable["body_mass_kg"]
+    usable["metabolism_contrib"] = usable["corrected_RAI"] * FMR_COEFF * (usable["body_mass_kg"] ** FMR_EXP)
+    
+    usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
+    usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
+    usable["biomass_contrib_gt1000"] = np.where(usable["body_mass_kg"] > 1000.0, usable["biomass_contrib"], 0.0)
+    
+    agg_dict_metric = {
+        "n_species": ("taxon_key", "nunique"),
+        "n_detections_total": ("n_detections", "sum"),
+        "B_H_index": ("biomass_contrib", "sum"),
+        "M_H_index": ("metabolism_contrib", "sum"),
+        "B_H_gt50": ("biomass_contrib_gt50", "sum"),
+        "B_H_gt100": ("biomass_contrib_gt100", "sum"),
+        "B_H_gt1000": ("biomass_contrib_gt1000", "sum"),
+    }
+    
+    cluster_metrics = (usable
+                       .groupby(["region", "cluster_id"])
+                       .agg(**agg_dict_metric)
+                       .reset_index())
+    
+    cluster_metrics["megafauna_fraction"] = np.where(
+        cluster_metrics["B_H_index"] > 0,
+        (cluster_metrics["B_H_gt50"] / cluster_metrics["B_H_index"]) * 100,
+        0.0
+    )
+    # CR-5: Add new megafauna fraction metrics with appropriate thresholds
+    cluster_metrics["megafauna_fraction_gt50"] = np.where(
+        cluster_metrics["B_H_index"] > 0,
+        (cluster_metrics["B_H_gt50"] / cluster_metrics["B_H_index"]) * 100,
+        0.0
+    )
+    cluster_metrics["megafauna_fraction_gt100"] = np.where(
+        cluster_metrics["B_H_index"] > 0,
+        (cluster_metrics["B_H_gt100"] / cluster_metrics["B_H_index"]) * 100,
+        0.0
+    )
+    
+    # Calculate centroids and merge
+    unique_dep_coords = det[['region', 'cluster_id', 'longitude', 'latitude']].drop_duplicates()
+    centroids = unique_dep_coords.groupby(['region', 'cluster_id']).agg(
+        longitude=('longitude', 'mean'),
+        latitude=('latitude', 'mean')
+    ).reset_index()
+    
+    all_meta = deps.groupby(['region', 'cluster_id']).agg(trap_days=('trap_days', 'sum')).reset_index()
+    all_meta = all_meta.merge(centroids, on=['region', 'cluster_id'], how='left')
+    
+    cluster_metrics = all_meta.merge(cluster_metrics, on=["region", "cluster_id"], how="left")
+    cluster_metrics["n_species"] = cluster_metrics["n_species"].fillna(0).astype(int)
+    cluster_metrics["n_detections_total"] = cluster_metrics["n_detections_total"].fillna(0).astype(int)
+    cluster_metrics["B_H_index"] = cluster_metrics["B_H_index"].fillna(0.0)
+    cluster_metrics["M_H_index"] = cluster_metrics["M_H_index"].fillna(0.0)
+    cluster_metrics["B_H_gt50"] = cluster_metrics["B_H_gt50"].fillna(0.0)
+    cluster_metrics["B_H_gt100"] = cluster_metrics["B_H_gt100"].fillna(0.0)
+    cluster_metrics["B_H_gt1000"] = cluster_metrics["B_H_gt1000"].fillna(0.0)
+    
+    return cluster_metrics, clustered_det
+
+
+def check_gedi_5km_overlap(region, buffered_polygon):
+    """Check if a buffered polygon overlaps at least one valid GEDI 5km pixel."""
+    raster_path = OUTPUT_DIR / "EOdata" / f"analysis_stack_5000_{region}.tif"
+    if not raster_path.exists():
+        raster_path = OUTPUT_DIR / "synthetic_EOdata" / f"analysis_stack_5000_{region}.tif"
+    
+    if not raster_path.exists():
+        return False
+        
+    try:
+        with rasterio.open(raster_path) as src:
+            out_image, _ = mask(src, [buffered_polygon], crop=True, filled=False, indexes=3, all_touched=False)
+            if isinstance(out_image, np.ma.MaskedArray):
+                valid_pixels = np.sum(~out_image.mask & (out_image.data > 0))
+            else:
+                valid_pixels = np.sum(out_image > 0)
+            return valid_pixels > 0
+    except Exception as e:
+        print(f"Warning masking GEDI raster: {e}")
+        return False
+
+
+def calculate_temporal_weights_py(det, cluster_map):
+    """Calculate temporal weight (w_temp_cluster) for each cluster in Python."""
+    det = det.copy()
+    det['cluster_id'] = det.apply(
+        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+        axis=1
+    )
+    det = det[det['cluster_id'] != ""].copy()
+    
+    deployments = det[['region', 'cluster_id', 'project_id', 'deployment_id', 'start_date', 'end_date', 'trap_days']].drop_duplicates().copy()
+    deployments["start_date"] = pd.to_datetime(deployments["start_date"])
+    gedi_start = pd.to_datetime("2019-04-17")
+    
+    deployments["years_before_gedi"] = (gedi_start - deployments["start_date"]).dt.days / 365.25
+    
+    brackets = CONFIG["temporal_decay"]["brackets"]
+    weights = CONFIG["temporal_decay"]["weights"]
+    
+    def get_w_temp(yrs):
+        if yrs <= brackets[0]:
+            return weights[0]
+        elif yrs <= brackets[1]:
+            return weights[1]
+        elif yrs <= brackets[2]:
+            return weights[2]
+        else:
+            return weights[3]
+            
+    deployments["w_temp"] = deployments["years_before_gedi"].apply(get_w_temp)
+    
+    cluster_weights = deployments.groupby("cluster_id").apply(
+        lambda g: (g["trap_days"] * g["w_temp"]).sum() / g["trap_days"].sum() if g["trap_days"].sum() > 0 else 1.0
+    ).to_dict()
+    
+    return cluster_weights
+
+
+def calculate_taxonomic_keep_proportions_py(det, cluster_map):
+    """Calculate taxonomic keep proportion (p_keep) for each cluster in Python."""
+    det = det.copy()
+    det['cluster_id'] = det.apply(
+        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+        axis=1
+    )
+    det = det[det['cluster_id'] != ""].copy()
+    
+    wild_det = det[~det["taxon_quality"].isin(["blank", "human", "domestic"])].copy()
+    
+    if len(wild_det) > 0:
+        total_wild = wild_det.groupby("cluster_id")["n_detections"].sum()
+        kept_wild = wild_det[wild_det["taxon_quality"].isin(["species", "genus", "family"])].groupby("cluster_id")["n_detections"].sum()
+        p_keep_dict = (kept_wild / total_wild).fillna(1.0).to_dict()
+    else:
+        p_keep_dict = {}
+        
+    return p_keep_dict
+
+
+# ── Main Script Entry ────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Process joint Congo and Amazon camera trap datasets with EltonTraits allometric scaling."
+        description="Process Congo, Amazon, and SE Asia camera trapping datasets with spatial clustering."
     )
     parser.add_argument("--congo-dir", type=Path, default=CONGO_DIR)
     parser.add_argument("--amazon-dir", type=Path, default=AMAZON_DIR)
@@ -628,39 +861,136 @@ def main():
     for lvl, cnt in match_summary.items():
         print(f"  {lvl:18s}: {cnt:5d} rows")
 
-    # Save event-level detections
-    joint_det.to_csv(args.out_detections, index=False)
-    print(f"Saved joint detections (event-level) to {args.out_detections}")
-
-    # Compute site-level metrics
+    # Run deployment-level site metrics (legacy metrics)
     print("\nComputing site-level heterotroph biomass and metabolism indices...")
     joint_metrics = compute_site_heterotroph_metrics(joint_det)
     joint_metrics["region"] = joint_metrics["project_id"].map(
         joint_det.drop_duplicates("project_id").set_index("project_id")["region"]
     )
-    
-    # Save deployment-level metrics
     joint_metrics.to_csv(args.out_metrics, index=False)
-    print(f"Saved joint metrics (deployment-level) to {args.out_metrics}")
+    print(f"Saved legacy joint metrics (deployment-level) to {args.out_metrics}")
 
-    # Regional summary statistics
-    print(f"\n{'='*60}")
-    print("SUMMARY")
-    print(f"{'='*60}")
-    for region in ["Congo", "Amazon", "SE_Asia"]:
-        sub = joint_metrics[joint_metrics["region"] == region]
-        print(f"{region} Basin:")
-        print(f"  Number of deployments: {len(sub)}")
-        print(f"  Unique projects:        {sub['project_name'].nunique()}")
-        print(f"  Total species detected: {sub['n_species'].max()}")
-        print(f"  Mean species/site:      {sub['n_species'].mean():.1f}")
-        print(f"  Biomass Index range:    {sub['B_H_index'].min():.2f} – {sub['B_H_index'].max():.2f}")
-        print(f"  Metabolism Index range: {sub['M_H_index'].min():.2f} – {sub['M_H_index'].max():.2f}")
-        print(f"  Median Biomass >50kg:   {sub['B_H_gt50'].median():.2f}")
-        print(f"  Median Biomass >100kg:  {sub['B_H_gt100'].median():.2f}")
-        print(f"  Median Biomass >1000kg: {sub['B_H_gt1000'].median():.2f}")
-        print(f"  Mean Megafauna %:       {sub['megafauna_fraction'].mean():.1f}%")
-    print(f"{'='*60}")
+    # Spatial clustering and GEDI filtering
+    if SPATIAL_LIBS_AVAILABLE:
+        print(f"\nRunning single-linkage spatial clustering at {CLUSTER_THRESHOLD_KM} km on deployments...")
+        cluster_map = get_master_cluster_map(joint_det, CLUSTER_THRESHOLD_KM)
+        
+        # Add cluster_id to event-level detections
+        joint_det['cluster_id'] = joint_det.apply(
+            lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
+            axis=1
+        )
+        # Save event-level detections with cluster assignments
+        joint_det.to_csv(args.out_detections, index=False)
+        print(f"Saved joint detections with cluster assignments to {args.out_detections}")
+
+        print("Aggregating detections to mathematical cluster-level metrics...")
+        cluster_metrics, clustered_det = aggregate_to_clusters(joint_det, cluster_map)
+
+        print("\nCalculating temporal weights and keep proportions in Python...")
+        p_keep_dict = calculate_taxonomic_keep_proportions_py(joint_det, cluster_map)
+        w_temp_dict = calculate_temporal_weights_py(joint_det, cluster_map)
+
+        cluster_metrics["p_keep"] = cluster_metrics["cluster_id"].map(p_keep_dict).fillna(1.0)
+        cluster_metrics["w_temp_cluster"] = cluster_metrics["cluster_id"].map(w_temp_dict).fillna(1.0)
+
+        print("\nFiltering clusters to only keep those overlapping at least one valid GEDI 5km pixel...")
+        # Map deployments to cluster ids for grouping
+        det_copy = joint_det.copy()
+        valid_clusters = []
+        for _, row in cluster_metrics.iterrows():
+            c_id = row["cluster_id"]
+            region = row["region"]
+            
+            c_deps = det_copy[det_copy["cluster_id"] == c_id]
+            points = list(zip(c_deps["longitude"], c_deps["latitude"]))
+            
+            mp = MultiPoint(points)
+            hull = mp.convex_hull
+            buffered = buffer_in_meters(hull, BUFFER_METERS)
+            
+            if check_gedi_5km_overlap(region, buffered):
+                valid_clusters.append(c_id)
+                
+        print(f"  ✓ Retained {len(valid_clusters)} / {len(cluster_metrics)} clusters with valid GEDI overlap.")
+        cluster_metrics_filt = cluster_metrics[cluster_metrics["cluster_id"].isin(valid_clusters)].copy()
+        
+        # Save the aggregated cluster metrics
+        cluster_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics.csv"
+        cluster_metrics_filt.to_csv(cluster_metrics_path, index=False)
+        print(f"Saved aggregated cluster-level metrics to {cluster_metrics_path}")
+
+        # Save robust metrics (trap_days >= MIN_TRAP_DAYS)
+        robust_cluster_metrics = cluster_metrics_filt[cluster_metrics_filt["trap_days"] >= MIN_TRAP_DAYS].copy()
+        robust_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics_robust.csv"
+        robust_cluster_metrics.to_csv(robust_metrics_path, index=False)
+        print(f"Saved robust cluster-level metrics to {robust_metrics_path}")
+
+        # Generate robust cluster buffered MCPs as GeoJSON
+        print("Generating and saving robust cluster buffered MCPs as GeoJSON...")
+        robust_det_for_geojson = det_copy[det_copy['cluster_id'].isin(robust_cluster_metrics['cluster_id'])].copy()
+        robust_det_for_geojson.to_csv(OUTPUT_DIR / "camera_traps_robust_detections.csv", index=False)
+        print(f"Saved robust filtered detections to {OUTPUT_DIR / 'camera_traps_robust_detections.csv'}")
+
+        # Group to unique deployments for polygons
+        deps_unique = (robust_det_for_geojson.groupby(["region", "cluster_id", "project_id", "deployment_id"])
+                       .agg(lon=("longitude", "first"),
+                            lat=("latitude", "first"),
+                            trap_days=("trap_days", "first"))
+                       .reset_index())
+
+        features = []
+        for c_id in robust_cluster_metrics['cluster_id'].unique():
+            c_deps = deps_unique[deps_unique["cluster_id"] == c_id]
+            if len(c_deps) == 0:
+                continue
+            points = list(zip(c_deps["lon"], c_deps["lat"]))
+
+            mp = MultiPoint(points)
+            hull = mp.convex_hull
+            buffered = buffer_in_meters(hull, BUFFER_METERS)
+
+            c_info = robust_cluster_metrics[robust_cluster_metrics['cluster_id'] == c_id].iloc[0]
+
+            properties = {
+                "cluster_id": str(c_id),
+                "region": str(c_info["region"]),
+                "trap_days": float(c_info["trap_days"]),
+                "n_species": int(c_info["n_species"]),
+                "B_H_index": float(c_info["B_H_index"]),
+                "M_H_index": float(c_info["M_H_index"]),
+                "B_H_gt50": float(c_info["B_H_gt50"]),
+                "B_H_gt100": float(c_info["B_H_gt100"]),
+                "B_H_gt1000": float(c_info["B_H_gt1000"]),
+                "megafauna_fraction": float(c_info["megafauna_fraction"]),
+                "megafauna_fraction_gt50": float(c_info["megafauna_fraction_gt50"]),
+                "megafauna_fraction_gt100": float(c_info["megafauna_fraction_gt100"]),
+                "p_keep": float(c_info["p_keep"]),
+                "w_temp_cluster": float(c_info["w_temp_cluster"])
+            }
+
+            feature = {
+                "type": "Feature",
+                "geometry": mapping(buffered),
+                "properties": properties
+            }
+            features.append(feature)
+
+        geojson = {
+            "type": "FeatureCollection",
+            "features": features
+        }
+
+        geojson_path = OUTPUT_DIR / "camera_traps_robust_buffered_mcps.geojson"
+        with open(geojson_path, "w") as f:
+            json.dump(geojson, f, indent=2)
+        print(f"Saved robust cluster buffered MCPs to {geojson_path}")
+
+    else:
+        # Fallback if spatial dependencies are missing
+        print("\nWARNING: scipy, shapely, or rasterio are not available.")
+        print("  Saving raw detections only, spatial clustering was skipped.")
+        joint_det.to_csv(args.out_detections, index=False)
 
 
 if __name__ == "__main__":

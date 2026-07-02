@@ -84,9 +84,6 @@ run_test("extract_scale_data signature check", quote({
   check_signature("extract_scale_data", c("scale_m", "mcps"))
 }))
 
-run_test("calculate_temporal_weights exists", quote({
-  exists("calculate_temporal_weights", mode = "function")
-}))
 
 run_test("fit_framework1_model exists", quote({
   exists("fit_framework1_model", mode = "function")
@@ -194,7 +191,7 @@ run_test("run_predictive_biomass_mapping successfully projects and outputs raste
     length(rasts) == 2 &&
     inherits(rasts[["5000"]]$congo, "SpatRaster") &&
     inherits(rasts[["5000"]]$amazon, "SpatRaster") &&
-    file.exists(file.path(temp_fig_dir, "figureS5.png")) &&
+    file.exists(file.path(temp_fig_dir, "figureS3.png")) &&
     file.exists(file.path(temp_fig_dir, "figure5.png"))
 }))
 
