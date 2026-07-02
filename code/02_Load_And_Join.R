@@ -32,12 +32,12 @@ library(stringr)
 # Source function files
 source("code/functions/theme_pnas.R")
 source("code/functions/load_data.R")
-source("code/functions/gedi_analysis.R")
-source("code/functions/frip_analysis.R")
-source("code/functions/convergence_analysis.R")
-source("code/functions/temporal_analysis.R")
-source("code/functions/plotting.R")
-source("code/functions/pa_pairs.R")
+# NOTE: calibration_helpers.R, model_convergence.R are sourced directly by
+# scripts 03-06, 09 that need them. Modules previously sourced here
+# (gedi_analysis, frip_analysis, convergence_analysis, temporal_analysis,
+# plotting, pa_pairs) were removed — they are part of an earlier H1-H4
+# hypothesis testing framework whose functions are not called by the current
+# pipeline. They remain available in code/functions/ for interactive use.
 
 cat("=== 02: Load and Join ===\n\n")
 
