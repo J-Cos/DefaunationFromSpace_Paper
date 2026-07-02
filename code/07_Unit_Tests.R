@@ -240,6 +240,36 @@ run_test("run_predictive_biomass_mapping successfully projects and outputs raste
     file.exists(file.path(temp_fig_dir, "figure5.png"))
 }))
 
+# =============================================================================
+# MODULE 5: code/10_Collect_Results_Stats.R
+# =============================================================================
+cat("\n--- Module: code/10_Collect_Results_Stats.R ---\n")
+source("code/10_Collect_Results_Stats.R")
+
+run_test("get_profile_cis exists", quote({
+  exists("get_profile_cis", mode = "function")
+}))
+
+run_test("get_profile_cis signature check", quote({
+  check_signature("get_profile_cis", c("model_obj"))
+}))
+
+run_test("get_profile_cis falls back to Wald CIs on dummy gam", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ x, data = df_dummy)
+  cis <- get_profile_cis(fit_dummy)
+  is.matrix(cis) && all(dim(cis) == c(2, 2)) && all(colnames(cis) == c("2.5 %", "97.5 %"))
+}))
+
+run_test("compute_prediction_correlations exists", quote({
+  exists("compute_prediction_correlations", mode = "function")
+}))
+
+run_test("compute_prediction_correlations signature check", quote({
+  check_signature("compute_prediction_correlations", c("ptab_lobo", "ptab_aic"))
+}))
+
 # --- Cleanup temp test directories ---
 unlink(temp_out_dir, recursive = TRUE)
 unlink(temp_fig_dir, recursive = TRUE)

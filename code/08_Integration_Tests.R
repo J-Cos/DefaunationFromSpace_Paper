@@ -55,6 +55,7 @@ unlink("figures/figureS4.png")
 unlink("figures/figureS4.pdf")
 unlink("figures/figure1_gedi_pipeline.png")
 unlink("figures/figure2_camera_trap_pipeline.png")
+unlink("outputs/results_statistics.csv")
 cat("  Old files cleaned successfully.\n\n")
 
 # =============================================================================
@@ -96,6 +97,11 @@ cat("--- Step 6: Running Pipeline Visualization (06_Pipeline_Visualization.R) --
 source("code/06_Pipeline_Visualization.R")
 cat("Step 6 Completed successfully.\n\n")
 
+# Step 7: Results Statistics Collection
+cat("--- Step 7: Running Results Statistics Collection (10_Collect_Results_Stats.R) ---\n")
+source("code/10_Collect_Results_Stats.R")
+cat("Step 7 Completed successfully.\n\n")
+
 # =============================================================================
 # DELIVERABLE VERIFICATION & INTEGRITY CHECKS
 # =============================================================================
@@ -122,7 +128,8 @@ checks <- c(
   verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)"),
   verify_file("figures/figureS4.png", "Predictive Columns Correlation Plot (Fig S4)"),
   verify_file("figures/figure1_gedi_pipeline.png", "Manuscript Figure 1 (GEDI Pipeline)"),
-  verify_file("figures/figure2_camera_trap_pipeline.png", "Manuscript Figure 2 (Camera Trap Pipeline)")
+  verify_file("figures/figure2_camera_trap_pipeline.png", "Manuscript Figure 2 (Camera Trap Pipeline)"),
+  verify_file("outputs/results_statistics.csv", "Results Statistics Harvester CSV")
 )
 
 # =============================================================================
