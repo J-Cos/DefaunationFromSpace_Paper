@@ -45,31 +45,24 @@ extract_scale_pixels <- function(scale_m, mcps = NULL) {
     mcps <- terra::vect(geojson_path)
   }
   
-  # Compute elephant presence dynamically based on spatial ranges or historical presence
-  mcps$elephant_present_strict <- 0
-  mcps$elephant_present_possible <- 0
-  if (file.exists("outputs/elephant_ranges.gpkg")) {
-    ele_ranges <- terra::vect("outputs/elephant_ranges.gpkg")
-    
-    # Strict: only extant (status == "Extant", which corresponds to presence == 1)
-    ele_ranges_strict <- ele_ranges[ele_ranges$status == "Extant", ]
-    if (nrow(ele_ranges_strict) > 0) {
-      intersects_strict <- terra::is.related(mcps, ele_ranges_strict, "intersects")
-      mcps$elephant_present_strict <- as.numeric(rowSums(as.matrix(intersects_strict)) > 0)
-    }
-    
-    # Possible: all statuses (Extant, Possibly Extant, Possibly Extinct)
-    intersects_possible <- terra::is.related(mcps, ele_ranges, "intersects")
-    mcps$elephant_present_possible <- as.numeric(rowSums(as.matrix(intersects_possible)) > 0)
+  # Compute elephant presence dynamically based on spatial ranges
+  if (!file.exists("outputs/elephant_ranges.gpkg")) {
+    stop("Critical Error: outputs/elephant_ranges.gpkg is missing! Please run 01_FigureS1_Regional_Bounding_Boxes.R first.")
   }
   
-  # Fallback to continent-level historical presence if GPKG is missing or has no intersection
-  if (sum(mcps$elephant_present_strict, na.rm = TRUE) == 0) {
-    mcps$elephant_present_strict <- ifelse(mcps$region %in% c("Congo", "SE_Asia"), 1, 0)
+  ele_ranges <- terra::vect("outputs/elephant_ranges.gpkg")
+  mcps$elephant_present_strict <- 0
+  
+  # Strict: only extant (status == "Extant", which corresponds to presence == 1)
+  ele_ranges_strict <- ele_ranges[ele_ranges$status == "Extant", ]
+  if (nrow(ele_ranges_strict) > 0) {
+    intersects_strict <- terra::is.related(mcps, ele_ranges_strict, "intersects")
+    mcps$elephant_present_strict <- as.numeric(rowSums(as.matrix(intersects_strict)) > 0)
   }
-  if (sum(mcps$elephant_present_possible, na.rm = TRUE) == 0) {
-    mcps$elephant_present_possible <- ifelse(mcps$region %in% c("Congo", "SE_Asia"), 1, 0)
-  }
+  
+  # Possible: all statuses (Extant, Possibly Extant, Possibly Extinct)
+  intersects_possible <- terra::is.related(mcps, ele_ranges, "intersects")
+  mcps$elephant_present_possible <- as.numeric(rowSums(as.matrix(intersects_possible)) > 0)
   
   # Retain legacy alias for safety
   mcps$elephant_present <- mcps$elephant_present_possible
