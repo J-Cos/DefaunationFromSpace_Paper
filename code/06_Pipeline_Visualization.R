@@ -631,7 +631,7 @@ p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 
 # --- Panel G: Vertebrate Biomass Index distribution across clusters ---
-df_clusters <- read_csv("outputs/camera_traps_cluster_level_metrics.csv", show_col_types = FALSE) %>%
+df_clusters <- read_csv("outputs/camera_traps_cluster_level_metrics_robust.csv", show_col_types = FALSE) %>%
   mutate(region = ifelse(region == "SE_Asia", "SE Asia", region))
 
 p2_f <- ggplot(df_clusters, aes(x = B_H_index, fill = region)) +

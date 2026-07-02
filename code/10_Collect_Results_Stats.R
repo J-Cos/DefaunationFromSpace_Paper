@@ -182,11 +182,11 @@ cat("Section 2: Camera trap sampling descriptors...\n")
 
 det  <- read_csv("outputs/camera_traps_joint_detections.csv",  show_col_types = FALSE)
 dep  <- read_csv("outputs/camera_traps_joint_metrics.csv",     show_col_types = FALSE)
-clus <- read_csv("outputs/camera_traps_cluster_level_metrics.csv", show_col_types = FALSE)
+clus <- read_csv("outputs/camera_traps_cluster_level_metrics_robust.csv", show_col_types = FALSE)
 
 SRC_CT  <- "process_camera_traps.py"
 SRC_VIS <- "visualise_camera_traps.py"
-SRC_CLU <- "camera_traps_cluster_level_metrics.csv"
+SRC_CLU <- "camera_traps_cluster_level_metrics_robust.csv"
 
 # --- Projects & deployments ---
 add("2", "n_wi_projects",      "Number of Wildlife Insights projects",
