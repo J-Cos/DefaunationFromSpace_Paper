@@ -63,27 +63,29 @@ test_camera_traps.py          --> Fast Python unit test suite testing key camera
     Strictly graphics-only script. Loads pre-processed outputs and generates publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the spatial cluster level.
 3.  **[code/test_camera_traps.py](code/test_camera_traps.py):**  
     Fast, standalone Python unit test suite testing key functions of the camera trap ingestion pipeline (taxon quality sorting, body mass mapping and fallback, independent event collapsing, and temporal weights) without requiring large real datasets.
-4.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](code/01_FigureS1_Regional_Bounding_Boxes.R):**  
+4.  **[code/generate_citations_table.py](code/generate_citations_table.py):**  
+    Extracts the dataset citation and metadata license information from the `projects.csv` files of all processed camera trap projects across Congo, Amazon, and Southeast Asia basins, de-duplicates by project ID, and outputs a formatted Markdown table (`outputs/data_citations_table.md`) and a raw CSV metadata table (`outputs/data_citations_table.csv`).
+5.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](code/01_FigureS1_Regional_Bounding_Boxes.R):**  
     Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
-5.  **[code/02_Load_And_Join.R](code/02_Load_And_Join.R):**  
+6.  **[code/02_Load_And_Join.R](code/02_Load_And_Join.R):**  
     Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, loads the prepared elephant range GeoPackage, and saves a consolidated environmental composite `loaded_data.rds`.
-6.  **[code/03_Framework1_Analysis.R](code/03_Framework1_Analysis.R):**  
+7.  **[code/03_Framework1_Analysis.R](code/03_Framework1_Analysis.R):**  
     Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across **expanded candidate formulations** (incorporating environmental covariates, regional basin boundaries, standing biomass sub-components, and specific elephant presence alternates). The selected best-fitting model shows that the specific presence of large ecological engineers (elephants) is a stronger biophysical predictor of understory openness than generic regional basin boundaries. Generates the publication-quality **Figure 3 (figure3.png)** with a continuous, vibrant model selection bar plot.
-7.  **[code/04_Framework2_Analysis.R](code/04_Framework2_Analysis.R):**  
+8.  **[code/04_Framework2_Analysis.R](code/04_Framework2_Analysis.R):**  
     Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across candidate formulations (evaluating combinations of understory openness, elevation, and basin interactions). Integrates both **LORO-CV parsimonious** and **standard AIC** selection pathways in a unified framework, automatically skipping out-of-sample folds containing `basin` levels to prevent runtime errors. Generates both the main generalizability **Supplementary Figure S2** (`figures/figureS2.png` / `figures/figureS2.pdf`) and the main **Figure 4** (`figures/figure4.png` / `figures/figure4.pdf`) using a DRY, highly parametric plotting pipeline, and saves both best models as RDS objects.
-8.  **[code/05_Predictive_Biomass_Maps.R](code/05_Predictive_Biomass_Maps.R):**  
+9.  **[code/05_Predictive_Biomass_Maps.R](code/05_Predictive_Biomass_Maps.R):**  
     Consolidates biomass prediction mapping. Projects both the LOBO-selected parsimonious best model and the AIC-selected best model across the tropical forest landscapes at both the **5 km** (supplementary map, **Supplementary Figure S3 / figureS3.png**) and **20 km** (peak predictive scale, **Figure 5 / figure5.png**) resolutions in a side-by-side, symmetrical two-column layout. Standardizes all predictions in out-of-sample log-scale MAE units to allow direct comparison of the universal biophysical footprint (Column 1) vs. basin-calibrated biogeographical shift models (Column 2).
-9.  **[code/05b_Predictive_Columns_Correlation.R](code/05b_Predictive_Columns_Correlation.R):**  
+10. **[code/05b_Predictive_Columns_Correlation.R](code/05b_Predictive_Columns_Correlation.R):**  
     Generates Supplementary Figure S4 (`figures/figureS4.png` and `figures/figureS4.pdf`) correlating the predictions from the LOBO-selected template model and the AIC-selected basin-calibrated model across all tropical forest pixels at the 20 km scale. Computes and displays both Pearson and Spearman rank correlation coefficients, providing quantitative insights into regional predictive shifts.
-10. **[code/06_Pipeline_Visualization.R](code/06_Pipeline_Visualization.R):**  
+11. **[code/06_Pipeline_Visualization.R](code/06_Pipeline_Visualization.R):**  
     Generates premium, PNAS-style multipanel manuscript **Figure 1 (figure1_gedi_pipeline.png)** and **Figure 2 (figure2_camera_trap_pipeline.png)**, which visually synthesize log-scale GEDI Shot Count distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
-11. **[code/07_Unit_Tests.R](code/07_Unit_Tests.R):**  
+12. **[code/07_Unit_Tests.R](code/07_Unit_Tests.R):**  
     A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
-12. **[code/08_Integration_Tests.R](code/08_Integration_Tests.R):**  
+13. **[code/08_Integration_Tests.R](code/08_Integration_Tests.R):**  
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `06`, `09`, and `10`) sequentially on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, vector GPKGs, CSV tables, and manuscript figures.
-13. **[code/09_Metabolic_Scaling_Analysis.R](code/09_Metabolic_Scaling_Analysis.R):**  
+14. **[code/09_Metabolic_Scaling_Analysis.R](code/09_Metabolic_Scaling_Analysis.R):**  
     Performs comparative Metabolic Scaling Theory (MST) and index robustness analysis. Evaluates the statistical sensitivity and generalizability of raw biomass ($B_H$) vs. metabolic-scaled energy flux ($M_H$, exponent $\beta = 0.75$), verifying that selected best formulations are completely stable. Saves its summary output to `outputs/metabolic_scaling_model_selection.csv`.
-14. **[code/10_Collect_Results_Stats.R](code/10_Collect_Results_Stats.R):**  
+15. **[code/10_Collect_Results_Stats.R](code/10_Collect_Results_Stats.R):**  
     Post-hoc statistics harvester. Reads all pipeline outputs (models, CSVs, rasters) and produces a long-form CSV (`outputs/results_statistics.csv`) containing every numeric result cited in the manuscript, with confidence intervals, p-values, and source file tracking.
 
 
