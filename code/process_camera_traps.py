@@ -459,37 +459,51 @@ def load_eltontraits(trait_dir: Path) -> pd.DataFrame:
 
 
 def match_body_mass(det: pd.DataFrame, traits: pd.DataFrame) -> pd.DataFrame:
-    """Matches body mass at exact species binomial, genus median, or family fallback levels."""
+    """Matches body mass at exact species binomial, genus median, or family fallback levels.
+
+    Uses vectorized lookups instead of row-wise iteration for performance.
+    Priority: species-level > genus-level > family fallback.
+    """
     det = det.copy()
     det["body_mass_kg"] = np.nan
     det["mass_match_level"] = "unmatched"
 
+    # Ensure string columns for lookup keys
+    det["_g"] = det["genus"].apply(safe_str)
+    det["_s"] = det["species"].apply(safe_str)
+    det["_f"] = det["family"].apply(safe_str)
+
     if len(traits) > 0:
-        species_mass = traits.groupby(["genus", "species"])["body_mass_kg"].median().to_dict()
-        genus_mass = traits.groupby("genus")["body_mass_kg"].median().to_dict()
+        species_mass = traits.groupby(["genus", "species"])["body_mass_kg"].median()
+        genus_mass = traits.groupby("genus")["body_mass_kg"].median()
     else:
-        species_mass = {}
-        genus_mass = {}
+        species_mass = pd.Series(dtype=float)
+        genus_mass = pd.Series(dtype=float)
 
-    for idx, row in det.iterrows():
-        g = safe_str(row.get("genus", ""))
-        s = safe_str(row.get("species", ""))
-        fam = safe_str(row.get("family", ""))
+    # 1. Species-level match (vectorized via MultiIndex map)
+    species_key = list(zip(det["_g"], det["_s"]))
+    species_idx = pd.MultiIndex.from_tuples(species_key, names=["genus", "species"])
+    sp_vals = species_idx.map(species_mass.to_dict().get)
+    sp_mask = pd.notna(sp_vals) & (det["_g"] != "") & (det["_s"] != "")
+    det.loc[sp_mask, "body_mass_kg"] = sp_vals[sp_mask]
+    det.loc[sp_mask, "mass_match_level"] = "species"
 
-        if g and s and (g, s) in species_mass:
-            det.at[idx, "body_mass_kg"] = species_mass[(g, s)]
-            det.at[idx, "mass_match_level"] = "species"
-            continue
+    # 2. Genus-level match (only where not yet matched)
+    unmatched = det["mass_match_level"] == "unmatched"
+    genus_vals = det.loc[unmatched, "_g"].map(genus_mass.to_dict())
+    g_mask = unmatched & genus_vals.notna() & (det["_g"] != "")
+    det.loc[g_mask, "body_mass_kg"] = genus_vals[g_mask]
+    det.loc[g_mask, "mass_match_level"] = "genus"
 
-        if g and g in genus_mass:
-            det.at[idx, "body_mass_kg"] = genus_mass[g]
-            det.at[idx, "mass_match_level"] = "genus"
-            continue
+    # 3. Family fallback (only where still unmatched)
+    unmatched = det["mass_match_level"] == "unmatched"
+    fam_vals = det.loc[unmatched, "_f"].map(FALLBACK_FAMILY_MASS_KG)
+    f_mask = unmatched & fam_vals.notna() & (det["_f"] != "")
+    det.loc[f_mask, "body_mass_kg"] = fam_vals[f_mask]
+    det.loc[f_mask, "mass_match_level"] = "family_fallback"
 
-        if fam and fam in FALLBACK_FAMILY_MASS_KG:
-            det.at[idx, "body_mass_kg"] = FALLBACK_FAMILY_MASS_KG[fam]
-            det.at[idx, "mass_match_level"] = "family_fallback"
-            continue
+    # Clean up temporary columns
+    det.drop(columns=["_g", "_s", "_f"], inplace=True)
 
     return det
 
