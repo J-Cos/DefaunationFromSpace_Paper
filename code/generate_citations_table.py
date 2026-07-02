@@ -14,15 +14,17 @@ import pandas as pd
 from pathlib import Path
 
 def make_markdown_table(df):
+    """Generates a markdown table string from a pandas DataFrame without iterrows."""
     headers = list(df.columns)
-    lines = []
-    lines.append("| " + " | ".join(headers) + " |")
-    lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
-    for _, row in df.iterrows():
-        val_str = []
-        for h in headers:
-            val = str(row[h]).replace("|", "\\|").replace("\n", " ").replace("\r", " ").strip()
-            val_str.append(val)
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |"
+    ]
+    for row in df.to_dict("records"):
+        val_str = [
+            str(row[h]).replace("|", "\\|").replace("\n", " ").replace("\r", " ").strip()
+            for h in headers
+        ]
         lines.append("| " + " | ".join(val_str) + " |")
     return "\n".join(lines)
 
@@ -84,7 +86,7 @@ def main():
                 else:
                     continue
             
-            for _, row in proj_df.iterrows():
+            for row in proj_df.to_dict("records"):
                 pid = str(row["project_id"]).strip()
                 pname = str(row["project_name"]).strip()
                 cit = str(row["data_citation"]).strip()
@@ -112,25 +114,28 @@ def main():
         # Parse deployments.csv to count provided deployments
         try:
             dep_df = pd.read_csv(dep_path, keep_default_na=False)
-            for _, row in dep_df.iterrows():
-                pid = str(row["project_id"]).strip()
-                did = str(row["deployment_id"]).strip()
-                
-                if pid not in project_metadata:
+            # Group deployments by project_id to avoid row-by-row iterrows loops
+            dep_groups = dep_df.groupby("project_id")["deployment_id"].apply(set).to_dict()
+            
+            for pid, deps in dep_groups.items():
+                pid_str = str(pid).strip()
+                if pid_str not in project_metadata:
                     continue
                     
-                meta = project_metadata[pid]
+                meta = project_metadata[pid_str]
                 if "provided_deps" not in meta:
                     meta["provided_deps"] = set()
                     meta["used_deps"] = set()
                     
-                meta["provided_deps"].add(did)
+                cleaned_deps = {str(d).strip() for d in deps}
+                meta["provided_deps"].update(cleaned_deps)
                 
-                # Check if this deployment is in a robust cluster
-                if did in dep_to_cluster:
-                    cl_id = dep_to_cluster[did]
-                    if cl_id in robust_cluster_ids:
-                        meta["used_deps"].add(did)
+                # Filter used deployments using vectorized/set intersection
+                used_in_file = {
+                    d for d in cleaned_deps 
+                    if d in dep_to_cluster and dep_to_cluster[d] in robust_cluster_ids
+                }
+                meta["used_deps"].update(used_in_file)
                         
         except Exception as e:
             print(f"Error reading deployments.csv at {dep_path}: {e}")
