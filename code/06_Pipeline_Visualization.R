@@ -391,7 +391,7 @@ ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 24.5, unit
 cat("✓ 8-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 
 # Copy figure to active brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
+brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
 if (file.exists(brain_artifacts_dir)) {
   file.copy(fig1_png, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.png"), overwrite = TRUE)
   # Also copy PDF version if generated
@@ -680,7 +680,7 @@ ggsave(filename = fig2_png, plot = fig2_final, width = 17.8, height = 22.0, unit
 cat("✓ 7-Panel Figure 2 successfully saved to:", fig2_png, "\n\n")
 
 # Copy figures to active brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
+brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
 if (file.exists(brain_artifacts_dir)) {
   file.copy(fig2_png, file.path(brain_artifacts_dir, "figure2_camera_trap_pipeline.png"), overwrite = TRUE)
   cat("✓ Copied 7-Panel Figure 2 to brain artifacts folder.\n")

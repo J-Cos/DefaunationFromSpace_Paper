@@ -617,24 +617,8 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     return(fig_final)
   }
   
-  # 1. Generate and save the main LOBO Figure 4
-  cat("Generating main LOBO-selected Figure 4...\n")
-  fig_main <- generate_figure4_trio(
-    model_name = best_model_name,
-    model_obj = best_model,
-    results_df = results_df,
-    joined_data = joined_data,
-    full_models = full_models,
-    is_aic = FALSE
-  )
-  
-  fig_png_path <- file.path(figures_dir, "figureS2.png")
-  save_pnas(plot = fig_main, filename = fig_png_path, type = "double", height_cm = 12.5)
-  fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
-  save_pnas(plot = fig_main, filename = fig_pdf_path, type = "double", height_cm = 12.5)
-  
-  # 2. Generate and save the alternate AIC Figure S2
-  cat("Generating alternate AIC-selected Figure S2...\n")
+  # 1. Generate and save the standard AICc-selected Figure 4 (alternate plot)
+  cat("Generating Standard AICc-selected Figure 4...\n")
   fig_alt <- generate_figure4_trio(
     model_name = best_model_name_aic,
     model_obj = best_model_aic,
@@ -644,22 +628,38 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     is_aic = TRUE
   )
   
-  fig_alt_png_path <- file.path(figures_dir, "figureS2_alternate_aic_full.png")
-  save_pnas(plot = fig_alt, filename = fig_alt_png_path, type = "double", height_cm = 12.5)
-  fig_alt_pdf_path <- sub("\\.png$", ".pdf", fig_alt_png_path)
-  save_pnas(plot = fig_alt, filename = fig_alt_pdf_path, type = "double", height_cm = 12.5)
+  fig4_png_path <- file.path(figures_dir, "figure4.png")
+  save_pnas(plot = fig_alt, filename = fig4_png_path, type = "double", height_cm = 12.5)
+  fig4_pdf_path <- sub("\\.png$", ".pdf", fig4_png_path)
+  save_pnas(plot = fig_alt, filename = fig4_pdf_path, type = "double", height_cm = 12.5)
   
-  # 3. Copy both to brain artifact directory if it exists
-  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
+  # 2. Generate and save the LORO-CV/LOBO-selected Figure S2 (main plot)
+  cat("Generating Generalizability LORO-CV-selected Figure S2...\n")
+  fig_main <- generate_figure4_trio(
+    model_name = best_model_name,
+    model_obj = best_model,
+    results_df = results_df,
+    joined_data = joined_data,
+    full_models = full_models,
+    is_aic = FALSE
+  )
+  
+  figS2_png_path <- file.path(figures_dir, "figureS2.png")
+  save_pnas(plot = fig_main, filename = figS2_png_path, type = "double", height_cm = 12.5)
+  figS2_pdf_path <- sub("\\.png$", ".pdf", figS2_png_path)
+  save_pnas(plot = fig_main, filename = figS2_pdf_path, type = "double", height_cm = 12.5)
+  
+  # 3. Copy both to the active brain artifact directory if it exists
+  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
   if (file.exists(brain_artifact_dir)) {
-    file.copy(fig_png_path, file.path(brain_artifact_dir, "figureS2.png"), overwrite = TRUE)
-    file.copy(fig_pdf_path, file.path(brain_artifact_dir, "figureS2.pdf"), overwrite = TRUE)
-    file.copy(fig_alt_png_path, file.path(brain_artifact_dir, "figureS2_alternate_aic_full.png"), overwrite = TRUE)
-    file.copy(fig_alt_pdf_path, file.path(brain_artifact_dir, "figureS2_alternate_aic_full.pdf"), overwrite = TRUE)
-    cat("✓ Copied both integrated figures to brain artifacts folder.\n")
+    file.copy(fig4_png_path, file.path(brain_artifact_dir, "figure4.png"), overwrite = TRUE)
+    file.copy(fig4_pdf_path, file.path(brain_artifact_dir, "figure4.pdf"), overwrite = TRUE)
+    file.copy(figS2_png_path, file.path(brain_artifact_dir, "figureS2.png"), overwrite = TRUE)
+    file.copy(figS2_pdf_path, file.path(brain_artifact_dir, "figureS2.pdf"), overwrite = TRUE)
+    cat("✓ Copied Figure 4 and Figure S2 to brain artifacts folder.\n")
   }
   
-  cat(sprintf("✓ Saved figure to %s\n", fig_png_path))
+  cat(sprintf("✓ Saved Figure 4 to %s and Figure S2 to %s\n", fig4_png_path, figS2_png_path))
   cat("=== Framework 2 Integrated Analysis Completed Successfully ===\n")
   
   return(list(
