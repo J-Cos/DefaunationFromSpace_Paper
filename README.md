@@ -57,6 +57,7 @@ visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory 
 05b_Predictive_Columns_Correlation.R  --> Generates Supplementary Figure S4 correlating template vs. calibrated models.
 06_Pipeline_Visualization.R           --> Generates GEDI & camera trap pipeline summary Figures 1 and 2.
 09_Metabolic_Scaling_Analysis.R       --> Performs comparative Metabolic Scaling Theory (MST) and index robustness analysis.
+10_Collect_Results_Stats.R            --> Harvests all numeric results into outputs/results_statistics.csv.
 ```
 
 ### Script Catalog (code/)
@@ -85,6 +86,8 @@ visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory 
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `06` and `09`) sequentially on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, vector GPKGs, CSV tables, and manuscript figures.
 12. **[code/09_Metabolic_Scaling_Analysis.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/09_Metabolic_Scaling_Analysis.R):**  
     Performs comparative Metabolic Scaling Theory (MST) and index robustness analysis. Evaluates the statistical sensitivity and generalizability of raw biomass ($B_H$) vs. metabolic-scaled energy flux ($M_H$, exponent $\beta = 0.75$), verifying that selected best formulations are completely stable. Saves its summary output to `outputs/metabolic_scaling_model_selection.csv`.
+13. **[code/10_Collect_Results_Stats.R](file:///home/j/AgenticProjects/DefaunationSynthesis/code/10_Collect_Results_Stats.R):**  
+    Post-hoc statistics harvester. Reads all pipeline outputs (models, CSVs, rasters) and produces a long-form CSV (`outputs/results_statistics.csv`) containing every numeric result cited in the manuscript, with confidence intervals, p-values, and source file tracking.
 
 
 ### **Diagnostic & Scratch Utilities (scratch/)**

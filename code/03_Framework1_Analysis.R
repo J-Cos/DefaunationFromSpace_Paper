@@ -384,7 +384,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     fill_var = "delta_AICc",
     fill_label = "Delta AICc",
     x_label = "Model Deviance Explained (%)",
-    plot_title = "C. Covariate Model Selection (Beta Regression)",
+    plot_title = "B. Covariate Model Selection (Beta Regression)",
     parsed_labels = parsed_labels
   )
   
@@ -403,7 +403,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     scale_x_continuous(breaks = seq(0.1, 1.0, by = 0.2), limits = c(0.08, 1.02)) +
     scale_y_continuous(breaks = seq(-3, 3, by = 1), limits = c(-2.8, 2.8)) +
     labs(
-      title = "B. Residual Independence & Temporal Stability",
+      title = "C. Residual Independence & Temporal Stability",
       x = "Cluster Temporal Alignment Weight (W_temp)",
       y = "Best Model Deviance Residuals"
     ) +
