@@ -758,13 +758,11 @@ def aggregate_to_clusters(det, cluster_map):
 def check_gedi_5km_overlap(region, buffered_polygon):
     """Check if a buffered polygon overlaps at least one valid GEDI 5km pixel."""
     raster_path = OUTPUT_DIR / "EOdata" / f"analysis_stack_5000_{region}.tif"
-    if not raster_path.exists():
-        raster_path = OUTPUT_DIR / "synthetic_EOdata" / f"analysis_stack_5000_{region}.tif"
     
     if not raster_path.exists():
         raise FileNotFoundError(
             f"Critical GEDI raster stack for {region} is missing! "
-            f"Expected at outputs/EOdata/analysis_stack_5000_{region}.tif or outputs/synthetic_EOdata/analysis_stack_5000_{region}.tif"
+            f"Expected at outputs/EOdata/analysis_stack_5000_{region}.tif"
         )
         
     try:

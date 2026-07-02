@@ -117,10 +117,9 @@ compute_prediction_correlations <- function(ptab_lobo, ptab_aic) {
     r_path <- file.path("outputs", "EOdata",
                         sprintf("analysis_stack_5000_%s.tif", b))
     if (!file.exists(r_path)) {
-      r_path <- file.path("outputs", "synthetic_EOdata",
-                          sprintf("analysis_stack_5000_%s.tif", b))
+      if (b == "SE_Asia") next
+      stop(sprintf("Critical Error: Required GeoTIFF stack missing: %s", r_path))
     }
-    if (!file.exists(r_path)) next
 
     r <- rast(r_path)
     # Aggregate 5 km → 20 km (factor 4)

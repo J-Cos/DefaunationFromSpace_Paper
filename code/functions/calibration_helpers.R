@@ -69,154 +69,72 @@ extract_scale_pixels <- function(scale_m, mcps = NULL) {
   mcps$elephant_present <- mcps$elephant_present_possible
 
   
-  mcps_congo <- mcps[mcps$region == "Congo", ]
-  mcps_amazon <- mcps[mcps$region == "Amazon", ]
-  mcps_seasia <- mcps[mcps$region == "SE_Asia", ]
-  
-  if (is.character(scale_m)) {
-    r_congo_path <- sprintf("outputs/EOdata/analysis_stack_%s_Congo.tif", scale_m)
-    r_amazon_path <- sprintf("outputs/EOdata/analysis_stack_%s_Amazon.tif", scale_m)
-  } else {
-    r_congo_path <- sprintf("outputs/EOdata/analysis_stack_%d_Congo.tif", scale_m)
-    r_amazon_path <- sprintf("outputs/EOdata/analysis_stack_%d_Amazon.tif", scale_m)
-  }
-  
-  # Fallback to synthetic data folders if needed
-  if (!file.exists(r_congo_path)) {
-    if (is.character(scale_m)) {
-      r_congo_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%s_Congo.tif", scale_m)
-    } else {
-      r_congo_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%d_Congo.tif", scale_m)
+  load_and_aggregate_if_needed <- function(path, scale_val, basin) {
+    if (file.exists(path)) {
+      return(terra::rast(path))
     }
-  }
-  if (!file.exists(r_amazon_path)) {
-    if (is.character(scale_m)) {
-      r_amazon_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%s_Amazon.tif", scale_m)
-    } else {
-      r_amazon_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%d_Amazon.tif", scale_m)
+    # Dynamic aggregation fallback from 5,000m real stack if target scale real file is missing
+    path_5000 <- sprintf("outputs/EOdata/analysis_stack_5000_%s.tif", basin)
+    if (file.exists(path_5000) && !is.character(scale_val) && scale_val > 5000) {
+      fact <- scale_val / 5000
+      message(sprintf("✓ Dynamically aggregating real 5,000m %s stack by factor of %d to %d m", basin, fact, scale_val))
+      r_5000 <- terra::rast(path_5000)
+      r <- terra::aggregate(r_5000, fact = fact, fun = "mean", na.rm = TRUE)
+      return(r)
     }
+    stop(sprintf("GeoTIFF analysis stack for %s at scale %s is missing.", basin, as.character(scale_val)))
   }
-  
-  if (!file.exists(r_congo_path) || !file.exists(r_amazon_path)) {
-    if (is.character(scale_m)) {
-      stop(sprintf("GeoTIFF analysis stacks for scale %s are missing.", scale_m))
-    } else {
-      stop(sprintf("GeoTIFF analysis stacks for scale %d m are missing.", scale_m))
-    }
-  }
-  
-  r_congo <- terra::rast(r_congo_path)
-  r_amazon <- terra::rast(r_amazon_path)
-  
+
   if (is.character(scale_m) && scale_m == "native") {
     aggregate_names <- c("uoi", "uoi_sd", "rh98", "gedi_n", "elevation", "slope", "hnd", "precip", "clay", "forest_fraction", "Npp_median")
   } else {
     aggregate_names <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
                          "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
   }
-  names(r_congo) <- aggregate_names
-  names(r_amazon) <- aggregate_names
-  
-  # Extract Congo: touches = FALSE by default, touch fallback for empty polygons
-  ext_congo <- terra::extract(r_congo, mcps_congo, df = TRUE, touches = FALSE)
-  all_congo_ids <- 1:nrow(mcps_congo)
-  extracted_congo_ids <- unique(ext_congo$ID)
-  empty_congo_ids <- setdiff(all_congo_ids, extracted_congo_ids)
-  
-  if (length(empty_congo_ids) > 0) {
-    ext_congo_touch <- terra::extract(r_congo, mcps_congo[empty_congo_ids, ], df = TRUE, touches = TRUE)
-    ext_congo_touch$ID <- empty_congo_ids[ext_congo_touch$ID]
-    ext_congo <- rbind(ext_congo %>% filter(ID %in% extracted_congo_ids), ext_congo_touch)
-  }
-  
-  mcp_congo_df <- as.data.frame(mcps_congo)
-  mcp_congo_df$ID <- 1:nrow(mcp_congo_df)
-  
-  if (is.character(scale_m) && scale_m == "native") {
-    pixel_congo <- merge(ext_congo, mcp_congo_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Congo", frip = NA)
-  } else {
-    pixel_congo <- merge(ext_congo, mcp_congo_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Congo")
-  }
-  
-  # Extract Amazon: touches = FALSE by default, touch fallback for empty polygons
-  ext_amazon <- terra::extract(r_amazon, mcps_amazon, df = TRUE, touches = FALSE)
-  all_amazon_ids <- 1:nrow(mcps_amazon)
-  extracted_amazon_ids <- unique(ext_amazon$ID)
-  empty_amazon_ids <- setdiff(all_amazon_ids, extracted_amazon_ids)
-  
-  if (length(empty_amazon_ids) > 0) {
-    ext_amazon_touch <- terra::extract(r_amazon, mcps_amazon[empty_amazon_ids, ], df = TRUE, touches = TRUE)
-    ext_amazon_touch$ID <- empty_amazon_ids[ext_amazon_touch$ID]
-    ext_amazon <- rbind(ext_amazon %>% filter(ID %in% extracted_amazon_ids), ext_amazon_touch)
-  }
-  
-  mcp_amazon_df <- as.data.frame(mcps_amazon)
-  mcp_amazon_df$ID <- 1:nrow(mcp_amazon_df)
-  
-  if (is.character(scale_m) && scale_m == "native") {
-    pixel_amazon <- merge(ext_amazon, mcp_amazon_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Amazon", frip = NA)
-  } else {
-    pixel_amazon <- merge(ext_amazon, mcp_amazon_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Amazon")
-  }
-  
-  # Extract Southeast Asia if the 5000m file is present and there are SE Asia MCP polygons
-  r_seasia_basename <- sprintf("analysis_stack_5000_SE_Asia.tif")
-  r_seasia_path <- file.path("outputs", "EOdata", r_seasia_basename)
-  
-  if (file.exists(r_seasia_path) && nrow(mcps_seasia) > 0) {
-    # If other scale requested, dynamically aggregate!
-    if (!is.character(scale_m) && scale_m > 5000) {
-      fact <- scale_m / 5000
-      r_seasia <- terra::aggregate(rast(r_seasia_path), fact = fact, fun = "mean", na.rm = TRUE)
+
+  basins <- c("Congo", "Amazon", "SE_Asia")
+  pixel_list <- list()
+
+  for (b in basins) {
+    mcps_b <- mcps[mcps$region == b, ]
+    if (nrow(mcps_b) == 0) next
+
+    r_path <- if (is.character(scale_m)) {
+      sprintf("outputs/EOdata/analysis_stack_%s_%s.tif", scale_m, b)
     } else {
-      r_seasia <- rast(r_seasia_path)
+      sprintf("outputs/EOdata/analysis_stack_%d_%s.tif", scale_m, b)
     }
-    
-    names(r_seasia) <- aggregate_names
-    
-    ext_seasia <- terra::extract(r_seasia, mcps_seasia, df = TRUE, touches = FALSE)
-    all_seasia_ids <- 1:nrow(mcps_seasia)
-    extracted_seasia_ids <- unique(ext_seasia$ID)
-    empty_seasia_ids <- setdiff(all_seasia_ids, extracted_seasia_ids)
-    
-    if (length(empty_seasia_ids) > 0) {
-      ext_seasia_touch <- terra::extract(r_seasia, mcps_seasia[empty_seasia_ids, ], df = TRUE, touches = TRUE)
-      ext_seasia_touch$ID <- empty_seasia_ids[ext_seasia_touch$ID]
-      ext_seasia <- rbind(ext_seasia %>% filter(ID %in% extracted_seasia_ids), ext_seasia_touch)
+
+    r_b <- load_and_aggregate_if_needed(r_path, scale_m, b)
+    names(r_b) <- aggregate_names
+
+    ext_b <- terra::extract(r_b, mcps_b, df = TRUE, touches = FALSE)
+    all_ids <- 1:nrow(mcps_b)
+    extracted_ids <- unique(ext_b$ID)
+    empty_ids <- setdiff(all_ids, extracted_ids)
+
+    if (length(empty_ids) > 0) {
+      ext_touch <- terra::extract(r_b, mcps_b[empty_ids, ], df = TRUE, touches = TRUE)
+      ext_touch$ID <- empty_ids[ext_touch$ID]
+      ext_b <- rbind(ext_b %>% filter(ID %in% extracted_ids), ext_touch)
     }
-    
-    mcp_seasia_df <- as.data.frame(mcps_seasia)
-    mcp_seasia_df$ID <- 1:nrow(mcp_seasia_df)
-    
+
+    mcp_df <- as.data.frame(mcps_b)
+    mcp_df$ID <- 1:nrow(mcp_df)
+
+    pixel_b <- merge(ext_b, mcp_df, by = "ID") %>%
+      filter(!is.na(uoi)) %>%
+      select(-ID) %>%
+      mutate(basin = b)
+
     if (is.character(scale_m) && scale_m == "native") {
-      pixel_seasia <- merge(ext_seasia, mcp_seasia_df, by = "ID") %>%
-        filter(!is.na(uoi)) %>%
-        select(-ID) %>%
-        mutate(basin = "SE_Asia", frip = NA)
-    } else {
-      pixel_seasia <- merge(ext_seasia, mcp_seasia_df, by = "ID") %>%
-        filter(!is.na(uoi)) %>%
-        select(-ID) %>%
-        mutate(basin = "SE_Asia")
+      pixel_b$frip <- NA
     }
-    
-    pixel_data <- rbind(pixel_congo, pixel_amazon, pixel_seasia)
-  } else {
-    pixel_data <- rbind(pixel_congo, pixel_amazon)
+
+    pixel_list[[b]] <- pixel_b
   }
-  
+
+  pixel_data <- do.call(rbind, pixel_list)
   return(pixel_data)
 }
 

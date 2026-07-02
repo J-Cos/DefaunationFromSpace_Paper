@@ -20,69 +20,28 @@ library(stringr)
 #' Automatically resolves the path to the analysis stack directory
 #' @details Checks environment variables, standard local sync folders, and GVFS mounts.
 #' @export
-resolve_data_dir <- function(default_dir = file.path("outputs", "synthetic_EOdata")) {
+resolve_data_dir <- function(default_dir = file.path("outputs", "EOdata")) {
   # 1. Environment variable override
   env_dir <- Sys.getenv("GEE_DRIVE_DIR")
-  if (env_dir != "") {
-    if (dir.exists(env_dir)) {
-      message(sprintf("Using data directory from GEE_DRIVE_DIR: %s", env_dir))
-      return(env_dir)
-    } else {
-      warning(sprintf("GEE_DRIVE_DIR is set to %s, but directory does not exist.", env_dir))
-    }
-  }
-
-  # 2. Local sync directory candidates
-  home_dir <- Sys.getenv("HOME")
-  candidates <- c(
-    file.path(home_dir, "GoogleDrive", "DefaunationSynthesis", "AnalysisStack"),
-    file.path(home_dir, "Google Drive", "DefaunationSynthesis", "AnalysisStack"),
-    file.path(home_dir, "gdrive", "DefaunationSynthesis", "AnalysisStack"),
-    file.path(home_dir, "GoogleDrive-MyDrive", "DefaunationSynthesis", "AnalysisStack")
+  resolved_dir <- if (env_dir != "" && dir.exists(env_dir)) env_dir else default_dir
+  
+  # 2. Check for the three true 5,000m stack files
+  required_files <- c(
+    "analysis_stack_5000_Congo.tif",
+    "analysis_stack_5000_Amazon.tif",
+    "analysis_stack_5000_SE_Asia.tif"
   )
   
-  # 3. GVFS google-drive mount detection (Linux Gnome Online Accounts)
-  run_dir <- "/run/user"
-  if (dir.exists(run_dir)) {
-    uids <- list.files(run_dir)
-    for (uid in uids) {
-      gvfs_dir <- file.path(run_dir, uid, "gvfs")
-      if (dir.exists(gvfs_dir)) {
-        mounts <- list.files(gvfs_dir, pattern = "^google-drive")
-        for (m in mounts) {
-          path_with_my_drive <- file.path(gvfs_dir, m, "My Drive", "DefaunationSynthesis", "AnalysisStack")
-          path_without_my_drive <- file.path(gvfs_dir, m, "DefaunationSynthesis", "AnalysisStack")
-          candidates <- c(candidates, path_with_my_drive, path_without_my_drive)
-        }
-      }
-    }
+  missing_files <- required_files[!file.exists(file.path(resolved_dir, required_files))]
+  if (length(missing_files) > 0) {
+    stop(sprintf("Critical Error: Missing required true analysis stacks in %s: %s", 
+                 resolved_dir, paste(missing_files, collapse = ", ")))
   }
   
-  # 4. Standard Mac and Windows Google Drive paths
-  candidates <- c(candidates,
-    file.path("G:", "My Drive", "DefaunationSynthesis", "AnalysisStack"),
-    file.path("/Volumes", "GoogleDrive", "My Drive", "DefaunationSynthesis", "AnalysisStack")
-  )
-
-  # Standardize and filter candidates
-  candidates <- unique(path.expand(candidates))
-  
-  for (cand in candidates) {
-    if (dir.exists(cand)) {
-      test_files <- list.files(cand, pattern = "^analysis_stack_.*\\.tif$")
-      if (length(test_files) > 0) {
-        message(sprintf("✓ Automatically detected Google Drive folder with analysis stacks: %s", cand))
-        return(cand)
-      }
-    }
-  }
-
-  # 5. Fallback to default
-  message(sprintf("Using default data directory: %s", default_dir))
-  return(default_dir)
+  return(resolved_dir)
 }
 
-#' Root directory for analysis-ready rasters (GEE exports or synthetic data)
+#' Root directory for analysis-ready rasters (GEE exports in outputs/EOdata)
 #' @export
 DATA_DIR <- resolve_data_dir()
 
@@ -137,43 +96,14 @@ load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
   stacks <- list()
   for (scale in SCALES) {
     basename <- sprintf("analysis_stack_%d_%s.tif", scale, basin)
-    
-    # Path checking order:
-    # 1. Real GEE exports directory (outputs/EOdata)
-    # 2. Directly in passed data_dir
-    # 3. Synthetic fallback directory (outputs/synthetic_EOdata)
-    candidates <- c(
-      file.path("outputs", "EOdata", basename),
-      file.path(data_dir, basename),
-      file.path("outputs", "synthetic_EOdata", basename)
-    )
-    
-    filename <- NULL
-    for (cand in candidates) {
-      if (file.exists(cand)) {
-        filename <- cand
-        break
-      }
-    }
+    filename <- file.path(data_dir, basename)
     
     # Dynamic aggregation fallback from 5,000m real stack if target scale real file is missing
-    r_5000_basename <- sprintf("analysis_stack_5000_%s.tif", basin)
-    r_5000_candidates <- c(
-      file.path("outputs", "EOdata", r_5000_basename),
-      file.path(data_dir, r_5000_basename)
-    )
-    r_5000_filename <- NULL
-    for (cand in r_5000_candidates) {
-      if (file.exists(cand)) {
-        r_5000_filename <- cand
-        break
-      }
-    }
+    r_5000_filename <- file.path(data_dir, sprintf("analysis_stack_5000_%s.tif", basin))
     
-    is_real_file_missing <- !file.exists(file.path("outputs", "EOdata", basename)) && 
-                            !file.exists(file.path(data_dir, basename))
+    is_real_file_missing <- !file.exists(filename)
     
-    if (is_real_file_missing && !is.null(r_5000_filename) && scale > 5000) {
+    if (is_real_file_missing && file.exists(r_5000_filename) && scale > 5000) {
       fact <- scale / 5000
       message(sprintf("✓ Dynamically aggregating real 5,000m stack by factor of %d to %d m: %s", fact, scale, basename))
       r_5000 <- rast(r_5000_filename)
@@ -192,13 +122,8 @@ load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
       next
     }
     
-    if (is.null(filename)) {
-      stop("File does not exist in any candidate location: ", basename)
-    }
-    
-    # Notify if loading real GEE export
-    if (grepl("outputs/EOdata", filename, fixed = TRUE)) {
-      message(sprintf("✓ Loading real GEE GeoTIFF stack: %s", filename))
+    if (!file.exists(filename)) {
+      stop("File does not exist: ", filename)
     }
     
     r <- rast(filename)
@@ -233,32 +158,10 @@ load_multiscale_stacks <- function(data_dir = DATA_DIR, basin) {
 #' @export
 load_native_stack <- function(data_dir = DATA_DIR, basin) {
   basename <- sprintf("analysis_stack_native_%s.tif", basin)
+  filename <- file.path(data_dir, basename)
   
-  # Path checking order:
-  # 1. Real GEE exports directory (outputs/EOdata)
-  # 2. Directly in passed data_dir
-  # 3. Synthetic fallback directory (outputs/synthetic_EOdata)
-  candidates <- c(
-    file.path("outputs", "EOdata", basename),
-    file.path(data_dir, basename),
-    file.path("outputs", "synthetic_EOdata", basename)
-  )
-  
-  filename <- NULL
-  for (cand in candidates) {
-    if (file.exists(cand)) {
-      filename <- cand
-      break
-    }
-  }
-  
-  if (is.null(filename)) {
-    stop("File does not exist in any candidate location: ", basename)
-  }
-  
-  # Notify if loading real GEE export
-  if (grepl("outputs/EOdata", filename, fixed = TRUE)) {
-    message(sprintf("✓ Loading real native GeoTIFF stack: %s", filename))
+  if (!file.exists(filename)) {
+    stop("File does not exist: ", filename)
   }
   
   r <- rast(filename)

@@ -56,11 +56,7 @@ rename_stack <- function(r) {
 load_and_aggregate_real <- function(basin_name) {
   r_5000_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_5000_%s.tif", basin_name))
   if (!file.exists(r_5000_path)) {
-    warning(sprintf("Real 5,000m stack for %s missing, trying synthetic fallback...", basin_name))
-    r_synth_path <- file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_%s.tif", scale_m, basin_name))
-    if (!file.exists(r_synth_path)) return(NULL)
-    r <- rast(r_synth_path)
-    return(rename_stack(r))
+    stop(sprintf("Real 5,000m stack for %s is missing in outputs/EOdata.", basin_name))
   }
   
   cat(sprintf("Loading real 5,000m stack for %s...\n", basin_name))

@@ -101,7 +101,7 @@ run_test("fit_framework2_model signature check", quote({
   check_signature("fit_framework2_model", c("data", "formula_path"))
 }))
 
-# Behavioral test for extract_scale_data on synthetic data
+# Behavioral test for extract_scale_data on real data (5km scale)
 run_test("extract_scale_data returns valid structure (5km scale)", quote({
   dat <- extract_scale_data(5000)
   is.data.frame(dat) && 

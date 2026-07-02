@@ -129,12 +129,12 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     cat(sprintf("--- Generating map at scale: %d m ---\n", scale_m))
     
     # Load specific scale TIFF stacks
+    # Load specific scale TIFF stacks
     r_congo_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))
     r_amazon_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m))
     
     # Dynamic aggregation fallback from 5000m real stack if target scale real file is missing
-    is_real_file_missing <- !file.exists(file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))) ||
-                            !file.exists(file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m)))
+    is_real_file_missing <- !file.exists(r_congo_path) || !file.exists(r_amazon_path)
     
     r_congo_5000_path <- file.path(outputs_dir, "EOdata", "analysis_stack_5000_Congo.tif")
     r_amazon_5000_path <- file.path(outputs_dir, "EOdata", "analysis_stack_5000_Amazon.tif")
@@ -144,21 +144,10 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       cat(sprintf("  ✓ Dynamically aggregating real 5,000m stack by factor of %d to %d m...\n", fact, scale_m))
       r_congo <- terra::aggregate(rast(r_congo_5000_path), fact = fact, fun = "mean", na.rm = TRUE)
       r_amazon <- terra::aggregate(rast(r_amazon_5000_path), fact = fact, fun = "mean", na.rm = TRUE)
-      
-      # Bypass file loading
-      r_congo_path <- "dynamic_aggregated"
-      r_amazon_path <- "dynamic_aggregated"
-    }
-    
-    if (r_congo_path != "dynamic_aggregated") {
-      # Fallback to synthetic if needed
-      if (!file.exists(r_congo_path)) r_congo_path = file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))
-      if (!file.exists(r_amazon_path)) r_amazon_path = file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m))
-      
+    } else {
       if (!file.exists(r_congo_path) || !file.exists(r_amazon_path)) {
-        stop(sprintf("GeoTIFF stacks for scale %d m are missing.", scale_m))
+        stop(sprintf("GeoTIFF stacks for scale %d m are missing in outputs/EOdata.", scale_m))
       }
-      
       r_congo <- rast(r_congo_path)
       r_amazon <- rast(r_amazon_path)
     }
@@ -175,12 +164,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     } else if (file.exists(r_seasia_path)) {
       r_seasia <- rast(r_seasia_path)
     } else {
-      r_seasia_synth <- file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_SE_Asia.tif", scale_m))
-      if (file.exists(r_seasia_synth)) {
-        r_seasia <- rast(r_seasia_synth)
-      } else {
-        r_seasia <- NULL
-      }
+      r_seasia <- NULL
     }
     
     aggregate_names <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",

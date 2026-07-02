@@ -8,8 +8,7 @@
 # calibration_helpers.R::extract_scale_data() for performance.
 #
 # Input:
-#   - outputs/synthetic_EOdata/analysis_stack_native_{basin}.tif  (10 bands)
-#   - outputs/synthetic_EOdata/analysis_stack_{scale}_{basin}.tif (11 bands)
+#   - outputs/EOdata/analysis_stack_{scale}_{basin}.tif (11/12 bands)
 #   - data/vectors/ — WDPA, HydroSHEDS basins, country boundaries
 #
 # Output:
@@ -48,34 +47,27 @@ STACK_DIR  <- resolve_data_dir()
 RDS_DIR    <- file.path("outputs", "rds")
 dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
 
-BASINS <- c("Congo", "Amazon")
+BASINS <- c("Congo", "Amazon", "SE_Asia")
 SCALES <- seq(5000, 100000, by = 5000)
-
-
-# --- 1. Load Native-scale Stacks --------------------------------------------
-
-cat("Loading native-scale stacks...\n")
-
-native_stacks <- map(
-  set_names(BASINS),
-  ~ {
-    load_native_stack(STACK_DIR, .x)
-  }
-)
 
 
 # --- 2. Load Multi-scale Stacks ---------------------------------------------
 
 cat("\nLoading multi-scale stacks...\n")
 
+# Load each basin's multi-scale stacks once
+basin_stacks <- map(
+  set_names(BASINS),
+  ~ load_multiscale_stacks(STACK_DIR, .x)
+)
+
+# Reshape the list to be keyed by scale
 multiscale_stacks <- map(
   set_names(as.character(SCALES), as.character(SCALES)),
   function(scale_str) {
     map(
       set_names(BASINS),
-      ~ {
-        load_multiscale_stacks(STACK_DIR, .x)[[scale_str]]
-      }
+      ~ basin_stacks[[.x]][[scale_str]]
     )
   }
 )
@@ -84,12 +76,10 @@ cat(sprintf("  Loaded %d scales × %d basins = %d stacks\n",
             length(SCALES), length(BASINS), length(SCALES) * length(BASINS)))
 
 
-# --- 3. Load and Rasterise Vector Layers (with synthetic fallback) ----------
+# --- 3. Load and Rasterise Vector Layers (programmatic construction) ----------
 
 cat("\nLoading and rasterising vector layers...\n")
 
-template_rast_congo <- native_stacks[["Congo"]][[1]]
-template_rast_amazon <- native_stacks[["Amazon"]][[1]]
 
 # Define the merged extent covering both basins for a single SpatRaster
 merged_ext <- ext(-62, 22, -7, 2)
