@@ -206,9 +206,9 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   })
   
   # 1-SE Parsimony Selection Strategy (evaluating only valid OOS models)
-  valid_idx <- which(!is.na(oos_RMSE_log))
+  valid_idx <- which(!is.na(oos_MAE_log))
   if (length(valid_idx) > 0) {
-    raw_best_idx <- valid_idx[which.min(oos_RMSE_log[valid_idx])]
+    raw_best_idx <- valid_idx[which.min(oos_MAE_log[valid_idx])]
     best_mae <- oos_MAE_log[raw_best_idx]
     best_se <- oos_MAE_log_SE[raw_best_idx]
     threshold_1se <- best_mae + best_se
@@ -224,7 +224,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   }
   
   parsimony_status <- sapply(1:num_models, function(m_idx) {
-    if (is.na(oos_RMSE_log[m_idx])) {
+    if (is.na(oos_MAE_log[m_idx])) {
       return("Failed LOBOCV (Collinear/Unseen Levels)")
     }
     mae <- oos_MAE_log[m_idx]
@@ -310,7 +310,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   best_model_name <- results_df$Model[which(results_df$Parsimony_Status == "Parsimonious Selected Best")]
   best_model <- gam(formula(full_models[[best_model_name]]), family = tw(),
                     weights = w_combined_norm, data = joined_data, method = "REML")
-  cat(sprintf("\n★ Parsimoniously Selected Best Model (1-SE Strategy): %s (OOS RMSE_log: %.4f)\n", best_model_name, results_df$OOS_RMSE_log[which(results_df$Model == best_model_name)]))
+  cat(sprintf("\n★ Parsimoniously Selected Best Model (1-SE Strategy): %s (OOS MAE_log: %.4f)\n", best_model_name, results_df$OOS_MAE_log[which(results_df$Model == best_model_name)]))
   cat("  (Selection via ML + LOBO-CV; coefficients from REML refit)\n\n")
   
   saveRDS(formula(best_model), file.path(outputs_dir, "framework2_best_formula.RDS"))
