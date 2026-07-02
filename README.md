@@ -24,8 +24,9 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 
 > [!NOTE]
 > **Pipeline Verification Workflow**: 
-> 1. **Unit Testing (`code/07_Unit_Tests.R`)**: Verifies the behavioral and mathematical correctness of individual core algorithms (such as pixel extraction matrices, temporal weights, and regression formulas) in isolation. It should be run first to ensure code stability.
-> 2. **One-Command R Orchestration (`code/08_Integration_Tests.R`)**: While R scripts `01` through `06` can be run manually in sequence, `code/08_Integration_Tests.R` acts as a master orchestrator. Executing this single test script automatically cleans up previous deliverables, runs all R analysis steps sequentially via `source()`, and verifies the mathematical integrity of every single model output and figure.
+> 1. **R Unit Testing (`code/07_Unit_Tests.R`)**: Verifies the behavioral and mathematical correctness of individual R core algorithms (such as pixel extraction matrices and regression formulas) in isolation.
+> 2. **Python Unit Testing (`code/test_camera_traps.py`)**: A fast, mock-data-driven test suite validating camera trap data processing (collapsing to independent events, body mass matching fallback levels, taxonomic keep proportions, and temporal weights).
+> 3. **One-Command R Orchestration (`code/08_Integration_Tests.R`)**: Acts as a master orchestrator. Executing this single test script automatically cleans up previous deliverables, runs all R analysis steps sequentially via `source()`, and verifies the mathematical integrity of every model output and figure.
 
 
 ```
@@ -39,6 +40,7 @@ The repository is structured as a fully sequential, modular, and non-hardcoded p
 process_camera_traps.py       --> Ingests raw WI camera trap packages, joins with EltonTraits, performs 11.1km spatial
                                   clustering, geodesic buffering, GEDI checks, and writes all spatial GeoJSON outputs.
 visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory vertebrate community & scaling figures.
+test_camera_traps.py          --> Fast Python unit test suite testing key camera trap functions without requiring large datasets.
       │
       ▼
 [Local R Analysis Pipeline (code/)]
@@ -59,27 +61,29 @@ visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory 
     Ingests and cleans raw Wildlife Insights camera trap packages from Congo, Amazon, and SE Asia basins, collapses image records to independent events, matches taxonomic entries to EltonTraits body-mass databases, performs 11.1km spatial clustering, filters clusters by GEDI grid overlap, computes taxonomic keep proportions (`p_keep`) and temporal weights (`w_temp_cluster`), generates buffered convex hulls using geodesic projections to avoid distortion, and writes all GeoJSON/CSV products.
 2.  **[code/visualise_camera_traps.py](code/visualise_camera_traps.py):**  
     Strictly graphics-only script. Loads pre-processed outputs and generates publication-quality multi-panel exploratory figures analyzing community structure, taxonomic composition, rank-abundance curves, and biophysical scaling at the spatial cluster level.
-3.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](code/01_FigureS1_Regional_Bounding_Boxes.R):**  
+3.  **[code/test_camera_traps.py](code/test_camera_traps.py):**  
+    Fast, standalone Python unit test suite testing key functions of the camera trap ingestion pipeline (taxon quality sorting, body mass mapping and fallback, independent event collapsing, and temporal weights) without requiring large real datasets.
+4.  **[code/01_FigureS1_Regional_Bounding_Boxes.R](code/01_FigureS1_Regional_Bounding_Boxes.R):**  
     Generates Figure S1 (`figures/figureS1.png` and `figures/figureS1.pdf`) showing the symmetric $15^\circ\text{S}\text{ to }15^\circ\text{N}$ bounding boxes ($50^\circ$ wide in longitude) centered on their respective regional centroids for Amazon, Congo, and SE Asia, and overlays the IUCN Proboscidea range maps categorized by status. Also exports the combined vector ranges to a single GeoPackage (`outputs/elephant_ranges.gpkg`).
-4.  **[code/02_Load_And_Join.R](code/02_Load_And_Join.R):**  
+5.  **[code/02_Load_And_Join.R](code/02_Load_And_Join.R):**  
     Rasterizes administrative, protected area, and physical basin vectors, cleans datasets, loads the prepared elephant range GeoPackage, and saves a consolidated environmental composite `loaded_data.rds`.
-5.  **[code/03_Framework1_Analysis.R](code/03_Framework1_Analysis.R):**  
+6.  **[code/03_Framework1_Analysis.R](code/03_Framework1_Analysis.R):**  
     Performs covariate model selection for GEDI understory openness (UOI) using **weighted Beta Regressions** across **expanded candidate formulations** (incorporating environmental covariates, regional basin boundaries, standing biomass sub-components, and specific elephant presence alternates). The selected best-fitting model shows that the specific presence of large ecological engineers (elephants) is a stronger biophysical predictor of understory openness than generic regional basin boundaries. Generates the publication-quality **Figure 3 (figure3.png)** with a continuous, vibrant model selection bar plot.
-6.  **[code/04_Framework2_Analysis.R](code/04_Framework2_Analysis.R):**  
+7.  **[code/04_Framework2_Analysis.R](code/04_Framework2_Analysis.R):**  
     Performs spaceborne standing mammal biomass index prediction using **weighted Tweedie GLMs** across candidate formulations (evaluating combinations of understory openness, elevation, and basin interactions). Integrates both **LORO-CV parsimonious** and **standard AIC** selection pathways in a unified framework, automatically skipping out-of-sample folds containing `basin` levels to prevent runtime errors. Generates both the main generalizability **Supplementary Figure S2** (`figures/figureS2.png` / `figures/figureS2.pdf`) and the main **Figure 4** (`figures/figure4.png` / `figures/figure4.pdf`) using a DRY, highly parametric plotting pipeline, and saves both best models as RDS objects.
-7.  **[code/05_Predictive_Biomass_Maps.R](code/05_Predictive_Biomass_Maps.R):**  
+8.  **[code/05_Predictive_Biomass_Maps.R](code/05_Predictive_Biomass_Maps.R):**  
     Consolidates biomass prediction mapping. Projects both the LOBO-selected parsimonious best model and the AIC-selected best model across the tropical forest landscapes at both the **5 km** (supplementary map, **Supplementary Figure S3 / figureS3.png**) and **20 km** (peak predictive scale, **Figure 5 / figure5.png**) resolutions in a side-by-side, symmetrical two-column layout. Standardizes all predictions in out-of-sample log-scale MAE units to allow direct comparison of the universal biophysical footprint (Column 1) vs. basin-calibrated biogeographical shift models (Column 2).
-8.  **[code/05b_Predictive_Columns_Correlation.R](code/05b_Predictive_Columns_Correlation.R):**  
+9.  **[code/05b_Predictive_Columns_Correlation.R](code/05b_Predictive_Columns_Correlation.R):**  
     Generates Supplementary Figure S4 (`figures/figureS4.png` and `figures/figureS4.pdf`) correlating the predictions from the LOBO-selected template model and the AIC-selected basin-calibrated model across all tropical forest pixels at the 20 km scale. Computes and displays both Pearson and Spearman rank correlation coefficients, providing quantitative insights into regional predictive shifts.
-9.  **[code/06_Pipeline_Visualization.R](code/06_Pipeline_Visualization.R):**  
+10. **[code/06_Pipeline_Visualization.R](code/06_Pipeline_Visualization.R):**  
     Generates premium, PNAS-style multipanel manuscript **Figure 1 (figure1_gedi_pipeline.png)** and **Figure 2 (figure2_camera_trap_pipeline.png)**, which visually synthesize log-scale GEDI Shot Count distributions and the camera trap spatial-temporal ingestion/calibration pipeline.
-10. **[code/07_Unit_Tests.R](code/07_Unit_Tests.R):**  
+11. **[code/07_Unit_Tests.R](code/07_Unit_Tests.R):**  
     A comprehensive functional unit-testing suite that verifies function signatures, argument structures, and correct scientific return types for all data extraction, precision/temporal weighting, regression modeling, and spatial projection mapping modules.
-11. **[code/08_Integration_Tests.R](code/08_Integration_Tests.R):**  
+12. **[code/08_Integration_Tests.R](code/08_Integration_Tests.R):**  
     An end-to-end integration test runner that unlinks old deliverables, executes the sequential R pipeline (`01` through `06`, `09`, and `10`) sequentially on the real GEE GeoTIFF datasets, and verifies the mathematical integrity and presence of all RDS models, vector GPKGs, CSV tables, and manuscript figures.
-12. **[code/09_Metabolic_Scaling_Analysis.R](code/09_Metabolic_Scaling_Analysis.R):**  
+13. **[code/09_Metabolic_Scaling_Analysis.R](code/09_Metabolic_Scaling_Analysis.R):**  
     Performs comparative Metabolic Scaling Theory (MST) and index robustness analysis. Evaluates the statistical sensitivity and generalizability of raw biomass ($B_H$) vs. metabolic-scaled energy flux ($M_H$, exponent $\beta = 0.75$), verifying that selected best formulations are completely stable. Saves its summary output to `outputs/metabolic_scaling_model_selection.csv`.
-13. **[code/10_Collect_Results_Stats.R](code/10_Collect_Results_Stats.R):**  
+14. **[code/10_Collect_Results_Stats.R](code/10_Collect_Results_Stats.R):**  
     Post-hoc statistics harvester. Reads all pipeline outputs (models, CSVs, rasters) and produces a long-form CSV (`outputs/results_statistics.csv`) containing every numeric result cited in the manuscript, with confidence intervals, p-values, and source file tracking.
 
 
@@ -105,18 +109,24 @@ visualise_camera_traps.py     --> Strictly graphics-only; generates exploratory 
 To guarantee scientific reproducibility and statistical rigor, the pipeline is covered by a two-tiered testing framework:
 
 ### Unit Test Coverage (100% of Core Pipeline Functions)
-The unit test suite (`code/07_Unit_Tests.R`) verifies the behavior of all core functions in isolation, including the calibration helper algorithms, temporal weighting, and integrated model fit routines.
-*   **Coverage Summary**: 100% of high-level analytical, modeling, mapping, and plotting functions are covered under 29 strict assertions.
+
+To verify the mathematical and behavioral correctness of core functions, the codebase includes separate R and Python unit test suites:
+
+#### R Unit Testing (`code/07_Unit_Tests.R`)
+Verifies individual algorithm steps (e.g. pixel extraction matrices, spatial calibration, temporal weighting, regression wrappers, mapping functions).
 *   **Run Command**:
     ```bash
     Rscript code/07_Unit_Tests.R
     ```
-*   **Assertions Verified**:
-    *   Pixel extraction matrices (`extract_scale_pixels`) and region bounding coordinates.
-    *   Data calibration (`extract_scale_data`), including proper derivation of normalized precision weights (`w_uoi_norm`) and spatial homogeneity scores.
-    *   Survey temporal alignment weighting (`calculate_temporal_weights`).
-    *   Model fitting functions (`fit_framework1_model`, `fit_framework2_model`) using dynamically loaded formulas.
-    *   High-level script runners (`run_framework1_analysis`, `run_framework2_analysis`, `run_predictive_biomass_mapping`) ensuring correct models are outputted and figures are cleanly populated in `figures/`.
+*   **Assertions**: 29 strict functional assertions covering 100% of pipeline modules.
+
+#### Python Camera Trap Unit Testing (`code/test_camera_traps.py`)
+Validates Wildlife Insights data ingestion operations (such as collapsing image series to independent events, mapping species/genus/family body mass traits, calculating RAI/biomass metrics, and assigning temporal weights) quickly using mock inputs without requiring actual camera trap files.
+*   **Run Command**:
+    ```bash
+    python3 code/test_camera_traps.py
+    ```
+*   **Assertions**: 9 tests verifying taxon quality categorization, Haversine geodesic distance, timestamp parsing, event collapsing, trait lookups, and biomass/metabolic flux metric derivations.
 
 ### End-to-End Integration Testing & Pipeline Orchestration
 The integration test suite (**`code/08_Integration_Tests.R`**) serves as both a master pipeline runner and a validation framework. It deletes old outputs and executes the entire local processing flow sequentially (`01` through `06`, `09`, and `10`) on the GEE GeoTIFF stack exports located in `outputs/EOdata/`.
