@@ -95,6 +95,77 @@ get_profile_cis <- function(model_obj) {
   })
 }
 
+# Computes the Pearson r and Spearman rho correlations between the 
+# LOBO-selected (parsimonious) and AICc-selected model predictions.
+# Replicates the 20 km prediction grids comparison (symmetrical layout)
+# across all tropical forest basin regions.
+#
+# Arguments:
+#   ptab_lobo: Coefficient table (summary p.table) of the LOBO model.
+#   ptab_aic: Coefficient table (summary p.table) of the AIC model.
+#
+# Returns:
+#   A list containing the overall Pearson/Spearman coefficients and 
+#   basin-specific lists, or NULL if files are missing.
+compute_prediction_correlations <- function(ptab_lobo, ptab_aic) {
+  basins <- c("Congo", "Amazon", "SE_Asia")
+  all_lobo <- c()
+  all_aic  <- c()
+  per_basin <- list()
+
+  for (b in basins) {
+    r_path <- file.path("outputs", "EOdata",
+                        sprintf("analysis_stack_5000_%s.tif", b))
+    if (!file.exists(r_path)) {
+      r_path <- file.path("outputs", "synthetic_EOdata",
+                          sprintf("analysis_stack_5000_%s.tif", b))
+    }
+    if (!file.exists(r_path)) next
+
+    r <- rast(r_path)
+    # Aggregate 5 km → 20 km (factor 4)
+    r_20 <- aggregate(r, fact = 4, fun = "mean", na.rm = TRUE)
+
+    # Band 3 is UOI in the analysis stacks
+    uoi_vals <- values(r_20[[3]])
+    valid    <- !is.na(uoi_vals)
+    uoi_v    <- uoi_vals[valid]
+
+    if (length(uoi_v) == 0) next
+
+    # LOBO: log(BH) = intercept + slope * UOI
+    pred_lobo <- ptab_lobo["(Intercept)", "Estimate"] +
+                 ptab_lobo["uoi", "Estimate"] * uoi_v
+
+    # AIC model: need elephant presence.  Use continent-level assignment.
+    ele <- ifelse(b %in% c("Congo", "SE_Asia"), 1, 0)
+    b_int_aic  <- ptab_aic["(Intercept)", "Estimate"]
+    b_uoi_aic  <- ptab_aic["uoi", "Estimate"]
+    b_ele_aic  <- ptab_aic["elephant_present_possiblePresent", "Estimate"]
+    b_uxe_aic  <- ptab_aic["uoi:elephant_present_possiblePresent", "Estimate"]
+
+    pred_aic <- b_int_aic + b_uoi_aic * uoi_v +
+                b_ele_aic * ele + b_uxe_aic * uoi_v * ele
+
+    all_lobo <- c(all_lobo, pred_lobo)
+    all_aic  <- c(all_aic,  pred_aic)
+
+    per_basin[[b]] <- list(
+      r_pearson  = cor(pred_lobo, pred_aic, method = "pearson"),
+      rho_spearman = cor(pred_lobo, pred_aic, method = "spearman")
+    )
+  }
+
+  if (length(all_lobo) == 0) return(NULL)
+
+  list(
+    overall_r   = cor(all_lobo, all_aic, method = "pearson"),
+    overall_rho = cor(all_lobo, all_aic, method = "spearman"),
+    per_basin   = per_basin
+  )
+}
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # SECTION 2 — Camera trap datasets
 # ───────────────────────────────────────────────────────────────────────────
@@ -503,65 +574,7 @@ add("5", "fw2_equation_intercept",
 # --- Pearson r and Spearman rho between LOBO and AIC model predictions ---
 # Replicate the 05b logic: load 5 km rasters, aggregate to 20 km,
 # predict with both models, correlate.
-compute_prediction_correlations <- function() {
-  basins <- c("Congo", "Amazon", "SE_Asia")
-  all_lobo <- c()
-  all_aic  <- c()
-  per_basin <- list()
-
-  for (b in basins) {
-    r_path <- file.path("outputs", "EOdata",
-                        sprintf("analysis_stack_5000_%s.tif", b))
-    if (!file.exists(r_path)) {
-      r_path <- file.path("outputs", "synthetic_EOdata",
-                          sprintf("analysis_stack_5000_%s.tif", b))
-    }
-    if (!file.exists(r_path)) next
-
-    r <- rast(r_path)
-    # Aggregate 5 km → 20 km (factor 4)
-    r_20 <- aggregate(r, fact = 4, fun = "mean", na.rm = TRUE)
-
-    # Band 3 is UOI in the analysis stacks
-    uoi_vals <- values(r_20[[3]])
-    valid    <- !is.na(uoi_vals)
-    uoi_v    <- uoi_vals[valid]
-
-    if (length(uoi_v) == 0) next
-
-    # LOBO: log(BH) = intercept + slope * UOI
-    pred_lobo <- ptab_lobo["(Intercept)", "Estimate"] +
-                 ptab_lobo["uoi", "Estimate"] * uoi_v
-
-    # AIC model: need elephant presence.  Use continent-level assignment.
-    ele <- ifelse(b %in% c("Congo", "SE_Asia"), 1, 0)
-    b_int_aic  <- ptab_aic["(Intercept)", "Estimate"]
-    b_uoi_aic  <- ptab_aic["uoi", "Estimate"]
-    b_ele_aic  <- ptab_aic["elephant_present_possiblePresent", "Estimate"]
-    b_uxe_aic  <- ptab_aic["uoi:elephant_present_possiblePresent", "Estimate"]
-
-    pred_aic <- b_int_aic + b_uoi_aic * uoi_v +
-                b_ele_aic * ele + b_uxe_aic * uoi_v * ele
-
-    all_lobo <- c(all_lobo, pred_lobo)
-    all_aic  <- c(all_aic,  pred_aic)
-
-    per_basin[[b]] <- list(
-      r_pearson  = cor(pred_lobo, pred_aic, method = "pearson"),
-      rho_spearman = cor(pred_lobo, pred_aic, method = "spearman")
-    )
-  }
-
-  if (length(all_lobo) == 0) return(NULL)
-
-  list(
-    overall_r   = cor(all_lobo, all_aic, method = "pearson"),
-    overall_rho = cor(all_lobo, all_aic, method = "spearman"),
-    per_basin   = per_basin
-  )
-}
-
-cors <- tryCatch(compute_prediction_correlations(), error = function(e) {
+cors <- tryCatch(compute_prediction_correlations(ptab_lobo, ptab_aic), error = function(e) {
   cat("  ⚠ Could not compute prediction correlations:", e$message, "\n")
   NULL
 })
