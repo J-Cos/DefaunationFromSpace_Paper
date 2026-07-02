@@ -190,7 +190,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       oos_MAE_log[m_idx] <- mean(abs(log_y_obs_valid - log_y_pred_valid))
       
       rss_log_model <- sum((log_y_obs_valid - log_y_pred_valid)^2)
-      tss_log_valid <- sum((log_y_obs_valid - mean(log_y_obs_valid))^2)
+      tss_log_valid <- sum((log_y_obs_valid - mean_log_y_obs)^2)
       oos_R2_log[m_idx] <- 1 - (rss_log_model / tss_log_valid)
     } else {
       oos_RMSE_raw[m_idx] <- NA; oos_MAE_raw[m_idx] <- NA
