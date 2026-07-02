@@ -1,8 +1,11 @@
 # =============================================================================
 # 02_Load_And_Join.R
 #
-# Load all GeoTIFF stacks from GEE exports, load and rasterise vector layers,
-# and prepare the full analysis environment.
+# Prepare the analysis environment: source function modules, load and
+# rasterise vector layers (PAs, basins, countries), and validate that
+# GeoTIFF stacks are accessible. Saves a lightweight metadata-only RDS;
+# downstream scripts (03–06) read GeoTIFFs directly via
+# calibration_helpers.R::extract_scale_data() for performance.
 #
 # Input:
 #   - outputs/synthetic_EOdata/analysis_stack_native_{basin}.tif  (10 bands)
@@ -10,7 +13,8 @@
 #   - data/vectors/ — WDPA, HydroSHEDS basins, country boundaries
 #
 # Output:
-#   - outputs/rds/loaded_data.rds (all stacks + rasterised vectors)
+#   - outputs/rds/loaded_data.rds (lightweight metadata placeholder;
+#     pixel data read on-the-fly from GeoTIFFs by downstream scripts)
 #
 # Dependencies:
 #   terra, sf, dplyr, tidyr, purrr, stringr
@@ -185,20 +189,20 @@ if (file.exists("outputs/elephant_ranges.gpkg")) {
   elephant_ranges <- vect("outputs/elephant_ranges.gpkg")
 }
 
-# HIGH-PERFORMANCE OPTIMIZATION:
-# To prevent gzipping and writing gigabytes of raw pixel values (which takes 10+ minutes and 1.5GB of space),
-# we save a lightweight structured metadata list. Downstream scripts read directly from the
-# GeoTIFF files on disk via calibration_helpers.R, so loaded_data.rds is not used for pixel data.
+# PERFORMANCE NOTE:
+# Downstream scripts (03-06, 09) read pixel data directly from GeoTIFF files
+# via calibration_helpers.R::extract_scale_data(), bypassing this RDS entirely.
+# We save a lightweight placeholder here to maintain the pipeline checkpoint
+# contract expected by 08_Integration_Tests.R. The rasterised vectors above
+# are constructed for use by any code that sources this file directly.
 loaded_data <- list(
-  native_stacks     = list(),
-  multiscale_stacks = list(),
-  pa_rast           = list(),
-  basins_r          = list(),
-  countries_r       = list(),
-  basins_v          = list(),
-  countries_v       = list(),
-  pa_polys_v        = list(),
-  elephant_ranges   = list()
+  pa_rast         = pa_rast,
+  basins_r        = basins_r,
+  countries_r     = countries_r,
+  basins_v        = basins_v,
+  countries_v     = countries_v,
+  pa_polys_v      = pa_polys_v,
+  elephant_ranges = elephant_ranges
 )
 saveRDS(loaded_data, file.path(RDS_DIR, "loaded_data.rds"))
 
