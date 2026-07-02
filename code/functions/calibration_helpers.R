@@ -24,7 +24,7 @@ library(jsonlite)
 config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
 config <- jsonlite::read_json(config_path)
 MIN_TRAP_DAYS <- config$clustering$min_trap_days
-CLUSTER_THRESHOLD_KM <- 11.1
+CLUSTER_THRESHOLD_KM <- as.numeric(config$clustering$threshold_km)
 
 
 
