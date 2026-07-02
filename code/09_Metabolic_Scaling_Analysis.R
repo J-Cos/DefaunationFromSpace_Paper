@@ -91,7 +91,7 @@ run_f1_selection <- function(index_name) {
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm)
+      gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm, method = "ML")
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
@@ -175,7 +175,7 @@ run_f2_aic_selection <- function(index_name) {
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = tw(), weights = w_combined_norm)
+      gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
@@ -232,7 +232,7 @@ run_f2_lobo_selection <- function(index_name) {
       if (nrow(train) == 0 || nrow(test) == 0) next
       
       fit <- tryCatch({
-        gam(f, data = train, family = tw(), weights = w_combined_norm)
+        gam(f, data = train, family = tw(), weights = w_combined_norm, method = "ML")
       }, error = function(e) NULL)
       
       if (!is.null(fit)) {
@@ -247,7 +247,7 @@ run_f2_lobo_selection <- function(index_name) {
       
       # Also fit full model to get DevExpl
       fit_full <- tryCatch({
-        gam(f, data = joined_data, family = tw(), weights = w_combined_norm)
+        gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
       }, error = function(e) NULL)
       dev_expl <- if (!is.null(fit_full)) summary(fit_full)$dev.expl else NA
       full_aic <- if (!is.null(fit_full)) AIC(fit_full) else NA

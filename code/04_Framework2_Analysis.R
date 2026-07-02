@@ -107,7 +107,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     m_name <- model_names[m_idx]
     m_form <- expanded_formulas_list[[m_idx]]
     
-    m_full <- gam(m_form, family = tw(), weights = w_combined_norm, data = joined_data, method = "REML")
+    m_full <- gam(m_form, family = tw(), weights = w_combined_norm, data = joined_data, method = "ML")
     full_models[[m_name]] <- m_full
     
     full_AIC[m_idx] <- AIC(m_full)
@@ -141,7 +141,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       }
       
       fold_model <- tryCatch({
-        gam(m_form, family = tw(), weights = w_combined_norm, data = train_data, method = "REML")
+        gam(m_form, family = tw(), weights = w_combined_norm, data = train_data, method = "ML")
       }, error = function(e) {
         NULL
       })
@@ -303,17 +303,20 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   write_csv(results_df, file.path(outputs_dir, "framework2_covariate_model_selection.csv"))
   
-  # Save RDS best model objects (LOBOCV parsimonious model)
+  # Save RDS best model objects (LOBOCV parsimonious model) — refit with REML for inference
   best_model_name <- results_df$Model[which(results_df$Parsimony_Status == "Parsimonious Selected Best")]
-  best_model <- full_models[[best_model_name]]
-  cat(sprintf("\n★ Parsimoniously Selected Best Model (1-SE Strategy): %s (OOS RMSE_log: %.4f)\n\n", best_model_name, results_df$OOS_RMSE_log[which(results_df$Model == best_model_name)]))
+  best_model <- gam(formula(full_models[[best_model_name]]), family = tw(),
+                    weights = w_combined_norm, data = joined_data, method = "REML")
+  cat(sprintf("\n★ Parsimoniously Selected Best Model (1-SE Strategy): %s (OOS RMSE_log: %.4f)\n", best_model_name, results_df$OOS_RMSE_log[which(results_df$Model == best_model_name)]))
+  cat("  (Selection via ML + LOBO-CV; coefficients from REML refit)\n\n")
   
   saveRDS(formula(best_model), file.path(outputs_dir, "framework2_best_formula.RDS"))
   saveRDS(best_model, file.path(outputs_dir, "framework2_best_model.RDS"))
   
-  # Save RDS best model objects (Standard AIC model)
+  # Save RDS best model objects (Standard AIC model) — refit with REML for inference
   best_model_name_aic <- results_df_aic$Model[best_aic_idx]
-  best_model_aic <- full_models[[best_model_name_aic]]
+  best_model_aic <- gam(formula(full_models[[best_model_name_aic]]), family = tw(),
+                        weights = w_combined_norm, data = joined_data, method = "REML")
   saveRDS(formula(best_model_aic), file.path(outputs_dir, "framework2_best_formula_aic.RDS"))
   saveRDS(best_model_aic, file.path(outputs_dir, "framework2_best_model_aic.RDS"))
   

@@ -94,7 +94,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   models_list <- list()
   for (name in names(expanded_base_formulas)) {
     f <- expanded_base_formulas[[name]]
-    models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "REML")
+    models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "ML")
   }
   
   # Compile results table
@@ -130,10 +130,13 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   write_csv(results_df, file.path(outputs_dir, "framework1_covariate_model_selection.csv"))
   
-  # Identify the best model
+  # Identify the best model (by AIC rank) and refit with REML for inference
   best_model_name <- results_df$Model[1]
-  best_model <- models_list[[best_model_name]]
-  cat(sprintf("\n★ Selected Best-Fitting Model: %s (AIC: %.2f, d_AIC: 0.00)\n\n", best_model_name, AIC(best_model)))
+  best_model_ml <- models_list[[best_model_name]]
+  best_model <- gam(formula(best_model_ml), family = betar(link = "logit"),
+                    weights = w_combined_norm, data = joined_data, method = "REML")
+  cat(sprintf("\n★ Selected Best-Fitting Model: %s (AIC: %.2f, d_AIC: 0.00)\n", best_model_name, AIC(best_model)))
+  cat("  (Selection via ML; coefficients from REML refit)\n\n")
   
   # Save best model RDS objects to outputs
   saveRDS(formula(best_model), file.path(outputs_dir, "framework1_best_formula.RDS"))
