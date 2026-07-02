@@ -193,6 +193,12 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       oos_RMSE_log[m_idx] <- sqrt(mean((log_y_obs_valid - log_y_pred_valid)^2))
       oos_MAE_log[m_idx] <- mean(abs(log_y_obs_valid - log_y_pred_valid))
       
+      # NOTE: R² is computed relative to the GLOBAL mean (mean_log_y_obs from
+      # the full dataset, L170), not the held-out fold's mean. This is a
+      # deliberate design choice: since all models share the same denominator
+      # (TSS), comparison across models within the same LOBO framework is valid.
+      # Using fold-specific means would give a pure generalization metric but
+      # would make R² values less comparable across different fold sizes.
       rss_log_model <- sum((log_y_obs_valid - log_y_pred_valid)^2)
       tss_log_valid <- sum((log_y_obs_valid - mean_log_y_obs)^2)
       oos_R2_log[m_idx] <- 1 - (rss_log_model / tss_log_valid)

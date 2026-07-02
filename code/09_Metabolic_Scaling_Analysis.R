@@ -257,7 +257,10 @@ run_f2_lobo_selection <- function(index_name) {
       if (length(train_idx) == 0 || length(test_idx) == 0) next
       
       fit_fold <- tryCatch({
-        m_fold <- gam(f, data = joined_data[train_idx, ], family = tw(), weights = w_combined_norm, method = "ML")
+        train_data <- joined_data[train_idx, ]
+        # Re-normalize weights within training fold (matches 04_Framework2_Analysis.R L137)
+        train_data$w_combined_norm <- train_data$w_combined / mean(train_data$w_combined)
+        m_fold <- gam(f, data = train_data, family = tw(), weights = w_combined_norm, method = "ML")
         check_model_convergence(m_fold, paste("F2 LORO-CV", index_name, n, "fold", b), raise_warning = FALSE)
         m_fold
       }, error = function(e) NULL)
