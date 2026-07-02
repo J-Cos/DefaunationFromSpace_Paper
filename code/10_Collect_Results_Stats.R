@@ -150,11 +150,11 @@ add("2", "congo_clusters_bh_gt1000",
     sum(clus$region == "Congo" & clus$B_H_gt1000 > 0),
     src = SRC_CLU, unit = "count")
 
-# Megaherbivore fraction (>50 kg body mass, as stored in megafauna_fraction) by basin
+# Megaherbivore fraction (>50 kg body mass, as stored in megafauna_fraction_gt50) by basin
 for (r in c("Amazon", "Congo", "SE_Asia")) {
   sub <- clus[clus$region == r & clus$B_H_index > 0, ]
   if (nrow(sub) > 0) {
-    mean_frac_50 <- mean(sub$megafauna_fraction, na.rm = TRUE)
+    mean_frac_50 <- mean(sub$megafauna_fraction_gt50, na.rm = TRUE)
   } else {
     mean_frac_50 <- 0
   }
@@ -163,14 +163,12 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
       mean_frac_50, src = SRC_CLU, unit = "percent")
 }
 
-# Megaherbivore fraction (>100 kg body mass) by basin — this is what the
-# manuscript reports as "megaherbivore biomass"
+# Megaherbivore fraction (>100 kg body mass, as stored in megafauna_fraction_gt100) by basin
+# This is what the manuscript reports as "megaherbivore biomass fraction"
 for (r in c("Amazon", "Congo", "SE_Asia")) {
   sub <- clus[clus$region == r & clus$B_H_index > 0, ]
   if (nrow(sub) > 0) {
-    frac_100 <- (sub$B_H_gt100 / sub$B_H_index) * 100
-    frac_100[is.nan(frac_100)] <- 0
-    mean_frac_100 <- mean(frac_100, na.rm = TRUE)
+    mean_frac_100 <- mean(sub$megafauna_fraction_gt100, na.rm = TRUE)
   } else {
     mean_frac_100 <- 0
   }
