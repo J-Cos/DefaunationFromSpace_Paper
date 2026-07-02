@@ -2,9 +2,11 @@
 """
 generate_citations_table.py
 ===========================
-Extracts the citation data from the projects.csv file in every camera trap dataset
-under the data/ directory, de-duplicates by project_id, and creates a neat,
-publication-quality markdown table citing all data used.
+Extracts camera trap citation data and cross-references with the processed outputs
+(camera_traps_joint_metrics.csv, camera_traps_cluster_level_metrics_robust.csv,
+and camera_traps_joint_detections.csv) to only include projects actually used in the
+final models. Computes sample sizes: deployments provided vs. used, cameras provided vs. used,
+and wild mammal images used, sorting the final publication-quality table by size.
 """
 
 import os
@@ -25,39 +27,88 @@ def make_markdown_table(df):
     return "\n".join(lines)
 
 def main():
-    print("=== Extracting Camera Trap Citations ===")
+    print("=== Cross-referencing Camera Trap Citations with Processing Outputs ===")
     
-    # 1. Find all projects.csv files recursively in data/
-    data_dir = Path("data")
-    projects_files = list(data_dir.glob("**/projects.csv"))
-    print(f"Found {len(projects_files)} projects.csv files in data directory.")
+    # 1. Load robust cluster IDs (used in the final analysis)
+    robust_metrics_path = Path("outputs/camera_traps_cluster_level_metrics_robust.csv")
+    if not robust_metrics_path.exists():
+        print(f"Error: {robust_metrics_path} is missing. Please run the integration tests first.")
+        return
+    robust_clusters_df = pd.read_csv(robust_metrics_path)
+    robust_cluster_ids = set(robust_clusters_df["cluster_id"].astype(str))
+    print(f"Loaded {len(robust_cluster_ids)} robust cluster IDs used in the models.")
+
+    # 2. Load joint detections to map deployments to cluster_id and count mammal images
+    detections_path = Path("outputs/camera_traps_joint_detections.csv")
+    if not detections_path.exists():
+        print(f"Error: {detections_path} is missing.")
+        return
     
-    records = []
+    print("Loading event-level joint detections...")
+    # Load columns needed for mapping and image counting
+    det_cols = ["project_id", "deployment_id", "cluster_id", "n_detections", "taxon_quality"]
+    det_df = pd.read_csv(detections_path, usecols=det_cols, keep_default_na=False)
     
-    # 2. Extract project info and citations
-    for path in projects_files:
-        try:
-            # We use keep_default_na=False to avoid interpreting NA or None as NaN
-            df = pd.read_csv(path, keep_default_na=False)
+    # Standardize column types
+    det_df["project_id"] = det_df["project_id"].astype(str).str.strip()
+    det_df["deployment_id"] = det_df["deployment_id"].astype(str).str.strip()
+    det_df["cluster_id"] = det_df["cluster_id"].astype(str).str.strip()
+    
+    # Map deployments to their cluster ID
+    dep_to_cluster = {}
+    for dep_id, cl_id in zip(det_df["deployment_id"], det_df["cluster_id"]):
+        if dep_id and cl_id:
+            dep_to_cluster[dep_id] = cl_id
             
-            # Check if required columns exist
+    # Sum wild mammal images used in robust clusters per project
+    # Wild mammals are defined as rows where taxon_quality is species, genus, or family
+    # (i.e. excluding blank, human, unmatched, and birds)
+    valid_taxa = ["species", "genus", "family"]
+    robust_dets = det_df[
+        (det_df["cluster_id"].isin(robust_cluster_ids)) &
+        (det_df["taxon_quality"].isin(valid_taxa))
+    ]
+    
+    project_images_used = {}
+    for proj_id, ndet in zip(robust_dets["project_id"], robust_dets["n_detections"]):
+        try:
+            val = float(ndet)
+            if not pd.isna(val):
+                project_images_used[proj_id] = project_images_used.get(proj_id, 0) + int(val)
+        except ValueError:
+            pass
+
+    # 3. Find and scan all raw packages to get provided deployments and cameras, and citations
+    data_dir = Path("data")
+    deployments_files = list(data_dir.glob("**/deployments.csv"))
+    print(f"Found {len(deployments_files)} raw deployments.csv files in data/ directory.")
+    
+    project_metadata = {}
+    
+    for dep_path in deployments_files:
+        package_dir = dep_path.parent
+        proj_csv_path = package_dir / "projects.csv"
+        if not proj_csv_path.exists():
+            continue
+            
+        # Parse projects.csv for name and citation
+        try:
+            proj_df = pd.read_csv(proj_csv_path, keep_default_na=False)
             required = ["project_id", "project_name", "data_citation"]
-            if not all(col in df.columns for col in required):
-                # Fallback to look for case insensitive matches
-                col_map = {col.lower(): col for col in df.columns}
+            if not all(col in proj_df.columns for col in required):
+                col_map = {col.lower(): col for col in proj_df.columns}
                 if all(req.lower() in col_map for req in required):
-                    df = df.rename(columns={col_map[req.lower()]: req for req in required})
+                    proj_df = proj_df.rename(columns={col_map[req.lower()]: req for req in required})
                 else:
-                    print(f"Warning: projects.csv at {path} is missing required columns. Skipping.")
                     continue
             
-            for _, row in df.iterrows():
-                project_id = str(row["project_id"]).strip()
-                project_name = str(row["project_name"]).strip()
-                data_citation = str(row["data_citation"]).strip()
+            for _, row in proj_df.iterrows():
+                pid = str(row["project_id"]).strip()
+                pname = str(row["project_name"]).strip()
+                cit = str(row["data_citation"]).strip()
                 
                 # Determine basin based on path
-                path_str = str(path)
+                path_str = str(package_dir)
                 if "Amazon" in path_str:
                     basin = "Amazon"
                 elif "Congo" in path_str:
@@ -66,35 +117,125 @@ def main():
                     basin = "SE Asia"
                 else:
                     basin = "Other"
-                
-                if project_id and data_citation:
-                    records.append({
-                        "Project ID": project_id,
-                        "Project Name": project_name,
-                        "Basin": basin,
-                        "Citation": data_citation
-                    })
+                    
+                if pid and cit:
+                    project_metadata[pid] = {
+                        "name": pname,
+                        "citation": cit,
+                        "basin": basin
+                    }
         except Exception as e:
-            print(f"Error reading {path}: {e}")
+            print(f"Error reading projects.csv at {proj_csv_path}: {e}")
+
+        # Parse deployments.csv to count provided deployments/cameras
+        try:
+            dep_df = pd.read_csv(dep_path, keep_default_na=False)
+            # Find device/camera id column
+            cam_col = None
+            for col in ["camera_id", "camera_name", "device_id", "camera"]:
+                if col in dep_df.columns:
+                    cam_col = col
+                    break
+                    
+            for _, row in dep_df.iterrows():
+                pid = str(row["project_id"]).strip()
+                did = str(row["deployment_id"]).strip()
+                cid = str(row[cam_col]).strip() if cam_col else did
+                if not cid or cid == "None" or cid == "":
+                    cid = did
+                    
+                if pid not in project_metadata:
+                    continue
+                    
+                meta = project_metadata[pid]
+                if "provided_deps" not in meta:
+                    meta["provided_deps"] = set()
+                    meta["provided_cams"] = set()
+                    meta["used_deps"] = set()
+                    meta["used_cams"] = set()
+                    
+                meta["provided_deps"].add(did)
+                meta["provided_cams"].add(cid)
+                
+                # Check if this deployment is in a robust cluster
+                if did in dep_to_cluster:
+                    cl_id = dep_to_cluster[did]
+                    if cl_id in robust_cluster_ids:
+                        meta["used_deps"].add(did)
+                        meta["used_cams"].add(cid)
+                        
+        except Exception as e:
+            print(f"Error reading deployments.csv at {dep_path}: {e}")
+
+    # 4. Filter and compile the final citations list
+    records = []
+    total_provided_deps = 0
+    total_used_deps = 0
+    total_provided_cams = 0
+    total_used_cams = 0
+    
+    for pid, meta in project_metadata.items():
+        # Only include if deployments were actually used in final robust models
+        used_deps_set = meta.get("used_deps", set())
+        used_deps_count = len(used_deps_set)
+        
+        if used_deps_count > 0:
+            provided_deps_count = len(meta.get("provided_deps", set()))
+            provided_cams_count = len(meta.get("provided_cams", set()))
+            used_cams_count = len(meta.get("used_cams", set()))
+            images_used = project_images_used.get(pid, 0)
+            
+            total_provided_deps += provided_deps_count
+            total_used_deps += used_deps_count
+            total_provided_cams += provided_cams_count
+            total_used_cams += used_cams_count
+            
+            records.append({
+                "Basin": meta["basin"],
+                "Project Name": meta["name"],
+                "Project ID": pid,
+                "Deployments (Provided)": provided_deps_count,
+                "Deployments (Used)": used_deps_count,
+                "Cameras (Provided)": provided_cams_count,
+                "Cameras (Used)": used_cams_count,
+                "Mammal Images (Used)": images_used,
+                "Citation": meta["citation"]
+            })
             
     if not records:
-        print("No citations found! Exiting.")
+        print("No active project citations found! Exiting.")
         return
         
-    df_all = pd.DataFrame(records)
+    df_citations = pd.DataFrame(records)
     
-    # 3. De-duplicate by Project ID
-    df_unique = df_all.drop_duplicates(subset=["Project ID"])
-    df_unique = df_unique.sort_values(by=["Basin", "Project Name"]).reset_index(drop=True)
+    # 5. Sort by Deployments Used (descending), then Mammal Images Used (descending)
+    df_citations = df_citations.sort_values(
+        by=["Deployments (Used)", "Mammal Images (Used)", "Project Name"],
+        ascending=[False, False, True]
+    ).reset_index(drop=True)
     
-    print(f"Extracted {len(df_unique)} unique project citations out of {len(df_all)} total entries.")
+    print(f"\nFinal statistics across used datasets:")
+    print(f"  Unique Projects Used: {len(df_citations)} (out of {len(project_metadata)} total provided)")
+    print(f"  Deployments Provided: {total_provided_deps} | Used: {total_used_deps}")
+    print(f"  Cameras Provided:     {total_provided_cams} | Used: {total_used_cams}")
+    print(f"  Wild Mammal Images:   {df_citations['Mammal Images (Used)'].sum()}")
     
-    # 4. Generate Markdown Table
-    df_md = df_unique[["Basin", "Project Name", "Project ID", "Citation"]].copy()
+    # 6. Generate Markdown publication-quality document
+    md_content = "# Camera Trap Data Citations & Sample Sizes\n\n"
+    md_content += "This table lists all camera trap datasets actually used in the standing mammal biomass calibration models, "
+    md_content += "sorted by the number of used deployments. It compares the number of deployments and cameras provided by "
+    md_content += "each project to those retained in robust clusters, and lists the count of independent wild mammal images "
+    md_content += "used for RAI calibrations.\n\n"
     
-    md_content = "# Data Citations Table\n\n"
-    md_content += "This table lists the unique camera trap projects used in the analysis, categorized by region, along with their respective metadata license and dataset citation.\n\n"
-    md_content += make_markdown_table(df_md)
+    # Create a nice summary header block
+    md_content += "### Data Summary\n"
+    md_content += f"- **Total Projects Used**: {len(df_citations)}\n"
+    md_content += f"- **Deployments Provided**: {total_provided_deps:,} | **Deployments Used**: {total_used_deps:,}\n"
+    md_content += f"- **Cameras Provided**: {total_provided_cams:,} | **Cameras Used**: {total_used_cams:,}\n"
+    md_content += f"- **Wild Mammal Images Used**: {df_citations['Mammal Images (Used)'].sum():,}\n\n"
+    
+    # Append the main markdown table
+    md_content += make_markdown_table(df_citations)
     md_content += "\n"
     
     # Write outputs
@@ -107,9 +248,9 @@ def main():
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
         
-    df_unique.to_csv(csv_path, index=False)
+    df_citations.to_csv(csv_path, index=False)
     
-    print(f"✓ Saved publication quality table to: {md_path}")
+    print(f"\n✓ Saved publication quality table to: {md_path}")
     print(f"✓ Saved raw CSV table to: {csv_path}")
 
 if __name__ == "__main__":
