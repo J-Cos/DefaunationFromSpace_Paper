@@ -32,6 +32,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   # --- 1. Ingest and Calibrate Scale-Specific Cluster Data ---------------------
   source("code/functions/calibration_helpers.R")
+  source("code/functions/model_convergence.R")
   joined_data <- extract_scale_data(scale_m)
   
   cat("✓ Merged and calibrated data successfully. N =", nrow(joined_data), "clusters.\n")
@@ -94,7 +95,9 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   models_list <- list()
   for (name in names(expanded_base_formulas)) {
     f <- expanded_base_formulas[[name]]
-    models_list[[name]] <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "ML")
+    m <- gam(f, family = betar(link = "logit"), weights = w_combined_norm, data = joined_data, method = "ML")
+    check_model_convergence(m, name)
+    models_list[[name]] <- m
   }
   
   # Compile results table (models fitted with ML for valid AICc comparison)
@@ -140,6 +143,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   best_model_ml <- models_list[[best_model_name]]
   best_model <- gam(formula(best_model_ml), family = betar(link = "logit"),
                     weights = w_combined_norm, data = joined_data, method = "REML")
+  check_model_convergence(best_model, paste(best_model_name, "(REML Refit)"))
   cat(sprintf("\n★ Selected Best-Fitting Model: %s (AICc: %.2f, d_AICc: 0.00)\n", best_model_name, results_df$AICc[1]))
   cat("  (Selection via ML/AICc; coefficients from REML refit)\n\n")
   

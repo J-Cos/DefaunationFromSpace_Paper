@@ -110,6 +110,51 @@ run_test("extract_scale_data returns valid structure (5km scale)", quote({
 }))
 
 # =============================================================================
+# MODULE 1.5: code/functions/model_convergence.R
+# =============================================================================
+cat("\n--- Module: code/functions/model_convergence.R ---\n")
+source("code/functions/model_convergence.R")
+
+run_test("check_model_convergence exists", quote({
+  exists("check_model_convergence", mode = "function")
+}))
+
+run_test("check_model_convergence signature check", quote({
+  check_signature("check_model_convergence", c("model_obj", "model_name", "raise_warning"))
+}))
+
+run_test("check_model_convergence handles NULL", quote({
+  res <- check_model_convergence(NULL, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && res$message == "Model object is NULL"
+}))
+
+run_test("check_model_convergence checks successful gam fit", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == TRUE && grepl("successfully", res$message)
+}))
+
+run_test("check_model_convergence detects non-converged inner flag", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  fit_dummy$converged <- FALSE
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && grepl("Inner", res$message)
+}))
+
+run_test("check_model_convergence detects non-converged outer flag", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  fit_dummy$outer.info <- list(conv = "non-converged or bad step")
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && grepl("Outer", res$message)
+}))
+
+# =============================================================================
 # MODULE 2: code/03_Framework1_Analysis.R
 # =============================================================================
 cat("\n--- Module: code/03_Framework1_Analysis.R ---\n")

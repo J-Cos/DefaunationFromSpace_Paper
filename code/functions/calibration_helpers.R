@@ -21,6 +21,7 @@ library(mgcv)
 library(readr)
 library(jsonlite)
 
+source("code/functions/model_convergence.R")
 config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
 config <- jsonlite::read_json(config_path)
 MIN_TRAP_DAYS <- config$clustering$min_trap_days
@@ -313,7 +314,9 @@ fit_framework1_model <- function(data, formula_path = "outputs/framework1_best_f
   } else {
     uoi ~ B_H_index
   }
-  mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_combined_norm, data = data, method = "REML")
+  m <- mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_combined_norm, data = data, method = "REML")
+  check_model_convergence(m, "FW1 Calibration Model (REML)")
+  m
 }
 
 #' Fit Framework 2 Model (Tweedie GLM)
@@ -332,5 +335,7 @@ fit_framework2_model <- function(data, formula_path = "outputs/framework2_best_f
   } else {
     B_H_index ~ uoi * basin + elevation
   }
-  mgcv::gam(formula_obj, family = tw(), weights = w_combined_norm, data = data, method = "REML")
+  m <- mgcv::gam(formula_obj, family = tw(), weights = w_combined_norm, data = data, method = "REML")
+  check_model_convergence(m, "FW2 Calibration Model (REML)")
+  m
 }

@@ -22,6 +22,7 @@ library(readr)
 # --- 1. Load Custom Calibration Helpers & Core Data --------------------------
 source("code/functions/theme_pnas.R")
 source("code/functions/calibration_helpers.R")
+source("code/functions/model_convergence.R")
 
 cat("=====================================================================\n")
 cat("=== code/09_Metabolic_Scaling_Analysis.R                          ===\n")
@@ -92,7 +93,9 @@ run_f1_selection <- function(index_name) {
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm, method = "ML")
+      m <- gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m, paste("F1", index_name, n))
+      m
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
@@ -179,7 +182,9 @@ run_f2_aic_selection <- function(index_name) {
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      m <- gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m, paste("F2 AICc", index_name, n))
+      m
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
@@ -252,7 +257,9 @@ run_f2_lobo_selection <- function(index_name) {
       if (length(train_idx) == 0 || length(test_idx) == 0) next
       
       fit_fold <- tryCatch({
-        gam(f, data = joined_data[train_idx, ], family = tw(), weights = w_combined_norm, method = "ML")
+        m_fold <- gam(f, data = joined_data[train_idx, ], family = tw(), weights = w_combined_norm, method = "ML")
+        check_model_convergence(m_fold, paste("F2 LORO-CV", index_name, n, "fold", b), raise_warning = FALSE)
+        m_fold
       }, error = function(e) NULL)
       
       if (!is.null(fit_fold)) {
@@ -263,7 +270,9 @@ run_f2_lobo_selection <- function(index_name) {
     
     # 2. Fit full model to get EDF, AICc and Deviance Explained
     fit_full <- tryCatch({
-      gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      m_full <- gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m_full, paste("F2 LORO-CV Full", index_name, n))
+      m_full
     }, error = function(e) NULL)
     
     if (!is.null(fit_full)) {
