@@ -375,10 +375,10 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   p_b <- plot_model_selection_bars(
     plot_df = plot_sel_df,
-    x_var = "R2",
+    x_var = "dev_expl",
     fill_var = "delta_AICc",
     fill_label = "Delta AICc",
-    x_label = "Adjusted Pseudo-R² (Goodness of Fit)",
+    x_label = "Model Deviance Explained",
     plot_title = "C. Covariate Model Selection (Beta Regression)",
     parsed_labels = parsed_labels
   )
