@@ -334,6 +334,24 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
   add("2", paste0("proboscidean_biomass_pct_", tolower(r)),
       paste0("Mean Proboscidean biomass fraction across clusters – ", r),
       mean(cluster_totals$probo_pct, na.rm = TRUE), src = SRC_VIS, unit = "percent")
+
+  # Overall pooled raw biomass fraction (matches Fig 2F bar composition)
+  total_raw_bm <- sum(sub_det$n_detections * sub_det$body_mass_kg, na.rm = TRUE)
+  probo_raw_bm <- sum((sub_det$n_detections * sub_det$body_mass_kg)[sub_det$order == "Proboscidea"], na.rm = TRUE)
+  pct_raw      <- ifelse(total_raw_bm > 0, probo_raw_bm / total_raw_bm * 100, 0)
+
+  add("2", paste0("proboscidean_biomass_pct_pooled_raw_", tolower(r)),
+      paste0("Overall pooled raw Proboscidean biomass fraction – ", r),
+      pct_raw, src = SRC_VIS, unit = "percent")
+
+  # Overall pooled corrected biomass fraction
+  total_corr_bm <- sum(sub_det$biomass_contrib, na.rm = TRUE)
+  probo_corr_bm <- sum(sub_det$biomass_contrib[sub_det$order == "Proboscidea"], na.rm = TRUE)
+  pct_corr      <- ifelse(total_corr_bm > 0, probo_corr_bm / total_corr_bm * 100, 0)
+
+  add("2", paste0("proboscidean_biomass_pct_pooled_corrected_", tolower(r)),
+      paste0("Overall pooled corrected Proboscidean biomass fraction – ", r),
+      pct_corr, src = SRC_VIS, unit = "percent")
 }
 
 cat("  ✓ Section 2 done.\n")
