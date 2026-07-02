@@ -143,10 +143,16 @@ compute_prediction_correlations <- function(ptab_lobo, ptab_aic) {
 
     # AIC model: need elephant presence.  Use continent-level assignment.
     ele <- ifelse(b %in% c("Congo", "SE_Asia"), 1, 0)
+    
+    # Find the row names matching elephant presence in the AIC model coefficient table
+    ele_rows <- grep("elephant_present", rownames(ptab_aic), value = TRUE)
+    ele_main_row <- ele_rows[!grepl("uoi:", ele_rows)]
+    ele_int_row <- ele_rows[grepl("uoi:", ele_rows)]
+    
     b_int_aic  <- ptab_aic["(Intercept)", "Estimate"]
     b_uoi_aic  <- ptab_aic["uoi", "Estimate"]
-    b_ele_aic  <- ptab_aic["elephant_present_possiblePresent", "Estimate"]
-    b_uxe_aic  <- ptab_aic["uoi:elephant_present_possiblePresent", "Estimate"]
+    b_ele_aic  <- if (length(ele_main_row) > 0) ptab_aic[ele_main_row[1], "Estimate"] else 0
+    b_uxe_aic  <- if (length(ele_int_row) > 0) ptab_aic[ele_int_row[1], "Estimate"] else 0
 
     pred_aic <- b_int_aic + b_uoi_aic * uoi_v +
                 b_ele_aic * ele + b_uxe_aic * uoi_v * ele
@@ -185,7 +191,7 @@ SRC_CLU <- "camera_traps_cluster_level_metrics.csv"
 
 # --- Projects & deployments ---
 add("2", "n_wi_projects",      "Number of Wildlife Insights projects",
-    n_distinct(dep$project_name), src = SRC_CT, unit = "count")
+    n_distinct(dep$project_id), src = SRC_CT, unit = "count")
 
 add("2", "n_deployments_total", "Total camera deployments",
     nrow(dep), src = SRC_CT, unit = "count")
