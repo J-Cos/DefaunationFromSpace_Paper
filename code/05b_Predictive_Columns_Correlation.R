@@ -194,10 +194,4 @@ ggsave("figures/figureS4.png", plot = p, width = 18, height = 8, units = "cm", d
 ggsave("figures/figureS4.pdf", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
 cat("✓ Successfully saved supplementary figure to figures/figureS4.png and .pdf\n")
 
-# Copy to brain folder
-brain_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-if (dir.exists(brain_dir)) {
-  file.copy("figures/figureS4.png", file.path(brain_dir, "figureS4.png"), overwrite = TRUE)
-  file.copy("figures/figureS4.pdf", file.path(brain_dir, "figureS4.pdf"), overwrite = TRUE)
-  cat("✓ Copied supplementary figure to brain folder.\n")
-}
+

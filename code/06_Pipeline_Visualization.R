@@ -390,16 +390,9 @@ fig1_png <- "figures/figure1_gedi_pipeline.png"
 ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
 cat("✓ 8-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 
-# Copy figure to active brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-if (file.exists(brain_artifacts_dir)) {
-  file.copy(fig1_png, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.png"), overwrite = TRUE)
-  # Also copy PDF version if generated
-  fig1_pdf <- sub("\\.png$", ".pdf", fig1_png)
-  ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
-  file.copy(fig1_pdf, file.path(brain_artifacts_dir, "figure1_gedi_pipeline.pdf"), overwrite = TRUE)
-  cat("✓ Copied 8-Panel Figure 1 (PNG & PDF) to brain artifacts folder.\n")
-}
+# Save PDF version
+fig1_pdf <- sub("\\.png$", ".pdf", fig1_png)
+ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
 
 
 # =============================================================================
@@ -679,12 +672,7 @@ fig2_png <- "figures/figure2_camera_trap_pipeline.png"
 ggsave(filename = fig2_png, plot = fig2_final, width = 17.8, height = 22.0, units = "cm", dpi = 600, bg = "white")
 cat("✓ 7-Panel Figure 2 successfully saved to:", fig2_png, "\n\n")
 
-# Copy figures to active brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-if (file.exists(brain_artifacts_dir)) {
-  file.copy(fig2_png, file.path(brain_artifacts_dir, "figure2_camera_trap_pipeline.png"), overwrite = TRUE)
-  cat("✓ Copied 7-Panel Figure 2 to brain artifacts folder.\n")
-}
+
 
 cat("============================================================\n")
 cat("=== Manuscript Figures 1 & 2 Completed Successfully ===\n")

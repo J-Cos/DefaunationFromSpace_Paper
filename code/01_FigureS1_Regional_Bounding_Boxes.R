@@ -89,13 +89,6 @@ if (!is.null(combined_proboscids)) {
   gpkg_path <- "outputs/elephant_ranges.gpkg"
   writeVector(combined_proboscids, gpkg_path, overwrite = TRUE)
   cat("✓ Successfully saved combined elephant range vector to outputs/elephant_ranges.gpkg\n")
-  
-  # Mirror GPKG in brain artifacts folder
-  brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-  if (file.exists(brain_artifacts_dir)) {
-    file.copy(gpkg_path, file.path(brain_artifacts_dir, "elephant_ranges.gpkg"), overwrite = TRUE)
-    cat("✓ Mirrored elephant_ranges.gpkg to brain artifacts folder.\n")
-  }
 }
 
 # Define a premium, clean PNAS-style map theme
@@ -209,13 +202,5 @@ fig_path_pdf_local <- "figures/figureS1.pdf"
 # Save high-resolution publication-quality PNG and PDF (300 DPI)
 ggsave(fig_path_png_local, plot = col_figure, width = 11.5, height = 16.5, units = "cm", dpi = 300, bg = "white")
 ggsave(fig_path_pdf_local, plot = col_figure, width = 11.5, height = 16.5, units = "cm", dpi = 300, bg = "white")
-
-# Mirror in brain artifacts folder
-brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-if (file.exists(brain_artifacts_dir)) {
-  file.copy(fig_path_png_local, file.path(brain_artifacts_dir, "figureS1.png"), overwrite = TRUE)
-  file.copy(fig_path_pdf_local, file.path(brain_artifacts_dir, "figureS1.pdf"), overwrite = TRUE)
-  cat("✓ Mirrored figureS1.png and figureS1.pdf to brain artifacts folder.\n")
-}
 
 cat("✓ Successfully saved Figure S1 regional bounding box column figure to:\n  -", fig_path_png_local, "\n  -", fig_path_pdf_local, "\n")

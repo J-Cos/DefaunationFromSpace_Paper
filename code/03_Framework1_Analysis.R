@@ -456,21 +456,7 @@ run_framework1_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     height_cm = 12.5
   )
   
-  # Copy to brain artifact directory
-  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
-  if (file.exists(brain_artifact_dir)) {
-    file.copy(fig_png_path,
-              file.path(brain_artifact_dir, "figure3.png"),
-              overwrite = TRUE)
-    # Also copy pdf version
-    fig_pdf_path <- sub("\\.png$", ".pdf", fig_png_path)
-    if (file.exists(fig_pdf_path)) {
-      file.copy(fig_pdf_path,
-                file.path(brain_artifact_dir, "figure3.pdf"),
-                overwrite = TRUE)
-    }
-    cat("✓ Copied integrated figure to brain artifacts folder.\n")
-  }
+
   
   cat(sprintf("✓ Saved figure to %s\n", fig_png_path))
   cat("=== Framework 1 Integrated Analysis Completed Successfully ===\n")

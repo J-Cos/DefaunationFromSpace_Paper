@@ -534,13 +534,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     ggsave(filename = png_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
     ggsave(filename = pdf_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
     
-    # Mirror to active brain artifacts folder
-    brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-    if (file.exists(brain_artifacts_dir)) {
-      file.copy(png_file, file.path(brain_artifacts_dir, sprintf("%s.png", output_base_name)), overwrite = TRUE)
-      file.copy(pdf_file, file.path(brain_artifacts_dir, sprintf("%s.pdf", output_base_name)), overwrite = TRUE)
-      cat(sprintf("✓ Copied %s.png and .pdf to brain artifacts folder.\n", output_base_name))
-    }
+
     
     cat(sprintf("✓ Successfully saved map figure to: %s\n\n", png_file))
     

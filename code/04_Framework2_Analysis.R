@@ -649,15 +649,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   figS2_pdf_path <- sub("\\.png$", ".pdf", figS2_png_path)
   save_pnas(plot = fig_main, filename = figS2_pdf_path, type = "double", height_cm = 12.5)
   
-  # 3. Copy both to the active brain artifact directory if it exists
-  brain_artifact_dir <- "/home/j/.gemini/antigravity/brain/c2196e8b-5bc2-4940-8c55-1b32cfdc6745"
-  if (file.exists(brain_artifact_dir)) {
-    file.copy(fig4_png_path, file.path(brain_artifact_dir, "figure4.png"), overwrite = TRUE)
-    file.copy(fig4_pdf_path, file.path(brain_artifact_dir, "figure4.pdf"), overwrite = TRUE)
-    file.copy(figS2_png_path, file.path(brain_artifact_dir, "figureS2.png"), overwrite = TRUE)
-    file.copy(figS2_pdf_path, file.path(brain_artifact_dir, "figureS2.pdf"), overwrite = TRUE)
-    cat("✓ Copied Figure 4 and Figure S2 to brain artifacts folder.\n")
-  }
+
   
   cat(sprintf("✓ Saved Figure 4 to %s and Figure S2 to %s\n", fig4_png_path, figS2_png_path))
   cat("=== Framework 2 Integrated Analysis Completed Successfully ===\n")
