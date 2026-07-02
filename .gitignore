@@ -12,6 +12,7 @@ env/
 .Rhistory
 .RData
 .Ruserdata
+Rplots.pdf
 
 # MacOS
 .DS_Store
