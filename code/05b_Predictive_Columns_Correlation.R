@@ -128,17 +128,19 @@ seasia_df <- if (!is.null(r_seasia)) predict_basin_df(r_seasia, "SE_Asia") else 
 all_data <- bind_rows(congo_df, amazon_df, seasia_df)
 
 # Calculate correlations (Pearson and Spearman)
-r_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "pearson", use = "complete.obs")
+# NOTE: use cor_* / rho_* prefixes to avoid shadowing the SpatRaster objects
+# r_congo, r_amazon, r_seasia defined above (L75-77).
+cor_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "pearson", use = "complete.obs")
 rho_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "spearman", use = "complete.obs")
 
-r_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "pearson", use = "complete.obs")
+cor_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "pearson", use = "complete.obs")
 rho_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "spearman", use = "complete.obs")
 
-r_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "pearson", use = "complete.obs")
+cor_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "pearson", use = "complete.obs")
 rho_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "spearman", use = "complete.obs")
 
 has_seasia <- !is.null(seasia_df) && nrow(seasia_df) > 0
-r_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "pearson", use = "complete.obs") else NA
+cor_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "pearson", use = "complete.obs") else NA
 rho_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "spearman", use = "complete.obs") else NA
 
 # Create annotation data frame for regional correlations (placed in top-left corner)
@@ -147,9 +149,9 @@ anno_df <- data.frame(
   z_lobo = c(-2.3, -2.3, -2.3),
   z_aic = c(2.3, 2.3, 2.3),
   label = c(
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", r_congo, rho_congo),
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", r_amazon, rho_amazon),
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", if (is.na(r_seasia)) 0.0 else r_seasia, if (is.na(rho_seasia)) 0.0 else rho_seasia)
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", cor_congo, rho_congo),
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", cor_amazon, rho_amazon),
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", if (is.na(cor_seasia)) 0.0 else cor_seasia, if (is.na(rho_seasia)) 0.0 else rho_seasia)
   )
 )
 if (!has_seasia) {
@@ -174,7 +176,7 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
   facet_wrap(~ basin, ncol = 3) +
   labs(
     title = "Correlation Between Biophysical Template & Basin-Calibrated Models",
-    subtitle = sprintf("Z-score Standing Mammal Biomass predictions (at %d m predictive scale) | Overall: Pearson r = %.2f, Spearman rho = %.2f", scale_m, r_overall, rho_overall),
+    subtitle = sprintf("Z-score Standing Mammal Biomass predictions (at %d m predictive scale) | Overall: Pearson r = %.2f, Spearman rho = %.2f", scale_m, cor_overall, rho_overall),
     x = "Column 1: Biophysical Template (Z-score)",
     y = "Column 2: Basin-Calibrated Model (Z-score)"
   ) +
