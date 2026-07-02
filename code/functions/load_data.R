@@ -96,7 +96,7 @@ SCALES <- seq(5000, 100000, by = 5000)
 
 #' Basin names used throughout the pipeline
 #' @export
-BASINS <- c("Congo", "Amazon")
+BASINS <- c("Congo", "Amazon", "SE_Asia")
 
 #' Minimum cover fraction for rasterise-and-mask (pixels must be ≥ 99%
 #' within a single polygon to be retained; see legacy Functions.r)
