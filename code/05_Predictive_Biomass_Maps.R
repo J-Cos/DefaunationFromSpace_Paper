@@ -97,6 +97,16 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   OOS_MAE_log <- best_row$OOS_MAE_log[1]
   cat(sprintf("OOS MAE (log1p scale) = %.4f\n", OOS_MAE_log))
   
+  # ───────────────────────────────────────────────────────────────────────────
+  # RATIONALE FOR USING COMMON OOS MAE (HI-7):
+  # To compare the spatial predictions of the universal baseline model (LOBO, M2.1)
+  # and the local calibrated model (AIC) on a mathematically identical scale,
+  # both prediction maps are standard-scaled (z-scores) using the exact same
+  # denominator: the Out-of-Sample MAE of the universal baseline model (M2.1).
+  # This ensures that both columns of the map are measured relative to the 
+  # same baseline prediction uncertainty unit.
+  # ───────────────────────────────────────────────────────────────────────────
+  
   # Extract calibrated scale data to get full-sample mean of log1p(biomass)
   source("code/functions/calibration_helpers.R")
   joined_data <- extract_scale_data(5000)
