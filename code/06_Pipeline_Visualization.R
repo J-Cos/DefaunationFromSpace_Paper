@@ -156,7 +156,6 @@ p1_a <- ggplot() +
   geom_spatraster(data = r_a_crop, aes(fill = uoi)) +
   uoi_fill_scale +
   geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "A")
@@ -166,7 +165,6 @@ p1_b <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
   uoi_fill_scale +
   geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "C")
@@ -176,7 +174,6 @@ p1_c <- ggplot() +
   geom_spatraster(data = r_s_crop, aes(fill = uoi)) +
   uoi_fill_scale +
   geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "E")
@@ -187,7 +184,6 @@ p1_d <- ggplot() +
   geom_spatraster(data = r_a_crop, aes(fill = gedi_n)) +
   n_fill_scale +
   geom_spatvector(data = countries_a, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "B")
@@ -197,7 +193,6 @@ p1_e <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
   n_fill_scale +
   geom_spatvector(data = countries_c, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "D")
@@ -207,7 +202,6 @@ p1_f <- ggplot() +
   geom_spatraster(data = r_s_crop, aes(fill = gedi_n)) +
   n_fill_scale +
   geom_spatvector(data = countries_s, fill = NA, colour = "grey80", linewidth = 0.2) +
-  geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
   labs(title = "F")
