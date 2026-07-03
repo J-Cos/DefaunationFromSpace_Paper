@@ -91,15 +91,16 @@ if (!is.null(combined_proboscids)) {
   cat("✓ Successfully saved combined elephant range vector to outputs/elephant_ranges.gpkg\n")
 }
 
+source("code/functions/theme_pnas.R")
+
 # Define a premium, clean PNAS-style map theme
-map_theme <- theme_minimal(base_size = 9) +
+map_theme <- theme_pnas(base_size = 7.5) +
   theme(
-    plot.title = element_text(size = 10, face = "bold", margin = margin(b = 4)),
+    plot.title = element_text(size = 8.5, face = "bold", margin = margin(b = 4)),
     panel.background = element_rect(fill = "#EBF5FB", color = NA), # Soft light blue ocean fill
     panel.grid.major = element_line(color = "white", linewidth = 0.2), # Soft white grid lines
-    panel.grid.minor = element_blank(),
     axis.title = element_blank(),
-    axis.text = element_text(size = 6, color = "grey50"),
+    axis.text = element_text(size = 5.0, color = "grey50"),
     plot.margin = margin(2, 2, 2, 2, "pt"),
     panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5)
   )

@@ -20,6 +20,8 @@ library(ggplot2)
 library(dplyr)
 library(readr)
 
+source("code/functions/theme_pnas.R")
+
 # 1. Load models
 outputs_dir <- "outputs"
 m_best <- readRDS(file.path(outputs_dir, "framework2_best_model.RDS"))
@@ -176,13 +178,12 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
     x = "Column 1: Biophysical Template (Z-score)",
     y = "Column 2: Basin-Calibrated Model (Z-score)"
   ) +
-  theme_minimal(base_size = 9) +
+  theme_pnas(base_size = 7.5) +
   theme(
-    plot.title = element_text(face = "bold", size = 10),
-    plot.subtitle = element_text(size = 8, color = "grey40"),
-    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 8.5),
+    plot.subtitle = element_text(size = 6.5, color = "grey40"),
     panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
-    strip.text = element_text(face = "bold", size = 9),
+    strip.text = element_text(face = "bold", size = 7.5),
     legend.position = "none"
   )
 
