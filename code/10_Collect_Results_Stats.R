@@ -21,7 +21,7 @@ library(terra)
 library(jsonlite)
 library(statmod)
 
-source("code/functions/calibration_helpers.R")
+# No external helpers needed since biomass is pre-calculated in Python.
 
 cat("=== 10: Collecting Results Statistics ===\n\n")
 
@@ -312,8 +312,8 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
 }
 
 # Proboscidean biomass fraction by basin (cluster-level aggregation)
-# Uses robust detections with cluster_id to match visualise_camera_traps.py logic
-robust_det <- read_csv("outputs/camera_traps_robust_detections.csv", show_col_types = FALSE)
+# Uses robust binned taxon metrics from process_camera_traps.py
+robust_det <- read_csv("outputs/camera_traps_robust_taxon_biomass.csv", show_col_types = FALSE)
 
 for (r in c("Amazon", "Congo", "SE_Asia")) {
   sub_det <- robust_det[robust_det$region == r &
@@ -327,9 +327,6 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
         0, src = SRC_VIS, unit = "percent")
     next
   }
-
-  # Calculate corrected biomass contribution using helper function
-  sub_det <- calculate_biomass_contrib(sub_det, config_obj = config)
 
   # Aggregate to cluster level, then compute mean Proboscidean fraction
   cluster_totals <- sub_det %>%

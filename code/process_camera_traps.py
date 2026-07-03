@@ -752,7 +752,7 @@ def aggregate_to_clusters(det, cluster_map):
     cluster_metrics["B_H_gt100"] = cluster_metrics["B_H_gt100"].fillna(0.0)
     cluster_metrics["B_H_gt1000"] = cluster_metrics["B_H_gt1000"].fillna(0.0)
     
-    return cluster_metrics, clustered_det
+    return cluster_metrics, usable
 
 
 def check_gedi_5km_overlap(region, buffered_polygon):
@@ -900,7 +900,7 @@ def main():
         print(f"Saved joint detections with cluster assignments to {args.out_detections}")
 
         print("Aggregating detections to mathematical cluster-level metrics...")
-        cluster_metrics, clustered_det = aggregate_to_clusters(joint_det, cluster_map)
+        cluster_metrics, cluster_taxon_metrics = aggregate_to_clusters(joint_det, cluster_map)
 
         print("\nCalculating temporal weights and keep proportions in Python...")
         p_keep_dict = calculate_taxonomic_keep_proportions_py(joint_det, cluster_map)
@@ -940,6 +940,12 @@ def main():
         robust_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics_robust.csv"
         robust_cluster_metrics.to_csv(robust_metrics_path, index=False)
         print(f"Saved robust cluster-level metrics to {robust_metrics_path}")
+
+        # Save robust taxon-level metrics containing pre-calculated biomass contribution
+        robust_taxon_metrics = cluster_taxon_metrics[cluster_taxon_metrics["cluster_id"].isin(robust_cluster_metrics["cluster_id"])].copy()
+        robust_taxon_path = OUTPUT_DIR / "camera_traps_robust_taxon_biomass.csv"
+        robust_taxon_metrics.to_csv(robust_taxon_path, index=False)
+        print(f"Saved robust taxon-level biomass metrics to {robust_taxon_path}")
 
         # Generate robust cluster buffered MCPs as GeoJSON
         print("Generating and saving robust cluster buffered MCPs as GeoJSON...")

@@ -25,6 +25,7 @@ library(terra)
 library(ggplot2)
 library(tidyterra)
 library(cowplot)
+library(patchwork)
 library(dplyr)
 library(readr)
 library(sf)
@@ -138,13 +139,14 @@ t_theme <- theme_pnas(base_size = 7.5)
 map_theme_fig1 <- theme_pnas(base_size = 7.5) +
   theme(
     legend.position = "none",
-    axis.text = element_blank(),
+    axis.text = element_text(size = 5.0),
     axis.ticks = element_blank(),
     axis.title = element_blank(),
-    panel.grid = element_blank(),
+    panel.grid.major = element_line(color = "white", linewidth = 0.2), # Soft white grid lines
+    panel.grid.minor = element_blank(),
     panel.background = element_rect(fill = "#EBF5FB", color = NA), # Soft blue oceans
     plot.background = element_rect(fill = "white", color = NA),
-    plot.margin = margin(2, 2, 2, 2, "pt"),
+    plot.margin = margin(4, 4, 4, 4, "pt"),
     panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5)
   )
 
@@ -157,7 +159,7 @@ p1_a <- ggplot() +
   geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "A. Amazon GEDI Openness (5 km)")
+  labs(title = "A")
 
 p1_b <- ggplot() +
   geom_spatvector(data = countries_c, fill = "white", colour = NA) +
@@ -167,7 +169,7 @@ p1_b <- ggplot() +
   geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "C. Congo GEDI Openness (5 km)")
+  labs(title = "C")
 
 p1_c <- ggplot() +
   geom_spatvector(data = countries_s, fill = "white", colour = NA) +
@@ -177,7 +179,7 @@ p1_c <- ggplot() +
   geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "E. SE Asia GEDI Openness (5 km)")
+  labs(title = "E")
 
 # --- Figure 1 Panels B, D, F: Shot Count Maps ---
 p1_d <- ggplot() +
@@ -188,7 +190,7 @@ p1_d <- ggplot() +
   geom_spatvector(data = mcps_amazon, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "B. Amazon GEDI Shot Count (5 km)")
+  labs(title = "B")
 
 p1_e <- ggplot() +
   geom_spatvector(data = countries_c, fill = "white", colour = NA) +
@@ -198,7 +200,7 @@ p1_e <- ggplot() +
   geom_spatvector(data = mcps_congo, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "D. Congo GEDI Shot Count (5 km)")
+  labs(title = "D")
 
 p1_f <- ggplot() +
   geom_spatvector(data = countries_s, fill = "white", colour = NA) +
@@ -208,7 +210,7 @@ p1_f <- ggplot() +
   geom_spatvector(data = mcps_seasia, fill = NA, color = "white", linewidth = 0.4, linetype = "solid") +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   map_theme_fig1 +
-  labs(title = "F. SE Asia GEDI Shot Count (5 km)")
+  labs(title = "F")
 
 # --- Figure 1 Panel G: Uncertainty Decay vs. GEDI Shot Density ---
 df_c_pts <- as.data.frame(r_c_crop[[c("uoi_sd", "gedi_n")]], na.rm = TRUE)
@@ -233,13 +235,16 @@ p1_g <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   scale_x_continuous(trans = "log10", labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
-    title = "G. Uncertainty Decay vs. GEDI Shot Count",
+    title = "G",
     x = "GEDI Shot Count (log scale)",
     y = "GEDI UOI Standard Error (SE)"
   ) +
   t_theme +
   theme(
     legend.position = "none",
+    aspect.ratio = 0.6,
+    plot.title = element_text(size = 8.5, face = "bold", hjust = 0),
+    panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5),
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
@@ -255,17 +260,20 @@ p1_h <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
   scale_color_manual(values = pal_region, name = "Region") +
   scale_x_continuous(limits = c(0.92, 0.975), breaks = seq(0.92, 0.97, by = 0.01)) +
   labs(
-    title = "H. UOI Distribution by Continent",
+    title = "H",
     x = "GEDI Understory Openness Index (UOI)",
     y = "Probability Density"
   ) +
   t_theme +
   theme(
     legend.position = "none",
+    aspect.ratio = 0.6,
+    plot.title = element_text(size = 8.5, face = "bold", hjust = 0),
+    panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5),
     plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
-# Robust custom legend extraction to prevent the ggplot2 >= 3.5.0 zeroGrob bug
+# --- Extract legends as grobs ---
 get_robust_legend <- function(plot) {
   g <- ggplotGrob(plot)
   grob_names <- sapply(g$grobs, function(x) x$name)
@@ -280,124 +288,70 @@ get_robust_legend <- function(plot) {
   return(NULL)
 }
 
-# --- Extract legends for neat sidebar panel ---
-p_uoi_legend_dummy <- ggplot() +
+# UOI colorbar legend
+p_uoi_leg <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
   scale_fill_viridis_c(
     option = "viridis",
     name = "GEDI Understory Openness Index (UOI)",
-    limits = c(0.92, 0.975),
-    oob = scales::squish,
-    na.value = "transparent",
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      label.position = "bottom",
-      barwidth = unit(5.0, "cm"),
-      barheight = unit(0.12, "cm")
-    )
-  ) +
-  t_theme +
-  theme(
-    legend.position = "bottom",
+    limits = c(0.92, 0.975), oob = scales::squish, na.value = "transparent",
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5,
+      label.position = "bottom", barwidth = unit(5, "cm"), barheight = unit(0.12, "cm"))
+  ) + t_theme + theme(legend.position = "bottom",
     legend.title = element_text(size = 5.5, face = "bold"),
-    legend.text = element_text(size = 4.5)
-  )
-uoi_legend <- get_robust_legend(p_uoi_legend_dummy)
+    legend.text = element_text(size = 4.5))
+uoi_legend <- get_robust_legend(p_uoi_leg)
 
-p_n_legend_dummy <- ggplot() +
+# Shot Count colorbar legend
+p_n_leg <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = gedi_n)) +
   scale_fill_viridis_c(
     option = "mako",
     name = "GEDI Shot Count (5 km cell, log scale)",
-    trans = "log10",
-    limits = c(10, 6000),
-    breaks = c(10, 100, 1000, 6000),
-    labels = c("10", "100", "1K", "6K"),
-    oob = scales::squish,
-    na.value = "transparent",
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      label.position = "bottom",
-      barwidth = unit(5.0, "cm"),
-      barheight = unit(0.12, "cm")
-    )
-  ) +
-  t_theme +
-  theme(
-    legend.position = "bottom",
+    trans = "log10", limits = c(10, 6000),
+    breaks = c(10, 100, 1000, 6000), labels = c("10", "100", "1K", "6K"),
+    oob = scales::squish, na.value = "transparent",
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5,
+      label.position = "bottom", barwidth = unit(5, "cm"), barheight = unit(0.12, "cm"))
+  ) + t_theme + theme(legend.position = "bottom",
     legend.title = element_text(size = 5.5, face = "bold"),
-    legend.text = element_text(size = 4.5)
-  )
-n_legend <- get_robust_legend(p_n_legend_dummy)
+    legend.text = element_text(size = 4.5))
+n_legend <- get_robust_legend(p_n_leg)
 
-# Extract robust Region legend
-p_basin_legend_dummy <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
+# Region legend
+p_reg_leg <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point() +
-  scale_color_manual(values = pal_region, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Region:") +
+  scale_color_manual(values = pal_region,
+    labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"),
+    name = "Region:") +
   theme_pnas(base_size = 7.5) +
-  theme(
-    legend.position = "right",
+  theme(legend.position = "bottom", legend.direction = "horizontal",
     legend.title = element_text(size = 6.0, face = "bold"),
     legend.text = element_text(size = 5.5),
-    legend.key.height = unit(0.25, "cm"),
-    legend.key.width = unit(0.3, "cm")
-  )
-basin_legend <- get_robust_legend(p_basin_legend_dummy)
+    legend.key.height = unit(0.25, "cm"), legend.key.width = unit(0.3, "cm"))
+region_legend <- get_robust_legend(p_reg_leg)
 
-# Combine the 3x2 grid of maps (symmetrical like Figure 5)
-fig_grid_maps <- cowplot::plot_grid(
-  p1_a, p1_d,  # Row 1: Amazon UOI, Amazon Shot Count
-  p1_b, p1_e,  # Row 2: Congo UOI, Congo Shot Count
-  p1_c, p1_f,  # Row 3: SE Asia UOI, SE Asia Shot Count
-  ncol = 2,
-  align = "vh",
-  axis = "tblr"
-)
+# --- Patchwork assembly ---
+# Flat grid with wrap_elements() for legends (these don't affect panel alignment).
+# Heights: maps (1), maps (1), maps (1), colorbars (0.12), G/H (1)
+fig1_grid <- p1_a + p1_d +
+             p1_b + p1_e +
+             p1_c + p1_f +
+             wrap_elements(full = uoi_legend) + wrap_elements(full = n_legend) +
+             p1_g + p1_h +
+             plot_layout(ncol = 2, heights = c(1, 1, 1, 0.12, 1))
 
-# Side-by-side legends under the columns
-row_legends <- cowplot::plot_grid(
-  uoi_legend, n_legend,
-  ncol = 2,
-  align = "h",
-  axis = "tb"
-)
-
-# Stack maps and their legends directly underneath
-fig_maps_and_legends <- cowplot::plot_grid(
-  fig_grid_maps,
-  row_legends,
-  ncol = 1,
-  rel_heights = c(1.0, 0.08)
-)
-
-# Row 4 underneath: G, H, and the basin legend on the right
-row4_plots <- cowplot::plot_grid(
-  p1_g, p1_h, basin_legend,
-  ncol = 3,
-  align = "h",
-  axis = "tb",
-  rel_widths = c(1.0, 1.0, 0.3)
-)
-
-# Assemble full 8-panel double-column PNAS Figure 1
-fig1_final <- cowplot::plot_grid(
-  fig_maps_and_legends,
-  row4_plots,
-  ncol = 1,
-  align = "v",
-  axis = "lr",
-  rel_heights = c(1.0, 0.32)
-)
+# Stack the single centered region legend below the grid
+fig1_final <- fig1_grid / wrap_elements(full = region_legend) +
+  plot_layout(heights = c(1, 0.025))
 
 fig1_png <- "figures/figure1_gedi_pipeline.png"
-ggsave(filename = fig1_png, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
+ggsave(filename = fig1_png, plot = fig1_final, width = 20.0, height = 27.5, units = "cm", dpi = 600, bg = "white")
 cat("✓ 8-Panel Figure 1 successfully saved to:", fig1_png, "\n\n")
 
 # Save PDF version
 fig1_pdf <- sub("\\.png$", ".pdf", fig1_png)
-ggsave(filename = fig1_pdf, plot = fig1_final, width = 17.8, height = 24.5, units = "cm", dpi = 600, bg = "white")
+ggsave(filename = fig1_pdf, plot = fig1_final, width = 20.0, height = 27.5, units = "cm", dpi = 600, bg = "white")
 
 
 # =============================================================================
@@ -425,19 +379,25 @@ df_binned_mass <- det_all %>%
 p2_a <- ggplot(df_binned_mass, aes(x = body_mass_kg, y = n_ind, color = region)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 1.2, alpha = 0.8) +
-  scale_color_manual(values = pal_region, name = "Region") +
+  scale_color_manual(values = pal_region, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = NULL) +
   scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
   scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
   labs(
-    title = "D. Vertebrate Individual Size Distribution",
+    title = "D",
     x = "Mammal Body Mass (kg, log scale)",
     y = "Total Detections (log scale)"
   ) +
   t_theme +
-  theme(legend.position = c(0.78, 0.82),
-        legend.title = element_text(size = 6.0, face = "bold"),
-        legend.text = element_text(size = 5.5),
-        plot.margin = margin(2, 4, 2, 4, "pt"))
+  theme(
+    aspect.ratio = 0.45,
+    legend.position = c(0.98, 0.98),
+    legend.justification = c(1, 1),
+    legend.text = element_text(size = 5.5),
+    legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
+    legend.key = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    plot.margin = margin(4, 4, 4, 4, "pt")
+  )
 
 get_clustered_deployments <- function(basin_name) {
   unique_deps <- det_all %>%
@@ -481,7 +441,7 @@ map_p_theme <- t_theme +
     axis.text = element_text(size = 5.0),
     axis.ticks = element_blank(),
     axis.title = element_blank(),
-    plot.margin = margin(2, 2, 2, 2, "pt"),
+    plot.margin = margin(4, 4, 4, 4, "pt"),
     panel.border = element_rect(colour = "grey30", fill = NA, linewidth = 0.5)
   )
 
@@ -492,10 +452,10 @@ p2_b <- ggplot() +
              shape = 21, color = "black", fill = pal_region[["Amazon"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("A. Amazon Clusters (n = %d)", nrow(amazon_c_info$centroids))) +
+  labs(title = "A") +
   map_p_theme +
   theme(legend.position = "none")
-
+ 
 # --- Panel C: Congo Spatial Clustering Map ---
 p2_c <- ggplot() +
   geom_spatvector(data = countries_congo_map, fill = "#F4F6F7", colour = "grey70", linewidth = 0.2) +
@@ -503,10 +463,10 @@ p2_c <- ggplot() +
              shape = 21, color = "black", fill = pal_region[["Congo"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("B. Congo Clusters (n = %d)", nrow(congo_c_info$centroids))) +
+  labs(title = "B") +
   map_p_theme +
   theme(legend.position = "none")
-
+ 
 # --- Panel D: Southeast Asia Spatial Clustering Map ---
 p2_g <- ggplot() +
   geom_spatvector(data = countries_seasia_map, fill = "#F4F6F7", colour = "grey70", linewidth = 0.2) +
@@ -514,16 +474,18 @@ p2_g <- ggplot() +
              shape = 21, color = "black", fill = pal_region[["SE_Asia"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
-  labs(title = sprintf("C. SE Asia Clusters (n = %d)", nrow(seasia_c_info$centroids))) +
+  labs(title = "C") +
   map_p_theme +
   theme(
-    legend.position = c(0.18, 0.22),
+    legend.position = c(0.02, 0.02),
+    legend.justification = c(0, 0),
     legend.title = element_text(size = 5.0, face = "bold"),
     legend.text = element_text(size = 4.5),
     legend.background = element_rect(fill = alpha("white", 0.7), color = NA),
     legend.key = element_blank(),
     legend.key.size = unit(0.2, "cm")
-  )
+  ) +
+  guides(size = guide_legend(override.aes = list(fill = "grey70", alpha = 0.7)))
 
 # --- Panel E: Temporal Calibration Timeline ---
 gedi_start <- as.Date("2019-04-17")
@@ -556,36 +518,32 @@ cluster_spans <- cluster_temporal_spans %>%
   mutate(row_idx = row_number())
 
 p2_d <- ggplot(cluster_spans) +
-  geom_vline(xintercept = gedi_start, linetype = "solid", color = "#D32F2F", linewidth = 0.75) +
-  annotate("text", x = gedi_start + 180, y = 15, label = "GEDI Launch\n(April 2019)", color = "#D32F2F", size = 2.0, fontface = "bold", hjust = 0) +
-  geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = region, alpha = w_temp_cluster), linewidth = 1.5) +
+  geom_vline(xintercept = gedi_start, linetype = "solid", color = "black", linewidth = 0.75) +
+  annotate("text", x = gedi_start - 180, y = 90, label = "GEDI Launch\n(April 2019)", color = "black", size = 2.0, fontface = "bold", hjust = 1) +
+  geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = region), linewidth = 0.6, alpha = 0.8) +
   scale_color_manual(values = pal_region, name = "Region") +
-  scale_alpha_continuous(name = "Temporal Weight", range = c(0.35, 1.0), breaks = c(0.1, 0.25, 0.5, 1.0)) +
   scale_x_date(date_breaks = "4 years", date_labels = "%Y", limits = c(as.Date("2003-01-01"), as.Date("2024-12-31"))) +
   labs(
-    title = "E. Survey Temporal Calibration Span",
+    title = "E",
     x = "Survey Era",
-    y = "Spatial Clusters (Ranked by Start Date)"
+    y = "Camera Trap Clusters"
   ) +
   t_theme +
-  theme(legend.position = "bottom",
-        legend.box = "vertical", # Stack legends vertically to prevent overflow
-        legend.title = element_text(size = 5.0, face = "bold"),
-        legend.text = element_text(size = 4.5),
-        legend.key.height = unit(0.10, "cm"),
-        legend.key.width = unit(0.4, "cm"),
-        legend.margin = margin(t = -2, b = -2, unit = "pt"),
+  theme(aspect.ratio = 0.45,
+        legend.position = "none",
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
-        plot.margin = margin(2, 4, 2, 4, "pt"))
+        plot.margin = margin(4, 4, 4, 4, "pt"))
 
-# --- Panel F: Taxonomic order composition horizontal bar plot ---
+# --- Panel G: Taxonomic order composition horizontal bar plot ---
 # ORDER_COLOURS now provided by pal_taxon from theme_pnas.R
 
-df_tax <- det_all %>%
+df_tax <- read_csv("outputs/camera_traps_robust_taxon_biomass.csv", show_col_types = FALSE) %>%
   filter(!is.na(order) & !is.na(body_mass_kg) & body_mass_kg > 0) %>%
   group_by(region, order) %>%
-  summarise(total_biomass = sum(n_detections * body_mass_kg), .groups = "drop")
+  summarise(total_biomass = sum(biomass_contrib, na.rm = TRUE), .groups = "drop")
+
+
 
 top_orders <- c("Cetartiodactyla", "Proboscidea", "Carnivora", "Rodentia", "Primates", "Cingulata", "Perissodactyla")
 df_tax <- df_tax %>%
@@ -601,72 +559,72 @@ df_tax <- df_tax %>%
 df_tax$order_clean <- factor(df_tax$order_clean, levels = rev(c(top_orders, "Other")))
 
 p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
-  geom_bar(stat = "identity", width = 0.55, color = "black", linewidth = 0.25) +
+  geom_bar(stat = "identity", width = 0.85, color = "black", linewidth = 0.25) +
   scale_fill_manual(values = pal_taxon, name = "Taxonomic Order:") +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_discrete(labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), expand = c(0, 0.3)) +
   labs(
-    title = "F. Vertebrate Biomass Composition",
-    x = "Proportion of Total Biomass (%)",
-    y = "Region"
+    title = "G",
+    x = expression(Proportion~of~Total~Biomass~(B[H]*" %")),
+    y = NULL
   ) +
   t_theme +
-  theme(legend.position = "bottom",
-        legend.title = element_text(size = 4.5, face = "bold"),
-        legend.text = element_text(size = 4.0),
-        legend.key.width = unit(0.12, "cm"),
-        legend.key.height = unit(0.12, "cm"),
+  theme(aspect.ratio = 0.45,
+        legend.position = "bottom",
+        legend.title = element_text(size = 5.0, face = "bold"),
+        legend.text = element_text(size = 4.5),
+        legend.key.width = unit(0.3, "cm"),
+        legend.key.height = unit(0.3, "cm"),
         legend.margin = margin(t = -2, b = -2, unit = "pt"),
-        legend.spacing.x = unit(0.08, "cm"),
+        legend.spacing.x = unit(0.1, "cm"),
         legend.spacing.y = unit(0.05, "cm"),
-        plot.margin = margin(2, 4, 2, 4, "pt")) +
+        plot.margin = margin(4, 4, 4, 4, "pt")) +
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 
-# --- Panel G: Vertebrate Biomass Index distribution across clusters ---
-df_clusters <- read_csv("outputs/camera_traps_cluster_level_metrics_robust.csv", show_col_types = FALSE) %>%
-  mutate(region = ifelse(region == "SE_Asia", "SE Asia", region))
+# --- Panel F: Vertebrate Biomass Index distribution across clusters ---
+df_clusters <- read_csv("outputs/camera_traps_cluster_level_metrics_robust.csv", show_col_types = FALSE)
 
-p2_f <- ggplot(df_clusters, aes(x = B_H_index, fill = region)) +
-  geom_histogram(bins = 10, color = "black", linewidth = 0.25, show.legend = FALSE) +
-  scale_fill_manual(values = c("Amazon" = pal_region[["Amazon"]], "Congo" = pal_region[["Congo"]], "SE Asia" = pal_region[["SE_Asia"]])) +
-  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 100000, 10000000), labels = c("0", "10", "100", "1K", "100K", "10M")) +
-  facet_wrap(~region, ncol = 1) +
+bin_width <- 0.4
+df_binned_biomass <- df_clusters %>%
+  filter(!is.na(B_H_index)) %>%
+  mutate(log_biomass = log10(B_H_index + 1)) %>%
+  mutate(bin_center = round(log_biomass / bin_width) * bin_width) %>%
+  group_by(region, bin_center) %>%
+  summarise(n_clusters = n(), .groups = "drop") %>%
+  complete(region, bin_center = seq(0, max(bin_center, na.rm = TRUE), by = bin_width), fill = list(n_clusters = 0)) %>%
+  mutate(B_H_index_val = 10^bin_center - 1)
+
+p2_f <- ggplot(df_binned_biomass, aes(x = B_H_index_val, y = n_clusters, color = region)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 1.2, alpha = 0.8) +
+  scale_color_manual(values = pal_region, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = NULL) +
+  scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 10000), labels = c("0", "10", "100", "1K", "10K")) +
   labs(
-    title = "G. Standing Biomass Across Spatial Clusters",
-    x = "Cluster Biomass Index (log1p scale)",
+    title = "F",
+    x = expression(Cluster~Biomass~Index~(B[H]*", log1p scale")),
     y = "Number of Clusters"
   ) +
   t_theme +
   theme(
-    strip.text = element_text(size = 5.0, face = "bold", margin = margin(1, 1, 1, 1)),
-    plot.margin = margin(2, 4, 8, 4, "pt")
+    aspect.ratio = 0.45,
+    legend.position = "none",
+    plot.margin = margin(4, 4, 4, 4, "pt")
   )
 
-# Assemble Figure 2: Column of 3 maps on the left, other 4 plots on the right
-column_maps <- cowplot::plot_grid(
-  p2_b, p2_c, p2_g,
-  ncol = 1,
-  align = "v"
-)
+# Assemble Figure 2 using patchwork for perfect panel alignment
+col1 <- p2_b / p2_c / p2_g + plot_layout(heights = c(1, 1, 1))
+col2 <- p2_a / p2_d / p2_f / p2_e + plot_layout(heights = c(0.9, 1.1, 0.9, 1.1))
 
-column_right <- cowplot::plot_grid(
-  p2_a,
-  p2_d,
-  p2_e,
-  p2_f,
-  ncol = 1,
-  align = "v",
-  rel_heights = c(0.9, 1.1, 1.1, 0.9)
-)
-
-fig2_final <- cowplot::plot_grid(
-  column_maps,
-  column_right,
-  ncol = 2,
-  rel_widths = c(1.2, 1.0)
-)
+fig2_final <- (col1 | col2) + plot_layout(widths = c(1.2, 1.0))
 
 fig2_png <- "figures/figure2_camera_trap_pipeline.png"
-ggsave(filename = fig2_png, plot = fig2_final, width = 17.8, height = 22.0, units = "cm", dpi = 600, bg = "white")
+ggsave(filename = fig2_png, plot = fig2_final, width = 22.0, height = 23.0, units = "cm", dpi = 600, bg = "white")
 cat("✓ 7-Panel Figure 2 successfully saved to:", fig2_png, "\n\n")
+
+fig2_pdf <- "figures/figure2_camera_trap_pipeline.pdf"
+ggsave(filename = fig2_pdf, plot = fig2_final, width = 22.0, height = 23.0, units = "cm", dpi = 600, bg = "white")
+cat("✓ 7-Panel Figure 2 PDF successfully saved to:", fig2_pdf, "\n\n")
+
 
 
 
