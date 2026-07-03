@@ -390,7 +390,8 @@ for (cn in coef_names1) {
   ci_u <- est + 1.96 * se
 
   clean <- gsub("elephant_present_possiblePresent", "ElephantPossible",
-           gsub("\\(Intercept\\)", "intercept", cn))
+           gsub("elephant_present_strictPresent", "ElephantStrict",
+           gsub("\\(Intercept\\)", "intercept", cn)))
 
   add("3", paste0("fw1_coef_", tolower(gsub("[^a-zA-Z0-9]", "_", clean))),
       paste0("FW1 best model coefficient – ", clean, " (logit scale)"),
@@ -463,8 +464,10 @@ for (cn in rownames(ptab_aic)) {
   ci_u <- prof_cis_aic[cn, 2]
 
   clean <- gsub("elephant_present_possiblePresent", "ElephantPossible",
+           gsub("elephant_present_strictPresent", "ElephantStrict",
            gsub("uoi:elephant_present_possiblePresent", "UOI_x_ElephantPossible",
-           gsub("\\(Intercept\\)", "intercept", cn)))
+           gsub("uoi:elephant_present_strictPresent", "UOI_x_ElephantStrict",
+           gsub("\\(Intercept\\)", "intercept", cn)))))
 
   add("4", paste0("fw2_aic_coef_", tolower(gsub("[^a-zA-Z0-9]", "_", clean))),
       paste0("FW2 AIC model coefficient – ", clean, " (log-link scale)"),
@@ -474,27 +477,33 @@ for (cn in rownames(ptab_aic)) {
 
 # Slope within elephant range = beta_uoi + beta_uoi:elephant
 # (requires variance-covariance for combined CI)
-if ("uoi" %in% rownames(ptab_aic) &&
-    "uoi:elephant_present_possiblePresent" %in% rownames(ptab_aic)) {
-
+int_term <- grep("^uoi:elephant_present_", rownames(ptab_aic), value = TRUE)
+if (length(int_term) == 1) {
+  ele_var <- gsub("uoi:", "", int_term)
   b_uoi  <- ptab_aic["uoi", "Estimate"]
-  b_int  <- ptab_aic["uoi:elephant_present_possiblePresent", "Estimate"]
+  b_int  <- ptab_aic[int_term, "Estimate"]
   slope_within <- b_uoi + b_int
 
   var_sum <- vcov_aic["uoi", "uoi"] +
-             vcov_aic["uoi:elephant_present_possiblePresent",
-                      "uoi:elephant_present_possiblePresent"] +
-             2 * vcov_aic["uoi", "uoi:elephant_present_possiblePresent"]
+             vcov_aic[int_term, int_term] +
+             2 * vcov_aic["uoi", int_term]
   se_sum <- sqrt(var_sum)
   z_sum  <- slope_within / se_sum
   p_sum  <- 2 * pnorm(-abs(z_sum))
 
   add("4", "fw2_aic_slope_within_elephant",
-      "UOI–biomass slope within possible elephant range (log-link scale)",
+      paste0("UOI–biomass slope within elephant range (", ele_var, ") (log-link scale)"),
       slope_within,
       ci_lo = slope_within - 1.96 * se_sum,
       ci_hi = slope_within + 1.96 * se_sum,
       pval  = p_sum, src = SRC_F2, unit = "log-link")
+
+  add("4", "fw2_aic_slope_outside_elephant",
+      paste0("UOI–biomass slope outside elephant range (", ele_var, ") (log-link scale)"),
+      b_uoi,
+      ci_lo = prof_cis_aic["uoi", 1],
+      ci_hi = prof_cis_aic["uoi", 2],
+      pval  = ptab_aic["uoi", "Pr(>|t|)"], src = SRC_F2, unit = "log-link")
 }
 
 # --- LOBO-selected (parsimonious) model ---
