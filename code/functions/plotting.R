@@ -25,9 +25,9 @@ if (file.exists("code/functions/theme_pnas.R")) {
 
 # --- Constants ---------------------------------------------------------------
 
-#' Colour palettes used across the manuscript
-BASIN_COLOURS <- c(Congo = "#2E86AB", Amazon = "#A23B72")
-PROTECTION_COLOURS <- c(Protected = "#2D6A4F", Unprotected = "#D4A373")
+#' Colour palettes used across the manuscript (derived from theme_pnas.R)
+BASIN_COLOURS <- pal_region  # Legacy alias
+PROTECTION_COLOURS <- c(Protected = "#0072B2", Unprotected = "#D55E00")  # CVD-safe blue/vermilion
 
 #' Bivariate classification colour scheme (2×2)
 BIVARIATE_COLOURS <- c(
@@ -105,10 +105,10 @@ make_paired_maps <- function(rast_congo, rast_amazon, fill_col, scale_fn,
                              countries) {
   p_congo <- make_basin_map(rast_congo, fill_col, scale_fn, countries) +
     theme(legend.position = "none") +
-    labs(title = "Congo Basin")
+    labs(title = "Congo")
   
   p_amazon_leg <- make_basin_map(rast_amazon, fill_col, scale_fn, countries) +
-    labs(title = "Amazon Basin")
+    labs(title = "Amazon")
   
   legend <- cowplot::get_legend(p_amazon_leg)
   

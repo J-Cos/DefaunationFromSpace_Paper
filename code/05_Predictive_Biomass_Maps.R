@@ -339,15 +339,11 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         plot.background = element_rect(fill = "white", color = NA)
       )
     
-    # Symmetrical highly-discriminative multi-hue colorblind-safe scale centered at 0.0 (Light Grey)
-    fill_scale <- scale_fill_gradientn(
-      colors = c("#b2182b", "#fdae61", "#dcdcdc", "#abdda4", "#2b5c8f"),
-      name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
+    fill_scale <- scale_fill_biomass(
       limits = c(-2.5, 2.5),
+      name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
       breaks = c(-2.0, -1.0, 0, 1.0, 2.0),
       labels = c("-2.0 MAE\n(Low Biomass)", "-1.0 MAE", "0.0\n(Mean Biomass)", "+1.0 MAE", "+2.0 MAE\n(High Biomass)"),
-      oob = scales::squish,
-      na.value = "transparent",
       guide = guide_colorbar(
         title.position = "top",
         title.hjust = 0.5,

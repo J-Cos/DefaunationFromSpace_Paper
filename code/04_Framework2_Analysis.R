@@ -361,7 +361,7 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
   
   # A highly DRY and robust function to compile PNAS Figure 4 for any model
   generate_figure4_trio <- function(model_name, model_obj, results_df, joined_data, full_models, is_aic = FALSE) {
-    pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")
+    # pal_region and pal_elephant_binary are defined in theme_pnas.R (sourced above)
     uoi_seq <- seq(from = 0.918, to = 0.970, length.out = 300)
     covs_to_fill <- c("elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
     
@@ -394,11 +394,11 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
                    color = "black", stroke = 0.3) +
         geom_line(data = pred_plot, aes(x = uoi, y = fit, color = basin), linewidth = 0.75) +
         
-        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
-        scale_color_manual(values = pal_basin, name = "Basin/Continent") +
+        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Region") +
+        scale_color_manual(values = pal_region, name = "Region") +
         scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
         scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemp.")) +
-        scale_fill_manual(values = pal_basin, name = "Basin/Continent") +
+        scale_fill_manual(values = pal_region, name = "Region") +
         scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
@@ -424,11 +424,11 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
                    color = "black", stroke = 0.3) +
         geom_line(data = pred_total_plot, aes(x = uoi, y = fit, color = .data[[ele_col]]), linewidth = 0.75) +
         
-        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
-        scale_color_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Region") +
+        scale_color_manual(values = pal_elephant_binary, name = "Elephant:") +
         scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
         scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemp.")) +
-        scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+        scale_fill_manual(values = pal_elephant_binary, name = "Elephant:") +
         scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
@@ -444,12 +444,12 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       p_a <- ggplot() +
         geom_point(data = joined_data, aes(x = uoi, y = B_H_index, fill = elephant_present_strict, size = trap_days, alpha = w_temp_cluster, shape = basin),
                    color = "black", stroke = 0.3) +
-        geom_line(data = pred_df, aes(x = uoi, y = fit), color = "#2E7D32", linewidth = 0.75) +
+        geom_line(data = pred_df, aes(x = uoi, y = fit), color = pal_elephant_binary[["Present"]], linewidth = 0.75) +
         
-        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
+        scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Region") +
         scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
         scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemp.")) +
-        scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence") +
+        scale_fill_manual(values = pal_elephant_binary, name = "Elephant:") +
         scale_x_continuous(breaks = seq(0.92, 0.97, by = 0.01), limits = c(0.918, 0.970)) +
         scale_y_continuous(trans = "log1p", labels = comma_format(), breaks = c(0, 10, 100, 1000, 3000), limits = c(0, 5000)) +
         labs(
@@ -483,9 +483,9 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     p_b <- ggplot(joined_data, aes(x = w_temp_cluster, y = residuals)) +
       geom_hline(yintercept = 0, linetype = "dashed", color = "#555555", linewidth = 0.4) +
       geom_point(aes(fill = .data[[fill_col]], size = trap_days, alpha = w_temp_cluster, shape = basin), color = "black", stroke = 0.3) +
-      geom_smooth(method = "lm", aes(weight = w_combined_norm), formula = y ~ x, color = "#2E7D32", linewidth = 0.6, se = TRUE, alpha = 0.1) +
+      geom_smooth(method = "lm", aes(weight = w_combined_norm), formula = y ~ x, color = pal_elephant_binary[["Present"]], linewidth = 0.6, se = TRUE, alpha = 0.1) +
       
-      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin/Continent") +
+      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Region") +
       scale_size_continuous(name = "Effort (Trap-days)", range = c(1.2, 4.0), breaks = c(100, 1000, 5000, 15000)) +
       scale_alpha_continuous(name = "Temporal Alignment Weight", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Historical", "Intermediate", "Contemporaneous")) +
       scale_x_continuous(breaks = seq(0.1, 1.0, by = 0.2), limits = c(0.08, 1.02)) +
@@ -505,9 +505,9 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       )
     
     if (fill_col == "basin") {
-      p_b <- p_b + scale_fill_manual(values = pal_basin, name = "Basin:")
+      p_b <- p_b + scale_fill_manual(values = pal_region, name = "Region:")
     } else {
-      p_b <- p_b + scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant Presence:")
+      p_b <- p_b + scale_fill_manual(values = pal_elephant_binary, name = "Elephant:")
     }
     
     # --- Panel C: Model Selection Bar Plot ---
@@ -615,10 +615,10 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     # --- 8. Construct Clean Shared Legend ---
     p_legend_obj <- ggplot(joined_data) +
       geom_point(aes(x = uoi, y = B_H_index, fill = elephant_present_strict, size = trap_days, alpha = w_temp_cluster, shape = basin), color = "black", stroke = 0.3) +
-      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Basin:") +
+      scale_shape_manual(values = c("Amazon" = 24, "Congo" = 21, "SE_Asia" = 22), name = "Region:") +
       scale_size_continuous(name = "Effort (Trap-days):", breaks = c(100, 1000, 5000, 15000), range = c(1.2, 4.0)) +
       scale_alpha_continuous(name = "Temporal Alignment:", range = c(0.25, 1.0), breaks = c(0.1, 0.5, 1.0), labels = c("Hist.", "Interm.", "Contemp.")) +
-      scale_fill_manual(values = c("Absent" = "#E06666", "Present" = "#2E7D32"), name = "Elephant:") +
+      scale_fill_manual(values = pal_elephant_binary, name = "Elephant:") +
       theme_pnas(base_size = 7.5) +
       theme(
         legend.position = "bottom",

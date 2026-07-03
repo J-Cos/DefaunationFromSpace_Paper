@@ -47,8 +47,7 @@ source("code/functions/calibration_helpers.R")
 
 dir.create("figures", recursive = TRUE, showWarnings = FALSE)
 
-# Color palettes
-pal_basin <- c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")
+# Color palettes (defined in theme_pnas.R: pal_region, pal_taxon, etc.)
 
 # =============================================================================
 # FIGURE 1: GEDI RAW DATA PIPELINE & SHOT-SPARSITY DISTRIBUTION (6 PANELS)
@@ -114,7 +113,7 @@ countries_s <- crop(countries_v, ext_s)
 
 # --- UOI Fill Scale ---
 uoi_fill_scale <- scale_fill_viridis_c(
-  option = "plasma",
+  option = "viridis",
   name = "GEDI Understory Openness (UOI)",
   limits = c(0.92, 0.975),
   oob = scales::squish,
@@ -230,7 +229,7 @@ df_pts <- df_pts %>%
 p1_g <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point(alpha = 0.25, size = 0.5, stroke = 0) +
   geom_smooth(method = "gam", formula = y ~ s(x, k = 5), se = TRUE, linewidth = 0.75) +
-  scale_color_manual(values = pal_basin, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Basin") +
+  scale_color_manual(values = pal_region, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Region") +
   scale_x_continuous(trans = "log10", labels = comma_format()) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 0.008), oob = scales::squish) +
   labs(
@@ -252,8 +251,8 @@ df_uoi_dist <- rbind(df_c_uoi, df_a_uoi, df_s_uoi)
 
 p1_h <- ggplot(df_uoi_dist, aes(x = uoi, fill = basin, color = basin)) +
   geom_density(alpha = 0.35, linewidth = 0.6) +
-  scale_fill_manual(values = pal_basin, name = "Basin") +
-  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_fill_manual(values = pal_region, name = "Region") +
+  scale_color_manual(values = pal_region, name = "Region") +
   scale_x_continuous(limits = c(0.92, 0.975), breaks = seq(0.92, 0.97, by = 0.01)) +
   labs(
     title = "H. UOI Distribution by Continent",
@@ -285,7 +284,7 @@ get_robust_legend <- function(plot) {
 p_uoi_legend_dummy <- ggplot() +
   geom_spatraster(data = r_c_crop, aes(fill = uoi)) +
   scale_fill_viridis_c(
-    option = "plasma",
+    option = "viridis",
     name = "GEDI Understory Openness Index (UOI)",
     limits = c(0.92, 0.975),
     oob = scales::squish,
@@ -333,10 +332,10 @@ p_n_legend_dummy <- ggplot() +
   )
 n_legend <- get_robust_legend(p_n_legend_dummy)
 
-# Extract robust Basin legend
+# Extract robust Region legend
 p_basin_legend_dummy <- ggplot(df_pts, aes(x = gedi_n, y = uoi_sd, color = basin)) +
   geom_point() +
-  scale_color_manual(values = pal_basin, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Basin:") +
+  scale_color_manual(values = pal_region, labels = c("Amazon" = "Amazon", "Congo" = "Congo", "SE_Asia" = "SE Asia"), name = "Region:") +
   theme_pnas(base_size = 7.5) +
   theme(
     legend.position = "right",
@@ -426,7 +425,7 @@ df_binned_mass <- det_all %>%
 p2_a <- ggplot(df_binned_mass, aes(x = body_mass_kg, y = n_ind, color = region)) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 1.2, alpha = 0.8) +
-  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_color_manual(values = pal_region, name = "Region") +
   scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
   scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
   labs(
@@ -490,7 +489,7 @@ map_p_theme <- t_theme +
 p2_b <- ggplot() +
   geom_spatvector(data = countries_amazon_map, fill = "#F4F6F7", colour = "grey70", linewidth = 0.2) +
   geom_point(data = amazon_c_info$centroids, aes(x = lon, y = lat, size = total_trap_days), 
-             shape = 21, color = "black", fill = "#E65100", stroke = 0.4, alpha = 0.5) +
+             shape = 21, color = "black", fill = pal_region[["Amazon"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   labs(title = sprintf("A. Amazon Clusters (n = %d)", nrow(amazon_c_info$centroids))) +
@@ -501,7 +500,7 @@ p2_b <- ggplot() +
 p2_c <- ggplot() +
   geom_spatvector(data = countries_congo_map, fill = "#F4F6F7", colour = "grey70", linewidth = 0.2) +
   geom_point(data = congo_c_info$centroids, aes(x = lon, y = lat, size = total_trap_days), 
-             shape = 21, color = "black", fill = "#1B5E20", stroke = 0.4, alpha = 0.5) +
+             shape = 21, color = "black", fill = pal_region[["Congo"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   labs(title = sprintf("B. Congo Clusters (n = %d)", nrow(congo_c_info$centroids))) +
@@ -512,7 +511,7 @@ p2_c <- ggplot() +
 p2_g <- ggplot() +
   geom_spatvector(data = countries_seasia_map, fill = "#F4F6F7", colour = "grey70", linewidth = 0.2) +
   geom_point(data = seasia_c_info$centroids, aes(x = lon, y = lat, size = total_trap_days), 
-             shape = 21, color = "black", fill = "#0D47A1", stroke = 0.4, alpha = 0.5) +
+             shape = 21, color = "black", fill = pal_region[["SE_Asia"]], stroke = 0.4, alpha = 0.5) +
   scale_size_continuous(name = "Trap Days", range = c(1.0, 5.0), breaks = c(100, 500, 1000, 2000, 5000), limits = c(10, 100000)) +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   labs(title = sprintf("C. SE Asia Clusters (n = %d)", nrow(seasia_c_info$centroids))) +
@@ -560,7 +559,7 @@ p2_d <- ggplot(cluster_spans) +
   geom_vline(xintercept = gedi_start, linetype = "solid", color = "#D32F2F", linewidth = 0.75) +
   annotate("text", x = gedi_start + 180, y = 15, label = "GEDI Launch\n(April 2019)", color = "#D32F2F", size = 2.0, fontface = "bold", hjust = 0) +
   geom_segment(aes(x = start, xend = end, y = row_idx, yend = row_idx, color = region, alpha = w_temp_cluster), linewidth = 1.5) +
-  scale_color_manual(values = pal_basin, name = "Basin") +
+  scale_color_manual(values = pal_region, name = "Region") +
   scale_alpha_continuous(name = "Temporal Weight", range = c(0.35, 1.0), breaks = c(0.1, 0.25, 0.5, 1.0)) +
   scale_x_date(date_breaks = "4 years", date_labels = "%Y", limits = c(as.Date("2003-01-01"), as.Date("2024-12-31"))) +
   labs(
@@ -581,16 +580,7 @@ p2_d <- ggplot(cluster_spans) +
         plot.margin = margin(2, 4, 2, 4, "pt"))
 
 # --- Panel F: Taxonomic order composition horizontal bar plot ---
-ORDER_COLOURS <- c(
-  "Cetartiodactyla"  = "#1B7837",  # Green
-  "Proboscidea"      = "#2166AC",  # Blue
-  "Carnivora"        = "#E08214",  # Orange
-  "Rodentia"         = "#6A3D9A",  # Purple
-  "Primates"         = "#C51B7D",  # Pink
-  "Cingulata"        = "#35978F",  # Teal
-  "Perissodactyla"   = "#4D4D4D",  # Charcoal
-  "Other"            = "#878787"   # Grey
-)
+# ORDER_COLOURS now provided by pal_taxon from theme_pnas.R
 
 df_tax <- det_all %>%
   filter(!is.na(order) & !is.na(body_mass_kg) & body_mass_kg > 0) %>%
@@ -612,11 +602,11 @@ df_tax$order_clean <- factor(df_tax$order_clean, levels = rev(c(top_orders, "Oth
 
 p2_e <- ggplot(df_tax, aes(x = prop, y = region, fill = order_clean)) +
   geom_bar(stat = "identity", width = 0.55, color = "black", linewidth = 0.25) +
-  scale_fill_manual(values = ORDER_COLOURS, name = "Taxonomic Order:") +
+  scale_fill_manual(values = pal_taxon, name = "Taxonomic Order:") +
   labs(
     title = "F. Vertebrate Biomass Composition",
     x = "Proportion of Total Biomass (%)",
-    y = "Basin/Continent"
+    y = "Region"
   ) +
   t_theme +
   theme(legend.position = "bottom",
@@ -636,7 +626,7 @@ df_clusters <- read_csv("outputs/camera_traps_cluster_level_metrics_robust.csv",
 
 p2_f <- ggplot(df_clusters, aes(x = B_H_index, fill = region)) +
   geom_histogram(bins = 10, color = "black", linewidth = 0.25, show.legend = FALSE) +
-  scale_fill_manual(values = c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE Asia" = "#0D47A1")) +
+  scale_fill_manual(values = c("Amazon" = pal_region[["Amazon"]], "Congo" = pal_region[["Congo"]], "SE Asia" = pal_region[["SE_Asia"]])) +
   scale_x_continuous(trans = "log1p", breaks = c(0, 10, 100, 1000, 100000, 10000000), labels = c("0", "10", "100", "1K", "100K", "10M")) +
   facet_wrap(~region, ncol = 1) +
   labs(

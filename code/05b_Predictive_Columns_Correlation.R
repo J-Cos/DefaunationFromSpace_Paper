@@ -170,13 +170,13 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
     fontface = "bold",
     size = 2.8
   ) +
-  scale_color_manual(values = c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")) +
+  scale_color_manual(values = pal_region) +
   facet_wrap(~ basin, ncol = 3) +
   labs(
-    title = "Correlation Between Biophysical Template & Basin-Calibrated Models",
+    title = "Correlation Between Biophysical Template & Region-Calibrated Models",
     subtitle = sprintf("Z-score Standing Mammal Biomass predictions (at %d m predictive scale) | Overall: Pearson r = %.2f, Spearman rho = %.2f", scale_m, cor_overall, rho_overall),
     x = "Column 1: Biophysical Template (Z-score)",
-    y = "Column 2: Basin-Calibrated Model (Z-score)"
+    y = "Column 2: Region-Calibrated Model (Z-score)"
   ) +
   theme_pnas(base_size = 7.5) +
   theme(

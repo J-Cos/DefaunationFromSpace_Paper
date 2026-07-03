@@ -3,10 +3,14 @@
 #
 # PNAS-style ggplot2 theme, colour palettes, and figure export helpers.
 # Designed for the Defaunation-from-Space manuscript.
+#
+# All palettes are colorblind-safe (deuteranopia, protanopia, tritanopia).
+# Categorical palettes follow Okabe-Ito; continuous palettes use viridis/scico.
 # =============================================================================
 
 library(ggplot2)
 library(scales)
+library(scico)
 
 # -----------------------------------------------------------------------------
 # Font registration (Conditional)
@@ -78,95 +82,63 @@ theme_pnas <- function(base_size = 8) {
 }
 
 # =============================================================================
-# COLOUR PALETTES
+# CATEGORICAL COLOUR PALETTES  (Okabe-Ito)
 # =============================================================================
 
-#' Basin palette
+#' Region palette (Okabe-Ito, colorblind-safe)
 #'
-#' Named colour vector for the two study basins.
+#' Named colour vector for the three study regions.
+#' Keys match the internal data column levels ("Amazon", "Congo", "SE_Asia").
 #' @export
-pal_basin <- c(
-  Congo  = "#1B5E20",
-  Amazon = "#E65100",
-  SE_Asia = "#0D47A1"
+pal_region <- c(
+  Amazon  = "#E69F00",
+  Congo   = "#009E73",
+  SE_Asia = "#0072B2"
 )
 
-#' Signal palette
+#' Taxonomic order palette (Okabe-Ito, colorblind-safe)
 #'
-#' Named colour vector for the two primary remote-sensing signals.
+#' Named colour vector for the 7 most common vertebrate orders + "Other".
 #' @export
-pal_signal <- c(
-  UOI  = "#1B5E20",
-  FRIP = "#BF360C"
+pal_taxon <- c(
+  Cetartiodactyla = "#009E73",
+  Proboscidea     = "#0072B2",
+  Carnivora       = "#E69F00",
+  Rodentia        = "#CC79A7",
+  Primates        = "#D55E00",
+  Cingulata       = "#56B4E9",
+  Perissodactyla  = "#F0E442",
+  Other           = "#999999"
 )
 
-#' Trend palette
+#' Elephant range status palette (colorblind-safe blue-orange-vermilion)
 #'
-#' Named colour vector for Mann-Kendall trend categories.
+#' Three-level palette for IUCN range status maps (Fig S1).
 #' @export
-pal_trend <- c(
-  Decreasing = "#388E3C",
-  Increasing = "#F57C00",
-  None       = "grey70"
+pal_elephant <- c(
+  Extant            = "#0072B2",
+  `Possibly Extant` = "#E69F00",
+  `Possibly Extinct` = "#D55E00"
 )
 
-#' Protection status palette
+#' Elephant presence/absence binary palette (colorblind-safe)
 #'
-#' Named colour vector for protected / unprotected classification.
+#' Two-level subset of pal_elephant for main-text scatter plots (Figs 3, 4).
+#' Uses blue (Present) and vermilion (Absent) — never red/green.
 #' @export
-pal_protect <- c(
-  Protected   = "#1565C0",
-  Unprotected = "#B71C1C"
+pal_elephant_binary <- c(
+  Absent  = "#D55E00",
+  Present = "#0072B2"
 )
 
 # =============================================================================
-# DIVERGING FILL SCALES
+# CONTINUOUS FILL SCALES
 # =============================================================================
-
-#' Diverging fill scale for FRIP (blue → grey95 → red)
-#'
-#' Continuous fill scale centred on zero using \code{scales::muted()} endpoints.
-#' Suitable for FRIP correlation values spanning negative to positive.
-#'
-#' @param ... Additional arguments passed to
-#'   \code{ggplot2::scale_fill_gradient2}.
-#'
-#' @return A ggplot2 scale object.
-#' @export
-scale_fill_frip <- function(...) {
-  scale_fill_gradient2(
-    low = scales::muted("blue"),
-    mid = "grey95",
-    high = scales::muted("red"),
-    midpoint = 0,
-    ...
-  )
-}
-
-#' Diverging fill scale for Mann-Kendall tau (green → grey95 → orange)
-#'
-#' Continuous fill scale centred on zero.
-#' Suitable for tau values indicating temporal trends.
-#'
-#' @param ... Additional arguments passed to
-#'   \code{ggplot2::scale_fill_gradient2}.
-#'
-#' @return A ggplot2 scale object.
-#' @export
-scale_fill_tau <- function(...) {
-  scale_fill_gradient2(
-    low = "#388E3C",
-    mid = "grey95",
-    high = "#F57C00",
-    midpoint = 0,
-    ...
-  )
-}
 
 #' Sequential fill scale for UOI (viridis option D)
 #'
-#' Continuous fill scale using the viridis-D colour map.
-#' Suitable for Understory Openness Index values.
+#' Perceptually uniform, colorblind-safe sequential scale.
+#' Yellow-green-blue colour map for Understory Openness Index values.
 #'
 #' @param ... Additional arguments passed to
 #'   \code{ggplot2::scale_fill_viridis_c}.
@@ -174,7 +146,63 @@ scale_fill_tau <- function(...) {
 #' @return A ggplot2 scale object.
 #' @export
 scale_fill_uoi <- function(...) {
-  scale_fill_viridis_c(option = "plasma", ...)
+  scale_fill_viridis_c(option = "viridis", ...)
+}
+
+#' Sequential fill scale for GEDI shot count (viridis mako)
+#'
+#' Perceptually uniform dark-blue sequential scale, visually distinct
+#' from the UOI viridis scale.
+#'
+#' @param ... Additional arguments passed to
+#'   \code{ggplot2::scale_fill_viridis_c}.
+#'
+#' @return A ggplot2 scale object.
+#' @export
+scale_fill_shots <- function(...) {
+  scale_fill_viridis_c(option = "mako", ...)
+}
+
+#' Diverging fill scale for predicted biomass (scico vik)
+#'
+#' Blue → white → red diverging scale centred on zero.
+#' Perceptually uniform and colorblind-safe.
+#' Designed for the main predicted biomass maps (Fig 5).
+#'
+#' @param limits Numeric vector of length 2. Default c(-2.5, 2.5).
+#' @param midpoint Numeric. Default 0.
+#' @param ... Additional arguments passed to
+#'   \code{ggplot2::scale_fill_gradientn}.
+#'
+#' @return A ggplot2 scale object.
+#' @export
+scale_fill_biomass <- function(limits = c(-2.5, 2.5), midpoint = 0, ...) {
+  # Use 11-stop vik ramp for smooth diverging gradient
+  vik_colors <- scico(11, palette = "vik")
+  scale_fill_gradientn(
+    colors = vik_colors,
+    limits = limits,
+    oob = scales::squish,
+    na.value = "transparent",
+    rescaler = function(x, to = c(0, 1), from = limits) {
+      scales::rescale_mid(x, to = to, from = from, mid = midpoint)
+    },
+    ...
+  )
+}
+
+#' Sequential fill scale for model selection metrics (viridis cividis)
+#'
+#' Colorblind-safe sequential scale (dark blue-grey → warm yellow)
+#' for ΔAIC, OOS MAE, and deviance-explained bar charts.
+#'
+#' @param ... Additional arguments passed to
+#'   \code{ggplot2::scale_fill_viridis_c}.
+#'
+#' @return A ggplot2 scale object.
+#' @export
+scale_fill_model_selection <- function(...) {
+  scale_fill_viridis_c(option = "cividis", ...)
 }
 
 # =============================================================================
@@ -249,18 +277,16 @@ save_pnas <- function(plot, filename, type = c("single", "double"),
 #' for both Framework 1 and Framework 2 (LOBO and AIC variants).
 #'
 #' @param plot_df Data frame containing the models to display.
-#' @param x_var Character. Name of the column to map to the x-axis (e.g., "R2", "Full_DevExpl", "delta_AIC").
-#' @param fill_var Character. Name of the column to map to the fill color (e.g., "delta_AIC", "OOS_MAE_log", "Full_DevExpl").
+#' @param x_var Character. Name of the column to map to the x-axis.
+#' @param fill_var Character. Name of the column to map to the fill color.
 #' @param fill_label Character. Title for the fill color legend.
 #' @param x_label Character. Title for the x-axis.
 #' @param plot_title Character. Title for the panel.
-#' @param colors Character vector. Colors for the gradient (default is the standard deep blue to red palette).
 #' @param parsed_labels Parsed plotmath expressions for the y-axis labels.
 #'
 #' @return A ggplot2 plot object.
 #' @export
 plot_model_selection_bars <- function(plot_df, x_var, fill_var, fill_label, x_label, plot_title,
-                                      colors = c("#0D47A1", "#1976D2", "#64B5F6", "#FFA726", "#F57C00", "#D84315"),
                                       parsed_labels = NULL) {
   p <- ggplot(plot_df, aes(x = .data[[x_var]], y = CleanName, fill = .data[[fill_var]])) +
     geom_bar(stat = "identity", width = 0.7, color = "black", linewidth = 0.2)
@@ -270,7 +296,7 @@ plot_model_selection_bars <- function(plot_df, x_var, fill_var, fill_label, x_la
   }
   
   p <- p +
-    scale_fill_gradientn(colors = colors, name = fill_label) +
+    scale_fill_model_selection(name = fill_label) +
     labs(
       title = plot_title,
       x = x_label,
@@ -293,4 +319,3 @@ plot_model_selection_bars <- function(plot_df, x_var, fill_var, fill_label, x_la
   
   return(p)
 }
-

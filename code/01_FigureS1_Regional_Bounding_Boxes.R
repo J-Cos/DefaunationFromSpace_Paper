@@ -109,7 +109,7 @@ map_theme <- theme_pnas(base_size = 7.5) +
 p_amazon <- ggplot() +
   geom_spatvector(data = countries_amazon, fill = "#F4F6F7", color = "grey70", linewidth = 0.25) +
   # Draw a bold bounding box outline inside the plot
-  geom_spatvector(data = bbox_amazon_v, fill = NA, color = "#E65100", linewidth = 1.0) +
+  geom_spatvector(data = bbox_amazon_v, fill = NA, color = pal_region[["Amazon"]], linewidth = 1.0) +
   coord_sf(xlim = c(-85, -35), ylim = c(-15, 15), expand = FALSE) +
   labs(title = "A") +
   map_theme +
@@ -126,12 +126,12 @@ if (!is.null(prob_congo) && nrow(prob_congo) > 0) {
   p_congo <- p_congo +
     geom_spatvector(data = prob_congo, aes(fill = status, color = status), linewidth = 0.3, alpha = 0.22) +
     scale_fill_manual(
-      values = c("Extant" = "#26A69A", "Possibly Extant" = "#FFA726", "Possibly Extinct" = "#EF5350"),
+      values = pal_elephant,
       name = "Elephant Status:",
       drop = FALSE
     ) +
     scale_color_manual(
-      values = c("Extant" = "#00695C", "Possibly Extant" = "#EF6C00", "Possibly Extinct" = "#C62828"),
+      values = c("Extant" = "#005A8C", "Possibly Extant" = "#B87A00", "Possibly Extinct" = "#A31C00"),
       name = "Elephant Status:",
       drop = FALSE
     ) +
@@ -147,7 +147,7 @@ if (!is.null(prob_congo) && nrow(prob_congo) > 0) {
 
 p_congo <- p_congo +
   # Draw a bold bounding box outline inside the plot
-  geom_spatvector(data = bbox_congo_v, fill = NA, color = "#1B5E20", linewidth = 1.0) +
+  geom_spatvector(data = bbox_congo_v, fill = NA, color = pal_region[["Congo"]], linewidth = 1.0) +
   coord_sf(xlim = c(-5, 45), ylim = c(-15, 15), expand = FALSE) +
   labs(title = "B") +
   map_theme
@@ -161,12 +161,12 @@ if (!is.null(prob_sea) && nrow(prob_sea) > 0) {
   p_sea <- p_sea +
     geom_spatvector(data = prob_sea, aes(fill = status, color = status), linewidth = 0.3, alpha = 0.22) +
     scale_fill_manual(
-      values = c("Extant" = "#26A69A", "Possibly Extant" = "#FFA726", "Possibly Extinct" = "#EF5350"),
+      values = pal_elephant,
       name = "Elephant Status:",
       drop = FALSE
     ) +
     scale_color_manual(
-      values = c("Extant" = "#00695C", "Possibly Extant" = "#EF6C00", "Possibly Extinct" = "#C62828"),
+      values = c("Extant" = "#005A8C", "Possibly Extant" = "#B87A00", "Possibly Extinct" = "#A31C00"),
       name = "Elephant Status:",
       drop = FALSE
     ) +
@@ -182,7 +182,7 @@ if (!is.null(prob_sea) && nrow(prob_sea) > 0) {
 
 p_sea <- p_sea +
   # Draw a bold bounding box outline inside the plot
-  geom_spatvector(data = bbox_sea_v, fill = NA, color = "#0D47A1", linewidth = 1.0) +
+  geom_spatvector(data = bbox_sea_v, fill = NA, color = pal_region[["SE_Asia"]], linewidth = 1.0) +
   coord_sf(xlim = c(90, 140), ylim = c(-15, 15), expand = FALSE) +
   labs(title = "C") +
   map_theme
