@@ -504,6 +504,21 @@ if (length(int_term) == 1) {
       ci_lo = prof_cis_aic["uoi", 1],
       ci_hi = prof_cis_aic["uoi", 2],
       pval  = ptab_aic["uoi", "Pr(>|t|)"], src = SRC_F2, unit = "log-link")
+
+  # Multiplicative fold-change in expected biomass per 0.01 UOI increase
+  add("4", "fw2_aic_fold_change_within_elephant",
+      paste0("Fold-change in expected biomass per 0.01 UOI increase within elephant range (", ele_var, ")"),
+      exp(slope_within * 0.01),
+      ci_lo = exp((slope_within - 1.96 * se_sum) * 0.01),
+      ci_hi = exp((slope_within + 1.96 * se_sum) * 0.01),
+      src = SRC_F2, unit = "fold")
+
+  add("4", "fw2_aic_fold_change_outside_elephant",
+      paste0("Fold-change in expected biomass per 0.01 UOI increase outside elephant range (", ele_var, ")"),
+      exp(b_uoi * 0.01),
+      ci_lo = exp(prof_cis_aic["uoi", 1] * 0.01),
+      ci_hi = exp(prof_cis_aic["uoi", 2] * 0.01),
+      src = SRC_F2, unit = "fold")
 }
 
 # --- LOBO-selected (parsimonious) model ---
