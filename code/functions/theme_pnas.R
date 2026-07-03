@@ -177,8 +177,8 @@ scale_fill_shots <- function(...) {
 #' @return A ggplot2 scale object.
 #' @export
 scale_fill_biomass <- function(limits = c(-2.5, 2.5), midpoint = 0, ...) {
-  # Use 11-stop vik ramp for smooth diverging gradient
-  vik_colors <- scico(11, palette = "vik")
+  # Use 11-stop reversed vik ramp for smooth diverging gradient
+  vik_colors <- rev(scico(11, palette = "vik"))
   scale_fill_gradientn(
     colors = vik_colors,
     limits = limits,
