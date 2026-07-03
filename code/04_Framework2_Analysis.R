@@ -224,8 +224,8 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
     threshold_1se <- best_mae + best_se
     
     compliant_indices <- valid_idx[which(oos_MAE_log[valid_idx] <= threshold_1se)]
-    min_edf <- min(full_edf[compliant_indices])
-    best_parsimonious_indices <- compliant_indices[which(full_edf[compliant_indices] == min_edf)]
+    min_edf <- min(round(full_edf[compliant_indices], 4))
+    best_parsimonious_indices <- compliant_indices[which(round(full_edf[compliant_indices], 4) == min_edf)]
     selected_idx <- best_parsimonious_indices[which.min(oos_MAE_log[best_parsimonious_indices])]
   } else {
     raw_best_idx <- NA
@@ -238,14 +238,15 @@ run_framework2_analysis <- function(scale_m = 5000, outputs_dir = "outputs", fig
       return("Failed LOBOCV (Collinear/Unseen Levels)")
     }
     mae <- oos_MAE_log[m_idx]
-    edf <- full_edf[m_idx]
+    edf <- round(full_edf[m_idx], 4)
+    raw_best_edf <- round(full_edf[raw_best_idx], 4)
     
     if (m_idx == selected_idx) {
       return("Parsimonious Selected Best")
     } else if (m_idx == raw_best_idx) {
       return("Raw Best (More Complex)")
     } else if (mae <= threshold_1se) {
-      if (edf < full_edf[raw_best_idx]) {
+      if (edf < raw_best_edf) {
         return("Parsimonious Candidate (Within 1-SE)")
       } else {
         return("Equivalent (Within 1-SE, More Complex)")
