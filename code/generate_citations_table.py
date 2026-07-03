@@ -103,11 +103,14 @@ def main():
                     basin = "Other"
                     
                 if pid and cit:
-                    project_metadata[pid] = {
-                        "name": pname,
-                        "citation": cit,
-                        "basin": basin
-                    }
+                    if pid not in project_metadata:
+                        project_metadata[pid] = {
+                            "name": pname,
+                            "citation": cit,
+                            "basin": basin,
+                            "provided_deps": set(),
+                            "used_deps": set()
+                        }
         except Exception as e:
             print(f"Error reading projects.csv at {proj_csv_path}: {e}")
 

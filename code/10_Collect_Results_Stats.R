@@ -21,10 +21,7 @@ library(terra)
 library(jsonlite)
 library(statmod)
 
-config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
-config <- jsonlite::read_json(config_path)
-day_range_coeff <- config$allometric_scaling$day_range_coeff
-day_range_exp   <- config$allometric_scaling$day_range_exp
+source("code/functions/calibration_helpers.R")
 
 cat("=== 10: Collecting Results Statistics ===\n\n")
 
@@ -201,6 +198,26 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
       sum(dep$region == r), src = SRC_CT, unit = "count")
 }
 
+# --- Used projects & deployments in retained clusters ---
+robust_ids <- clus$cluster_id
+det_robust <- det %>% filter(cluster_id %in% robust_ids)
+dep_robust <- dep %>% filter(paste(project_id, deployment_id) %in% paste(det_robust$project_id, det_robust$deployment_id))
+
+add("2", "n_wi_projects_used", "Number of used projects in robust clusters",
+    n_distinct(dep_robust$project_id), src = SRC_CLU, unit = "count")
+
+add("2", "n_deployments_used", "Total used camera deployments in robust clusters",
+    nrow(dep_robust), src = SRC_CLU, unit = "count")
+
+for (r in c("Amazon", "Congo", "SE_Asia")) {
+  # Standardize name for SE_Asia to match lowercase
+  r_clean <- tolower(gsub("_", "", r))
+  add("2", paste0("n_deployments_used_", r_clean),
+      paste0("Used camera deployments – ", r),
+      sum(dep_robust$region == r), src = SRC_CLU, unit = "count")
+}
+
+
 # --- Trap-days ---
 add("2", "total_trap_days_all_deployments",
     "Total survey effort across all deployments (trap-days)",
@@ -311,15 +328,8 @@ for (r in c("Amazon", "Congo", "SE_Asia")) {
     next
   }
 
-  sub_det$day_range_km <- day_range_coeff * (sub_det$body_mass_kg ^ day_range_exp)
-  # cluster-level trap_days from the cluster file
-  sub_det <- sub_det %>%
-    left_join(
-      clus %>% select(cluster_id, cluster_trap_days = trap_days),
-      by = "cluster_id"
-    )
-  sub_det$corrected_rai <- (sub_det$n_detections / sub_det$cluster_trap_days * 100) / sub_det$day_range_km
-  sub_det$biomass_contrib <- sub_det$corrected_rai * sub_det$body_mass_kg
+  # Calculate corrected biomass contribution using helper function
+  sub_det <- calculate_biomass_contrib(sub_det, config_obj = config)
 
   # Aggregate to cluster level, then compute mean Proboscidean fraction
   cluster_totals <- sub_det %>%
