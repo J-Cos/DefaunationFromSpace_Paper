@@ -84,9 +84,6 @@ run_test("extract_scale_data signature check", quote({
   check_signature("extract_scale_data", c("scale_m", "mcps"))
 }))
 
-run_test("calculate_temporal_weights exists", quote({
-  exists("calculate_temporal_weights", mode = "function")
-}))
 
 run_test("fit_framework1_model exists", quote({
   exists("fit_framework1_model", mode = "function")
@@ -104,12 +101,57 @@ run_test("fit_framework2_model signature check", quote({
   check_signature("fit_framework2_model", c("data", "formula_path"))
 }))
 
-# Behavioral test for extract_scale_data on synthetic data
+# Behavioral test for extract_scale_data on real data (5km scale)
 run_test("extract_scale_data returns valid structure (5km scale)", quote({
   dat <- extract_scale_data(5000)
   is.data.frame(dat) && 
     nrow(dat) > 0 && 
     all(c("cluster_id", "region", "basin", "trap_days", "uoi", "w_combined_norm", "homogeneity", "w_temp_cluster") %in% names(dat))
+}))
+
+# =============================================================================
+# MODULE 1.5: code/functions/model_convergence.R
+# =============================================================================
+cat("\n--- Module: code/functions/model_convergence.R ---\n")
+source("code/functions/model_convergence.R")
+
+run_test("check_model_convergence exists", quote({
+  exists("check_model_convergence", mode = "function")
+}))
+
+run_test("check_model_convergence signature check", quote({
+  check_signature("check_model_convergence", c("model_obj", "model_name", "raise_warning"))
+}))
+
+run_test("check_model_convergence handles NULL", quote({
+  res <- check_model_convergence(NULL, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && res$message == "Model object is NULL"
+}))
+
+run_test("check_model_convergence checks successful gam fit", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == TRUE && grepl("successfully", res$message)
+}))
+
+run_test("check_model_convergence detects non-converged inner flag", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  fit_dummy$converged <- FALSE
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && grepl("Inner", res$message)
+}))
+
+run_test("check_model_convergence detects non-converged outer flag", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ s(x, k = 3), data = df_dummy)
+  fit_dummy$outer.info <- list(conv = "non-converged or bad step")
+  res <- check_model_convergence(fit_dummy, raise_warning = FALSE)
+  is.list(res) && res$converged == FALSE && grepl("Outer", res$message)
 }))
 
 # =============================================================================
@@ -123,18 +165,18 @@ run_test("run_framework1_analysis exists", quote({
 }))
 
 run_test("run_framework1_analysis signature check", quote({
-  check_signature("run_framework1_analysis", c("scale_m", "outputs_dir", "figures_dir"))
+  check_signature("run_framework1_analysis", c("scale_m", "outputs_dir"))
 }))
 
 run_test("run_framework1_analysis execution and returns list of data + fitted model", quote({
-  res <- run_framework1_analysis(scale_m = 5000, outputs_dir = temp_out_dir, figures_dir = temp_fig_dir)
+  res <- run_framework1_analysis(scale_m = 5000, outputs_dir = temp_out_dir)
   
   is.list(res) &&
     is.data.frame(res$results_df) &&
     inherits(res$best_model, "gam") &&
     grepl("Beta regression", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework1_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "figure3.png"))
+    file.exists(file.path(temp_out_dir, "framework1_full_models.RDS"))
 }))
 
 # =============================================================================
@@ -148,18 +190,18 @@ run_test("run_framework2_analysis exists", quote({
 }))
 
 run_test("run_framework2_analysis signature check", quote({
-  check_signature("run_framework2_analysis", c("scale_m", "outputs_dir", "figures_dir"))
+  check_signature("run_framework2_analysis", c("scale_m", "outputs_dir"))
 }))
 
 run_test("run_framework2_analysis execution and returns list of data + fitted Tweedie GLM", quote({
-  res <- run_framework2_analysis(scale_m = 5000, outputs_dir = temp_out_dir, figures_dir = temp_fig_dir)
+  res <- run_framework2_analysis(scale_m = 5000, outputs_dir = temp_out_dir)
   
   is.list(res) &&
     is.data.frame(res$results_df) &&
     inherits(res$best_model, "gam") &&
     grepl("Tweedie", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework2_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "figure4.png"))
+    file.exists(file.path(temp_out_dir, "framework2_full_models.RDS"))
 }))
 
 # =============================================================================
@@ -194,8 +236,38 @@ run_test("run_predictive_biomass_mapping successfully projects and outputs raste
     length(rasts) == 2 &&
     inherits(rasts[["5000"]]$congo, "SpatRaster") &&
     inherits(rasts[["5000"]]$amazon, "SpatRaster") &&
-    file.exists(file.path(temp_fig_dir, "figureS5.png")) &&
+    file.exists(file.path(temp_fig_dir, "figureS3.png")) &&
     file.exists(file.path(temp_fig_dir, "figure5.png"))
+}))
+
+# =============================================================================
+# MODULE 5: code/10_Collect_Results_Stats.R
+# =============================================================================
+cat("\n--- Module: code/10_Collect_Results_Stats.R ---\n")
+source("code/10_Collect_Results_Stats.R")
+
+run_test("get_profile_cis exists", quote({
+  exists("get_profile_cis", mode = "function")
+}))
+
+run_test("get_profile_cis signature check", quote({
+  check_signature("get_profile_cis", c("model_obj"))
+}))
+
+run_test("get_profile_cis falls back to Wald CIs on dummy gam", quote({
+  set.seed(123)
+  df_dummy <- data.frame(x = 1:10, y = 2 * (1:10) + rnorm(10))
+  fit_dummy <- gam(y ~ x, data = df_dummy)
+  cis <- get_profile_cis(fit_dummy)
+  is.matrix(cis) && all(dim(cis) == c(2, 2)) && all(colnames(cis) == c("2.5 %", "97.5 %"))
+}))
+
+run_test("compute_prediction_correlations exists", quote({
+  exists("compute_prediction_correlations", mode = "function")
+}))
+
+run_test("compute_prediction_correlations signature check", quote({
+  check_signature("compute_prediction_correlations", c("ptab_lobo", "ptab_aic"))
 }))
 
 # --- Cleanup temp test directories ---

@@ -19,157 +19,15 @@ library(terra)
 library(dplyr)
 library(mgcv)
 library(readr)
+library(jsonlite)
 
-# Global Shared Constants
-CLUSTER_THRESHOLD_KM <- 11.1
+source("code/functions/model_convergence.R")
+config_path <- if (file.exists("code/config.json")) "code/config.json" else "config.json"
+config <- jsonlite::read_json(config_path)
+MIN_TRAP_DAYS <- config$clustering$min_trap_days
+CLUSTER_THRESHOLD_KM <- as.numeric(config$clustering$threshold_km)
 
-# --- Internal Helper: Calculate Camera Trap Deployment Temporal Weights ------
-calculate_temporal_weights <- function() {
-  detections_path <- "outputs/camera_traps_joint_detections.csv"
-  if (!file.exists(detections_path)) {
-    return(NULL)
-  }
-  
-  det_all <- readr::read_csv(detections_path, show_col_types = FALSE)
-  det_all$start_date <- as.Date(det_all$start_date)
-  det_all$end_date <- as.Date(det_all$end_date)
-  
-  # Haversine distance single-linkage clustering (threshold = 11.1 km)
-  haversine_dist <- function(lon1, lat1, lon2, lat2) {
-    r <- 6371.0
-    rad <- pi / 180
-    dlon <- (lon2 - lon1) * rad
-    dlat <- (lat2 - lat1) * rad
-    lat1 <- lat1 * rad
-    lat2 <- lat2 * rad
-    a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
-    c <- 2 * asin(sqrt(a))
-    return(r * c)
-  }
-  
-  coords_df <- det_all %>% 
-    select(region, longitude, latitude) %>% 
-    distinct() %>% 
-    mutate(cluster_id_geo = "")
-  
-  for (reg in unique(coords_df$region)) {
-    sub_indices <- which(coords_df$region == reg)
-    sub <- coords_df[sub_indices, ]
-    n <- nrow(sub)
-    if (n == 0) next
-    if (n > 1) {
-      dist_mat <- matrix(0, nrow=n, ncol=n)
-      for (i in 1:n) {
-        for (j in 1:n) {
-          dist_mat[i,j] <- haversine_dist(sub$longitude[i], sub$latitude[i], sub$longitude[j], sub$latitude[j])
-        }
-      }
-      hc <- hclust(as.dist(dist_mat), method="single")
-      labels <- cutree(hc, h=CLUSTER_THRESHOLD_KM)
-    } else {
-      labels <- 1
-    }
-    coords_df$cluster_id_geo[sub_indices] <- paste0(reg, "_", sprintf("%02d", labels))
-  }
-  
-  det_all <- det_all %>%
-    left_join(coords_df, by = c("region", "longitude", "latitude"))
-  
-  deployments <- det_all %>%
-    select(region, cluster_id_geo, deployment_id, start_date, end_date, trap_days) %>%
-    distinct()
-  
-  gedi_start <- as.Date("2019-04-17")
-  
-  deployments <- deployments %>%
-    mutate(
-      years_before_gedi = as.numeric(gedi_start - start_date) / 365.25,
-      w_temp = case_when(
-        years_before_gedi <= 1.0  ~ 1.0,
-        years_before_gedi <= 6.0  ~ 0.5,
-        years_before_gedi <= 11.0 ~ 0.25,
-        TRUE                      ~ 0.1
-      )
-    )
-  
-  cluster_temp_metrics <- deployments %>%
-    group_by(cluster_id_geo) %>%
-    summarise(
-      w_temp_cluster = sum(trap_days * w_temp) / sum(trap_days),
-      .groups = "drop"
-    )
-  
-  return(cluster_temp_metrics)
-}
 
-# --- Internal Helper: Calculate Camera Trap Deployment Taxonomic Keep Props ---
-calculate_taxonomic_keep_proportions <- function() {
-  detections_path <- "outputs/camera_traps_joint_detections.csv"
-  if (!file.exists(detections_path)) {
-    return(NULL)
-  }
-  
-  det_all <- readr::read_csv(detections_path, show_col_types = FALSE)
-  
-  # Group coordinates into clusters
-  haversine_dist <- function(lon1, lat1, lon2, lat2) {
-    r <- 6371.0
-    rad <- pi / 180
-    dlon <- (lon2 - lon1) * rad
-    dlat <- (lat2 - lat1) * rad
-    lat1 <- lat1 * rad
-    lat2 <- lat2 * rad
-    a <- sin(dlat/2)^2 + cos(lat1) * cos(lat2) * sin(dlon/2)^2
-    c <- 2 * asin(sqrt(a))
-    return(r * c)
-  }
-  
-  coords_df <- det_all %>% 
-    select(region, longitude, latitude) %>% 
-    distinct() %>% 
-    mutate(cluster_id_geo = "")
-  
-  for (reg in unique(coords_df$region)) {
-    sub_indices <- which(coords_df$region == reg)
-    sub <- coords_df[sub_indices, ]
-    n <- nrow(sub)
-    if (n == 0) next
-    if (n > 1) {
-      dist_mat <- matrix(0, nrow=n, ncol=n)
-      for (i in 1:n) {
-        for (j in 1:n) {
-          dist_mat[i,j] <- haversine_dist(sub$longitude[i], sub$latitude[i], sub$longitude[j], sub$latitude[j])
-        }
-      }
-      hc <- hclust(as.dist(dist_mat), method="single")
-      labels <- cutree(hc, h=CLUSTER_THRESHOLD_KM)
-    } else {
-      labels <- 1
-    }
-    coords_df$cluster_id_geo[sub_indices] <- paste0(reg, "_", sprintf("%02d", labels))
-  }
-  
-  det_all <- det_all %>%
-    left_join(coords_df, by = c("region", "longitude", "latitude"))
-  
-  # Filter out blanks, humans, domestic animals
-  wild_det <- det_all %>%
-    filter(!taxon_quality %in% c("blank", "human", "domestic"))
-  
-  cluster_keep_props <- wild_det %>%
-    group_by(cluster_id_geo) %>%
-    summarise(
-      total_wild_detections = sum(n_detections, na.rm = TRUE),
-      kept_wild_detections = sum(n_detections[taxon_quality %in% c("species", "genus", "family")], na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      p_keep = ifelse(total_wild_detections > 0, kept_wild_detections / total_wild_detections, 1.0)
-    ) %>%
-    select(cluster_id_geo, p_keep)
-  
-  return(cluster_keep_props)
-}
 
 # --- 1. Extract Raw Pixel-Level Data Within MCP Polygons ---------------------
 #' Extract Pixel-Level Data Within MCP Polygons
@@ -188,184 +46,95 @@ extract_scale_pixels <- function(scale_m, mcps = NULL) {
     mcps <- terra::vect(geojson_path)
   }
   
-  # Compute elephant presence dynamically based on spatial ranges or historical presence
-  mcps$elephant_present_strict <- 0
-  mcps$elephant_present_possible <- 0
-  if (file.exists("outputs/elephant_ranges.gpkg")) {
-    ele_ranges <- terra::vect("outputs/elephant_ranges.gpkg")
-    
-    # Strict: only extant (status == "Extant", which corresponds to presence == 1)
-    ele_ranges_strict <- ele_ranges[ele_ranges$status == "Extant", ]
-    if (nrow(ele_ranges_strict) > 0) {
-      intersects_strict <- terra::is.related(mcps, ele_ranges_strict, "intersects")
-      mcps$elephant_present_strict <- as.numeric(rowSums(as.matrix(intersects_strict)) > 0)
-    }
-    
-    # Possible: all statuses (Extant, Possibly Extant, Possibly Extinct)
-    intersects_possible <- terra::is.related(mcps, ele_ranges, "intersects")
-    mcps$elephant_present_possible <- as.numeric(rowSums(as.matrix(intersects_possible)) > 0)
+  # Compute elephant presence dynamically based on spatial ranges
+  if (!file.exists("outputs/elephant_ranges.gpkg")) {
+    stop("Critical Error: outputs/elephant_ranges.gpkg is missing! Please run 01_FigureS1_Regional_Bounding_Boxes.R first.")
   }
   
-  # Fallback to continent-level historical presence if GPKG is missing or has no intersection
-  if (sum(mcps$elephant_present_strict, na.rm = TRUE) == 0) {
-    mcps$elephant_present_strict <- ifelse(mcps$region %in% c("Congo", "SE_Asia"), 1, 0)
+  ele_ranges <- terra::vect("outputs/elephant_ranges.gpkg")
+  mcps$elephant_present_strict <- 0
+  
+  # Strict: only extant (status == "Extant", which corresponds to presence == 1)
+  ele_ranges_strict <- ele_ranges[ele_ranges$status == "Extant", ]
+  if (nrow(ele_ranges_strict) > 0) {
+    intersects_strict <- terra::is.related(mcps, ele_ranges_strict, "intersects")
+    mcps$elephant_present_strict <- as.numeric(rowSums(as.matrix(intersects_strict)) > 0)
   }
-  if (sum(mcps$elephant_present_possible, na.rm = TRUE) == 0) {
-    mcps$elephant_present_possible <- ifelse(mcps$region %in% c("Congo", "SE_Asia"), 1, 0)
-  }
+  
+  # Possible: all statuses (Extant, Possibly Extant, Possibly Extinct)
+  intersects_possible <- terra::is.related(mcps, ele_ranges, "intersects")
+  mcps$elephant_present_possible <- as.numeric(rowSums(as.matrix(intersects_possible)) > 0)
   
   # Retain legacy alias for safety
   mcps$elephant_present <- mcps$elephant_present_possible
 
   
-  mcps_congo <- mcps[mcps$region == "Congo", ]
-  mcps_amazon <- mcps[mcps$region == "Amazon", ]
-  mcps_seasia <- mcps[mcps$region == "SE_Asia", ]
-  
-  if (is.character(scale_m)) {
-    r_congo_path <- sprintf("outputs/EOdata/analysis_stack_%s_Congo.tif", scale_m)
-    r_amazon_path <- sprintf("outputs/EOdata/analysis_stack_%s_Amazon.tif", scale_m)
-  } else {
-    r_congo_path <- sprintf("outputs/EOdata/analysis_stack_%d_Congo.tif", scale_m)
-    r_amazon_path <- sprintf("outputs/EOdata/analysis_stack_%d_Amazon.tif", scale_m)
-  }
-  
-  # Fallback to synthetic data folders if needed
-  if (!file.exists(r_congo_path)) {
-    if (is.character(scale_m)) {
-      r_congo_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%s_Congo.tif", scale_m)
-    } else {
-      r_congo_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%d_Congo.tif", scale_m)
+  load_and_aggregate_if_needed <- function(path, scale_val, basin) {
+    if (file.exists(path)) {
+      return(terra::rast(path))
     }
-  }
-  if (!file.exists(r_amazon_path)) {
-    if (is.character(scale_m)) {
-      r_amazon_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%s_Amazon.tif", scale_m)
-    } else {
-      r_amazon_path <- sprintf("outputs/synthetic_EOdata/analysis_stack_%d_Amazon.tif", scale_m)
+    # Dynamic aggregation fallback from 5,000m real stack if target scale real file is missing
+    path_5000 <- sprintf("outputs/EOdata/analysis_stack_5000_%s.tif", basin)
+    if (file.exists(path_5000) && !is.character(scale_val) && scale_val > 5000) {
+      fact <- scale_val / 5000
+      message(sprintf("✓ Dynamically aggregating real 5,000m %s stack by factor of %d to %d m", basin, fact, scale_val))
+      r_5000 <- terra::rast(path_5000)
+      r <- terra::aggregate(r_5000, fact = fact, fun = "mean", na.rm = TRUE)
+      return(r)
     }
+    stop(sprintf("GeoTIFF analysis stack for %s at scale %s is missing.", basin, as.character(scale_val)))
   }
-  
-  if (!file.exists(r_congo_path) || !file.exists(r_amazon_path)) {
-    if (is.character(scale_m)) {
-      stop(sprintf("GeoTIFF analysis stacks for scale %s are missing.", scale_m))
-    } else {
-      stop(sprintf("GeoTIFF analysis stacks for scale %d m are missing.", scale_m))
-    }
-  }
-  
-  r_congo <- terra::rast(r_congo_path)
-  r_amazon <- terra::rast(r_amazon_path)
-  
+
   if (is.character(scale_m) && scale_m == "native") {
     aggregate_names <- c("uoi", "uoi_sd", "rh98", "gedi_n", "elevation", "slope", "hnd", "precip", "clay", "forest_fraction", "Npp_median")
   } else {
     aggregate_names <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
                          "elevation", "slope", "hnd", "precip", "clay", "forest_fraction")
   }
-  names(r_congo) <- aggregate_names
-  names(r_amazon) <- aggregate_names
-  
-  # Extract Congo: touches = FALSE by default, touch fallback for empty polygons
-  ext_congo <- terra::extract(r_congo, mcps_congo, df = TRUE, touches = FALSE)
-  all_congo_ids <- 1:nrow(mcps_congo)
-  extracted_congo_ids <- unique(ext_congo$ID)
-  empty_congo_ids <- setdiff(all_congo_ids, extracted_congo_ids)
-  
-  if (length(empty_congo_ids) > 0) {
-    ext_congo_touch <- terra::extract(r_congo, mcps_congo[empty_congo_ids, ], df = TRUE, touches = TRUE)
-    ext_congo_touch$ID <- empty_congo_ids[ext_congo_touch$ID]
-    ext_congo <- rbind(ext_congo %>% filter(ID %in% extracted_congo_ids), ext_congo_touch)
-  }
-  
-  mcp_congo_df <- as.data.frame(mcps_congo)
-  mcp_congo_df$ID <- 1:nrow(mcp_congo_df)
-  
-  if (is.character(scale_m) && scale_m == "native") {
-    pixel_congo <- merge(ext_congo, mcp_congo_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Congo", frip = NA)
-  } else {
-    pixel_congo <- merge(ext_congo, mcp_congo_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Congo")
-  }
-  
-  # Extract Amazon: touches = FALSE by default, touch fallback for empty polygons
-  ext_amazon <- terra::extract(r_amazon, mcps_amazon, df = TRUE, touches = FALSE)
-  all_amazon_ids <- 1:nrow(mcps_amazon)
-  extracted_amazon_ids <- unique(ext_amazon$ID)
-  empty_amazon_ids <- setdiff(all_amazon_ids, extracted_amazon_ids)
-  
-  if (length(empty_amazon_ids) > 0) {
-    ext_amazon_touch <- terra::extract(r_amazon, mcps_amazon[empty_amazon_ids, ], df = TRUE, touches = TRUE)
-    ext_amazon_touch$ID <- empty_amazon_ids[ext_amazon_touch$ID]
-    ext_amazon <- rbind(ext_amazon %>% filter(ID %in% extracted_amazon_ids), ext_amazon_touch)
-  }
-  
-  mcp_amazon_df <- as.data.frame(mcps_amazon)
-  mcp_amazon_df$ID <- 1:nrow(mcp_amazon_df)
-  
-  if (is.character(scale_m) && scale_m == "native") {
-    pixel_amazon <- merge(ext_amazon, mcp_amazon_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Amazon", frip = NA)
-  } else {
-    pixel_amazon <- merge(ext_amazon, mcp_amazon_df, by = "ID") %>%
-      filter(!is.na(uoi)) %>%
-      select(-ID) %>%
-      mutate(basin = "Amazon")
-  }
-  
-  # Extract Southeast Asia if the 5000m file is present and there are SE Asia MCP polygons
-  r_seasia_basename <- sprintf("analysis_stack_5000_SE_Asia.tif")
-  r_seasia_path <- file.path("outputs", "EOdata", r_seasia_basename)
-  
-  if (file.exists(r_seasia_path) && nrow(mcps_seasia) > 0) {
-    # If other scale requested, dynamically aggregate!
-    if (!is.character(scale_m) && scale_m > 5000) {
-      fact <- scale_m / 5000
-      r_seasia <- terra::aggregate(rast(r_seasia_path), fact = fact, fun = "mean", na.rm = TRUE)
+
+  basins <- c("Congo", "Amazon", "SE_Asia")
+  pixel_list <- list()
+
+  for (b in basins) {
+    mcps_b <- mcps[mcps$region == b, ]
+    if (nrow(mcps_b) == 0) next
+
+    r_path <- if (is.character(scale_m)) {
+      sprintf("outputs/EOdata/analysis_stack_%s_%s.tif", scale_m, b)
     } else {
-      r_seasia <- rast(r_seasia_path)
+      sprintf("outputs/EOdata/analysis_stack_%d_%s.tif", scale_m, b)
     }
-    
-    names(r_seasia) <- aggregate_names
-    
-    ext_seasia <- terra::extract(r_seasia, mcps_seasia, df = TRUE, touches = FALSE)
-    all_seasia_ids <- 1:nrow(mcps_seasia)
-    extracted_seasia_ids <- unique(ext_seasia$ID)
-    empty_seasia_ids <- setdiff(all_seasia_ids, extracted_seasia_ids)
-    
-    if (length(empty_seasia_ids) > 0) {
-      ext_seasia_touch <- terra::extract(r_seasia, mcps_seasia[empty_seasia_ids, ], df = TRUE, touches = TRUE)
-      ext_seasia_touch$ID <- empty_seasia_ids[ext_seasia_touch$ID]
-      ext_seasia <- rbind(ext_seasia %>% filter(ID %in% extracted_seasia_ids), ext_seasia_touch)
+
+    r_b <- load_and_aggregate_if_needed(r_path, scale_m, b)
+    names(r_b) <- aggregate_names
+
+    ext_b <- terra::extract(r_b, mcps_b, df = TRUE, touches = FALSE)
+    all_ids <- 1:nrow(mcps_b)
+    extracted_ids <- unique(ext_b$ID)
+    empty_ids <- setdiff(all_ids, extracted_ids)
+
+    if (length(empty_ids) > 0) {
+      ext_touch <- terra::extract(r_b, mcps_b[empty_ids, ], df = TRUE, touches = TRUE)
+      ext_touch$ID <- empty_ids[ext_touch$ID]
+      ext_b <- rbind(ext_b %>% filter(ID %in% extracted_ids), ext_touch)
     }
-    
-    mcp_seasia_df <- as.data.frame(mcps_seasia)
-    mcp_seasia_df$ID <- 1:nrow(mcp_seasia_df)
-    
+
+    mcp_df <- as.data.frame(mcps_b)
+    mcp_df$ID <- 1:nrow(mcp_df)
+
+    pixel_b <- merge(ext_b, mcp_df, by = "ID") %>%
+      filter(!is.na(uoi)) %>%
+      select(-ID) %>%
+      mutate(basin = b)
+
     if (is.character(scale_m) && scale_m == "native") {
-      pixel_seasia <- merge(ext_seasia, mcp_seasia_df, by = "ID") %>%
-        filter(!is.na(uoi)) %>%
-        select(-ID) %>%
-        mutate(basin = "SE_Asia", frip = NA)
-    } else {
-      pixel_seasia <- merge(ext_seasia, mcp_seasia_df, by = "ID") %>%
-        filter(!is.na(uoi)) %>%
-        select(-ID) %>%
-        mutate(basin = "SE_Asia")
+      pixel_b$frip <- NA
     }
-    
-    pixel_data <- rbind(pixel_congo, pixel_amazon, pixel_seasia)
-  } else {
-    pixel_data <- rbind(pixel_congo, pixel_amazon)
+
+    pixel_list[[b]] <- pixel_b
   }
-  
+
+  pixel_data <- do.call(rbind, pixel_list)
   return(pixel_data)
 }
 
@@ -381,11 +150,11 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
   pixel_data <- extract_scale_pixels(scale_m, mcps = mcps)
   
   joined_data <- pixel_data %>%
-    group_by(cluster_id, region, basin, elephant_present_strict, elephant_present_possible, elephant_present, trap_days, n_species, B_H_index, M_H_index, B_H_gt50, B_H_gt100, B_H_gt1000, megafauna_fraction) %>%
+    group_by(cluster_id, region, basin, elephant_present_strict, elephant_present_possible, elephant_present, trap_days, n_species, B_H_index, M_H_index, B_H_gt50, B_H_gt100, B_H_gt1000, megafauna_fraction, p_keep, w_temp_cluster) %>%
     summarise(
       n_pixels = n(),
       uoi_sd = ifelse(is.na(sd(uoi, na.rm = TRUE)), 0, sd(uoi, na.rm = TRUE)),
-      uoi = mean(uoi, na.rm = TRUE),
+      uoi = pmax(pmin(mean(uoi, na.rm = TRUE), 1 - 1e-5), 1e-5),
       elevation = mean(elevation, na.rm = TRUE),
       slope = mean(slope, na.rm = TRUE),
       hnd = mean(hnd, na.rm = TRUE),
@@ -396,21 +165,11 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
       rh98 = mean(rh98, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    filter(trap_days >= 10)
+    filter(trap_days >= MIN_TRAP_DAYS)
   
   # Compute standard errors of the mean
   joined_data <- joined_data %>%
     mutate(uoi_se = uoi_sd / sqrt(n_pixels))
-  
-  # Load and join taxonomic keep proportions
-  cluster_keep <- calculate_taxonomic_keep_proportions()
-  if (!is.null(cluster_keep)) {
-    joined_data <- joined_data %>%
-      left_join(cluster_keep, by = c("cluster_id" = "cluster_id_geo"))
-    joined_data$p_keep[is.na(joined_data$p_keep)] <- 1.0
-  } else {
-    joined_data$p_keep <- 1.0
-  }
   
   # Calculate effective trap days discounted by taxonomic resolution issues
   joined_data <- joined_data %>%
@@ -448,18 +207,6 @@ extract_scale_data <- function(scale_m, mcps = NULL) {
     joined_data$homogeneity <- 1.0
   }
   
-  # Join temporal weights back to spatial dataset
-  cluster_temp <- calculate_temporal_weights()
-  if (!is.null(cluster_temp)) {
-    joined_data <- joined_data %>%
-      left_join(cluster_temp, by = c("cluster_id" = "cluster_id_geo"))
-    
-    # Fallback for NAs
-    joined_data$w_temp_cluster[is.na(joined_data$w_temp_cluster)] <- median(joined_data$w_temp_cluster, na.rm = TRUE)
-  } else {
-    joined_data$w_temp_cluster <- 1.0 # Default fallback
-  }
-  
   # Calculate Combined Weight (Spatial Precision * Temporal Alignment)
   joined_data <- joined_data %>%
     mutate(w_combined = w_uoi * w_temp_cluster) %>%
@@ -485,7 +232,9 @@ fit_framework1_model <- function(data, formula_path = "outputs/framework1_best_f
   } else {
     uoi ~ B_H_index
   }
-  mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_combined_norm, data = data, method = "REML")
+  m <- mgcv::gam(formula_obj, family = betar(link = "logit"), weights = w_combined_norm, data = data, method = "REML")
+  check_model_convergence(m, "FW1 Calibration Model (REML)")
+  m
 }
 
 #' Fit Framework 2 Model (Tweedie GLM)
@@ -504,5 +253,10 @@ fit_framework2_model <- function(data, formula_path = "outputs/framework2_best_f
   } else {
     B_H_index ~ uoi * basin + elevation
   }
-  mgcv::gam(formula_obj, family = tw(), weights = w_combined_norm, data = data, method = "REML")
+  m <- mgcv::gam(formula_obj, family = tw(), weights = w_combined_norm, data = data, method = "REML")
+  check_model_convergence(m, "FW2 Calibration Model (REML)")
+  m
 }
+
+
+

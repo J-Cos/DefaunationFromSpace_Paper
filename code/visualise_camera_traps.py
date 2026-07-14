@@ -40,9 +40,10 @@ import matplotlib.colors as colors
 from pathlib import Path
 from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, fcluster
-from shapely.geometry import MultiPoint
+from shapely.geometry import MultiPoint, shape
 import rasterio
 from rasterio.mask import mask
+import json
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -120,182 +121,14 @@ def panel_label(ax, label, x=-0.12, y=1.05):
             fontsize=9, fontweight="bold", va="top", ha="left")
 
 
-# ── Haversine and Clustering Helpers ────────────────────────────────────────
+# ── Coordinate mapping helper ────────────────────────────────────────────────
 
-def haversine(lon1, lat1, lon2, lat2):
-    """Compute Haversine distance in km between coordinate arrays."""
-    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
-    c = 2 * np.arcsin(np.sqrt(a))
-    return 6371.0 * c
+def get_coordinate_cluster_map(df):
+    """Build a mapping from (region, lon, lat) to cluster_id directly from data."""
+    return df.drop_duplicates(['region', 'longitude', 'latitude']).set_index(['region', 'longitude', 'latitude'])['cluster_id'].to_dict()
 
 
-def get_master_cluster_map(df, threshold_km=11.1):
-    """Create a master WGS84-to-cluster_id map using 11.1km single-linkage clustering."""
-    unique_coords = df[['region', 'longitude', 'latitude']].drop_duplicates().reset_index(drop=True)
-    unique_coords['cluster_id'] = ""
-    
-    for reg in unique_coords['region'].unique():
-        sub = unique_coords[unique_coords['region'] == reg].copy()
-        n = len(sub)
-        if n == 0:
-            continue
-        
-        if n > 1:
-            coords = sub[['longitude', 'latitude']].values
-            dist_matrix = np.zeros((n, n))
-            for i in range(n):
-                for j in range(i+1, n):
-                    d = haversine(coords[i,0], coords[i,1], coords[j,0], coords[j,1])
-                    dist_matrix[i,j] = d
-                    dist_matrix[j,i] = d
-            condensed = dist_matrix[np.triu_indices(n, k=1)]
-            Z = linkage(condensed, method='single')
-            labels = fcluster(Z, threshold_km, criterion='distance')
-        else:
-            labels = np.array([1])
-            
-        sub['c_num'] = labels
-        sub['cluster_id'] = reg + "_" + sub['c_num'].astype(str).str.zfill(2)
-        unique_coords.loc[unique_coords['region'] == reg, 'cluster_id'] = sub['cluster_id'].values
-        
-    return unique_coords.set_index(['region', 'longitude', 'latitude'])['cluster_id'].to_dict()
 
-
-def aggregate_to_clusters(det, cluster_map):
-    """Aggregate event-level detections to mathematical 11.1km spatial cluster metrics."""
-    det = det.copy()
-    det['cluster_id'] = det.apply(
-        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
-        axis=1
-    )
-    det = det[det['cluster_id'] != ""].copy()
-    
-    # Calculate total trap days per cluster summing unique deployments within that cluster
-    deps = det[['region', 'cluster_id', 'project_id', 'deployment_id', 'trap_days']].drop_duplicates()
-    cluster_trap_days = deps.groupby(['region', 'cluster_id'])['trap_days'].sum().to_dict()
-    
-    # Group detections by cluster and taxon key
-    grp_cols = ["region", "cluster_id", "taxon_key", "class", "order", "family", "genus", "species", "taxon_quality"]
-    for col in ["body_mass_kg", "common_name"]:
-        if col in det.columns:
-            grp_cols.append(col)
-            
-    clustered_det = det.groupby(grp_cols, dropna=False)['n_detections'].sum().reset_index()
-    clustered_det['cluster_trap_days'] = clustered_det.apply(
-        lambda r: cluster_trap_days.get((r['region'], r['cluster_id']), 1.0),
-        axis=1
-    )
-    
-    # Cluster-level Relative Abundance Index
-    clustered_det['RAI'] = (clustered_det['n_detections'] / clustered_det['cluster_trap_days']) * 100
-    
-    # Biophysical estimations (Carbone et al. 2005 day-range and Nagy 2005 FMR)
-    usable = clustered_det[
-        (clustered_det["taxon_quality"].isin(["species", "genus", "family"])) &
-        (~clustered_det["taxon_quality"].isin(["blank", "human", "domestic"])) &
-        (clustered_det["body_mass_kg"].notna()) &
-        (clustered_det["body_mass_kg"] > 0)
-    ].copy()
-    
-    DAY_RANGE_COEFF = 1.2
-    DAY_RANGE_EXP = 0.26
-    FMR_COEFF = 10.0
-    FMR_EXP = 0.75
-    
-    usable["day_range_km"] = DAY_RANGE_COEFF * (usable["body_mass_kg"] ** DAY_RANGE_EXP)
-    usable["corrected_RAI"] = usable["RAI"] / usable["day_range_km"]
-    
-    usable["biomass_contrib"] = usable["corrected_RAI"] * usable["body_mass_kg"]
-    usable["metabolism_contrib"] = usable["corrected_RAI"] * FMR_COEFF * (usable["body_mass_kg"] ** FMR_EXP)
-    
-    usable["biomass_contrib_gt50"] = np.where(usable["body_mass_kg"] > 50.0, usable["biomass_contrib"], 0.0)
-    usable["biomass_contrib_gt100"] = np.where(usable["body_mass_kg"] > 100.0, usable["biomass_contrib"], 0.0)
-    usable["biomass_contrib_gt1000"] = np.where(usable["body_mass_kg"] > 1000.0, usable["biomass_contrib"], 0.0)
-    
-    agg_dict = {
-        "n_species": ("taxon_key", "nunique"),
-        "n_detections_total": ("n_detections", "sum"),
-        "B_H_index": ("biomass_contrib", "sum"),
-        "M_H_index": ("metabolism_contrib", "sum"),
-        "B_H_gt50": ("biomass_contrib_gt50", "sum"),
-        "B_H_gt100": ("biomass_contrib_gt100", "sum"),
-        "B_H_gt1000": ("biomass_contrib_gt1000", "sum"),
-    }
-    
-    cluster_metrics = (usable
-                       .groupby(["region", "cluster_id"])
-                       .agg(**agg_dict)
-                       .reset_index())
-    
-    cluster_metrics["megafauna_fraction"] = np.where(
-        cluster_metrics["B_H_index"] > 0,
-        (cluster_metrics["B_H_gt50"] / cluster_metrics["B_H_index"]) * 100,
-        0.0
-    )
-    
-    # Complete spatial centroids and effort
-    unique_dep_coords = det[['region', 'cluster_id', 'longitude', 'latitude']].drop_duplicates()
-    centroids = unique_dep_coords.groupby(['region', 'cluster_id']).agg(
-        longitude=('longitude', 'mean'),
-        latitude=('latitude', 'mean')
-    ).reset_index()
-    
-    all_meta = deps.groupby(['region', 'cluster_id']).agg(trap_days=('trap_days', 'sum')).reset_index()
-    all_meta = all_meta.merge(centroids, on=['region', 'cluster_id'], how='left')
-    
-    cluster_metrics = all_meta.merge(cluster_metrics, on=["region", "cluster_id"], how="left")
-    cluster_metrics["n_species"] = cluster_metrics["n_species"].fillna(0).astype(int)
-    cluster_metrics["n_detections_total"] = cluster_metrics["n_detections_total"].fillna(0).astype(int)
-    cluster_metrics["B_H_index"] = cluster_metrics["B_H_index"].fillna(0.0)
-    cluster_metrics["M_H_index"] = cluster_metrics["M_H_index"].fillna(0.0)
-    cluster_metrics["B_H_gt50"] = cluster_metrics["B_H_gt50"].fillna(0.0)
-    cluster_metrics["B_H_gt100"] = cluster_metrics["B_H_gt100"].fillna(0.0)
-    cluster_metrics["B_H_gt1000"] = cluster_metrics["B_H_gt1000"].fillna(0.0)
-    cluster_metrics["megafauna_fraction"] = cluster_metrics["megafauna_fraction"].fillna(0.0)
-    
-    return cluster_metrics, clustered_det
-
-
-def check_gedi_5km_overlap(region, buffered_polygon):
-    """Check if a buffered polygon overlaps at least one valid GEDI 5km pixel."""
-    raster_path = OUTPUT_DIR / "EOdata" / f"analysis_stack_5000_{region}.tif"
-    if not raster_path.exists():
-        raster_path = OUTPUT_DIR / "synthetic_EOdata" / f"analysis_stack_5000_{region}.tif"
-    
-    if not raster_path.exists():
-        return False
-        
-    try:
-        with rasterio.open(raster_path) as src:
-            # Try touches=False first
-            out_image, _ = mask(src, [buffered_polygon], crop=True, filled=False, indexes=3, all_touched=False)
-            if isinstance(out_image, np.ma.MaskedArray):
-                valid_data = out_image.data[~out_image.mask]
-            else:
-                valid_data = out_image
-            valid_data = valid_data[~np.isnan(valid_data)]
-            if src.nodata is not None:
-                valid_data = valid_data[valid_data != src.nodata]
-                
-            if len(valid_data) > 0:
-                return True
-                
-            # touches=True fallback
-            out_image_t, _ = mask(src, [buffered_polygon], crop=True, filled=False, indexes=3, all_touched=True)
-            if isinstance(out_image_t, np.ma.MaskedArray):
-                valid_data_t = out_image_t.data[~out_image_t.mask]
-            else:
-                valid_data_t = out_image_t
-            valid_data_t = valid_data_t[~np.isnan(valid_data_t)]
-            if src.nodata is not None:
-                valid_data_t = valid_data_t[valid_data_t != src.nodata]
-                
-            return len(valid_data_t) > 0
-    except Exception:
-        return False
 
 
 def _compute_region_extent(det: pd.DataFrame, region: str, pad: float = 1.0) -> list:
@@ -313,7 +146,7 @@ def _compute_region_extent(det: pd.DataFrame, region: str, pad: float = 1.0) -> 
 
 # ── Figure 1: Camera Trap Detections & Diversity ───────────────────────────
 
-def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: pd.DataFrame, fig_dir: Path):
+def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, geojson_features: list, fig_dir: Path):
     """
     4-panel summary of camera trap detections and diversity across basins.
     (A) Deployment maps using Minimum Convex Polygons + 11.1km buffer colored by effort
@@ -328,17 +161,6 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     except ImportError:
         cartopy_available = False
 
-    # Extract coordinates by deployment and map cluster ids
-    dep = (det.groupby(["region", "project_name", "deployment_id"])
-           .agg(lon=("longitude", "first"),
-                lat=("latitude", "first"),
-                trap_days=("trap_days", "first"))
-           .reset_index())
-    dep['cluster_id'] = dep.apply(
-        lambda r: cluster_map.get((r['region'], r['lon'], r['lat']), ""),
-        axis=1
-    )
-
     fig = plt.figure(figsize=(DOUBLE_COL, DOUBLE_COL * 0.98))
     gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.05], hspace=0.45, wspace=0.35)
 
@@ -352,16 +174,12 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     ]
 
     # Shared log-scaled effort normalization across all clusters globally
-    cluster_days = dep.groupby(['region', 'cluster_id'])['trap_days'].sum()
-    min_days = max(10, cluster_days.min())
-    max_days = cluster_days.max()
+    min_days = max(10, cluster_metrics['trap_days'].min())
+    max_days = cluster_metrics['trap_days'].max()
     norm = colors.LogNorm(vmin=min_days, vmax=max_days)
     cmap = plt.cm.viridis
 
     for idx, reg in enumerate(regions_info):
-        sub_dep = dep[dep["region"] == reg["name"]]
-        unique_c_ids = sub_dep["cluster_id"].unique()
-        
         if cartopy_available:
             ax_map = fig.add_subplot(reg["gs"], projection=ccrs.PlateCarree())
             ax_map.set_extent(reg["extent"], crs=ccrs.PlateCarree())
@@ -386,22 +204,18 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
             ax_map.set_ylabel("Latitude (°N)", fontsize=5.5)
             ax_map.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0")
 
-        # Plot fuzzed MCP + 5.55km (0.05 degree) buffers for each cluster
-        for c_id in unique_c_ids:
-            c_dep = sub_dep[sub_dep["cluster_id"] == c_id]
-            points = list(zip(c_dep["lon"], c_dep["lat"]))
-            if len(points) == 0:
+        # Plot pre-computed projection-safe buffered MCPs from GeoJSON
+        n_clusters = 0
+        for feat in geojson_features:
+            if feat["region"] != reg["name"]:
                 continue
+            n_clusters += 1
+            
+            buffered = feat["geometry"]
+            c_days = feat["trap_days"]
+            color = cmap(norm(c_days))
             
             try:
-                # Minimum Convex Polygon via Shapely + 0.05 degree buffer
-                mp = MultiPoint(points)
-                hull = mp.convex_hull
-                buffered = hull.buffer(0.05)  # 0.05 deg ≈ 5.55 km
-                
-                c_days = c_dep["trap_days"].sum()
-                color = cmap(norm(c_days))
-                
                 if cartopy_available:
                     ax_map.add_geometries(
                         [buffered], crs=ccrs.PlateCarree(),
@@ -417,9 +231,9 @@ def make_figure1(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
                             x, y = poly.exterior.xy
                             ax_map.fill(x, y, facecolor=color, edgecolor="black", linewidth=0.3, alpha=0.6, zorder=3)
             except Exception as e:
-                print(f"      Warning: Shapely buffer failed for {c_id}: {e}")
+                print(f"      Warning: Drawing geometry failed: {e}")
 
-        ax_map.set_title(f"{reg['name']} Basin ({len(unique_c_ids)} clusters)", fontsize=7.5, pad=3)
+        ax_map.set_title(f"{reg['name']} Basin ({n_clusters} clusters)", fontsize=7.5, pad=3)
         if idx == 0:
             panel_label(ax_map, "A", x=-0.08, y=1.05)
 
@@ -664,7 +478,6 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
     med_mc = np.median(logM_congo)
     med_ma = np.median(logM_amazon)
     med_ms = np.median(logM_seasia)
-    
     ax.axvline(med_mc, color=PAL["Congo"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_ma, color=PAL["Amazon"], ls="--", lw=0.8, zorder=4)
     ax.axvline(med_ms, color=PAL["SE_Asia"], ls="--", lw=0.8, zorder=4)
@@ -690,7 +503,7 @@ def make_figure2(valid: pd.DataFrame, fig_dir: Path):
 
 # ── Figure 3: Vertebrate Body Size & Megafauna ─────────────────────────────
 
-def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: pd.DataFrame, fig_dir: Path):
+def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, geojson_features: list, fig_dir: Path):
     """
     5-panel body size and megafaunal comparison (Landscape Cluster-level).
     (A) Geographic maps of megafauna biomass ($B_{H, >50}$) for Congo & Amazon clusters using buffered MCPs (0.05 degree)
@@ -706,22 +519,11 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     except ImportError:
         cartopy_available = False
 
-    # Extract coordinates by deployment and map cluster ids
-    dep = (det.groupby(["region", "project_name", "deployment_id"])
-           .agg(lon=("longitude", "first"),
-                lat=("latitude", "first"),
-                trap_days=("trap_days", "first"))
-           .reset_index())
-    dep['cluster_id'] = dep.apply(
-        lambda r: cluster_map.get((r['region'], r['lon'], r['lat']), ""),
-        axis=1
-    )
-
     # 5-panel layout
     fig = plt.figure(figsize=(DOUBLE_COL, DOUBLE_COL * 1.35))
     gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 1.0], hspace=0.4, wspace=0.3)
 
-    # ── (A) Geographic Maps (MCPs + 0.05 deg Buffers colored by B_H_gt50) ────
+    # ── (A) Geographic Maps (Buffered MCPs from GeoJSON colored by B_H_gt50) ────
     gs_maps = gs[0, :].subgridspec(1, 3, wspace=0.15)
     
     regions_info = [
@@ -743,9 +545,6 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
     cmap = plt.cm.plasma
 
     for idx, reg in enumerate(regions_info):
-        sub_dep = dep[dep["region"] == reg["name"]]
-        unique_c_ids = sub_dep["cluster_id"].unique()
-        
         if cartopy_available:
             ax_map = fig.add_subplot(reg["gs"], projection=ccrs.PlateCarree())
             ax_map.set_extent(reg["extent"], crs=ccrs.PlateCarree())
@@ -770,25 +569,25 @@ def make_figure3(det: pd.DataFrame, cluster_metrics: pd.DataFrame, cluster_map: 
             ax_map.set_ylabel("Latitude (°N)", fontsize=5.5)
             ax_map.grid(True, linestyle="--", linewidth=0.2, color="#E0E0E0")
 
-        # Plot fuzzed MCP + 5.55km (0.05 degree) buffers for each cluster
-        for c_id in unique_c_ids:
-            c_dep = sub_dep[sub_dep["cluster_id"] == c_id]
-            points = list(zip(c_dep["lon"], c_dep["lat"]))
-            if len(points) == 0:
+        # Plot pre-computed projection-safe buffered MCPs from GeoJSON
+        n_clusters = 0
+        for feat in geojson_features:
+            if feat["region"] != reg["name"]:
                 continue
+            n_clusters += 1
+            
+            c_id = feat["cluster_id"]
+            buffered = feat["geometry"]
+            
+            c_id_int = int(c_id) if isinstance(c_id, str) and c_id.isdigit() else c_id
+            c_biomass = biomass_map.get((reg["name"], c_id), biomass_map.get((reg["name"], c_id_int), 0.0))
+            
+            if c_biomass > 0.0:
+                color = cmap(norm(c_biomass))
+            else:
+                color = "#E0E0E0"  # light grey for absence
             
             try:
-                # Minimum Convex Polygon via Shapely + 0.05 degree buffer
-                mp = MultiPoint(points)
-                hull = mp.convex_hull
-                buffered = hull.buffer(0.05)  # 0.05 deg ≈ 5.55 km
-                
-                c_biomass = biomass_map.get((reg["name"], c_id), 0.0)
-                if c_biomass > 0.0:
-                    color = cmap(norm(c_biomass))
-                else:
-                    color = "#E0E0E0"  # light grey for absence
-                
                 if cartopy_available:
                     ax_map.add_geometries(
                         [buffered], crs=ccrs.PlateCarree(),
@@ -1146,156 +945,68 @@ def make_figure4(cluster_metrics: pd.DataFrame, fig_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate PNAS-style multi-panel figures aggregated to 11.1km spatial clusters."
+        description="Generate PNAS-style multi-panel figures from pre-processed camera trap datasets."
     )
-    parser.add_argument("--detections", type=Path, default=OUTPUT_DIR / "camera_traps_joint_detections.csv")
     parser.add_argument("--fig-dir", type=Path, default=FIG_DIR)
     args = parser.parse_args()
 
     args.fig_dir.mkdir(parents=True, exist_ok=True)
     set_pnas_style()
 
-    print("Loading joint camera trapping detections...")
-    det = pd.read_csv(args.detections)
-    
-    print("\nRunning single-linkage clustering at 11.1 km on deployments...")
-    cluster_map = get_master_cluster_map(det)
-    
-    print("Aggregating detections to mathematical cluster-level metrics...")
-    cluster_metrics, clustered_det = aggregate_to_clusters(det, cluster_map)
-    
-    print("\nFiltering clusters to only keep those overlapping at least one valid GEDI 5km pixel...")
-    # Map deployments to cluster ids for grouping
-    det_copy = det.copy()
-    det_copy['cluster_id'] = det_copy.apply(
-        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
-        axis=1
-    )
-    
-    valid_clusters = []
-    for _, row in cluster_metrics.iterrows():
-        c_id = row["cluster_id"]
-        region = row["region"]
-        
-        c_deps = det_copy[det_copy["cluster_id"] == c_id]
-        points = list(zip(c_deps["longitude"], c_deps["latitude"]))
-        
-        mp = MultiPoint(points)
-        hull = mp.convex_hull
-        buffered = hull.buffer(0.05)
-        
-        if check_gedi_5km_overlap(region, buffered):
-            valid_clusters.append(c_id)
-            
-    print(f"  ✓ Retained {len(valid_clusters)} / {len(cluster_metrics)} clusters with valid GEDI 5km pixel overlap.")
-    cluster_metrics = cluster_metrics[cluster_metrics["cluster_id"].isin(valid_clusters)].copy()
-    
-    # Save the aggregated cluster metrics for subsequent remote sensing linkage
-    cluster_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics.csv"
-    cluster_metrics.to_csv(cluster_metrics_path, index=False)
-    print(f"Saved aggregated cluster-level metrics to {cluster_metrics_path}")
-
-    # Apply robustness filter: keep only clusters with trap_days > 0 (i.e. keep all clusters)
-    print("\nApplying robustness filter (trap_days > 0.0) to keep all clusters...")
-    robust_cluster_metrics = cluster_metrics[cluster_metrics["trap_days"] > 0.0].copy()
+    # Load pre-processed datasets
+    robust_det_path = OUTPUT_DIR / "camera_traps_robust_detections.csv"
     robust_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics_robust.csv"
-    robust_cluster_metrics.to_csv(robust_metrics_path, index=False)
-    print(f"Saved robust cluster-level metrics to {robust_metrics_path}")
+    full_metrics_path = OUTPUT_DIR / "camera_traps_cluster_level_metrics.csv"
+    
+    if not robust_det_path.exists() or not robust_metrics_path.exists() or not full_metrics_path.exists():
+        raise FileNotFoundError(
+            "Pre-processed outputs are missing. Please run code/process_camera_traps.py first."
+        )
 
-    # Generate and save robust cluster buffered MCPs as GeoJSON for R/terra linkage
-    print("Generating and saving robust cluster buffered MCPs as GeoJSON...")
-    import json
-    from shapely.geometry import mapping
+    print("Loading pre-processed camera trapping data...")
+    robust_det = pd.read_csv(robust_det_path)
+    robust_cluster_metrics = pd.read_csv(robust_metrics_path)
+    cluster_metrics = pd.read_csv(full_metrics_path)
 
-    # Map deployments to cluster ids
-    det_copy = det.copy()
-    det_copy['cluster_id'] = det_copy.apply(
-        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
-        axis=1
-    )
-    # Keep only deployments in robust clusters
-    robust_det_for_geojson = det_copy[det_copy['cluster_id'].isin(robust_cluster_metrics['cluster_id'])].copy()
-    robust_det_for_geojson.to_csv(OUTPUT_DIR / "camera_traps_robust_detections.csv", index=False)
-    print(f"Saved robust filtered detections with cluster assignments to {OUTPUT_DIR / 'camera_traps_robust_detections.csv'}")
-
-    # Group to unique deployment locations
-    deps_unique = (robust_det_for_geojson.groupby(["region", "cluster_id", "project_name", "deployment_id"])
-                   .agg(lon=("longitude", "first"),
-                        lat=("latitude", "first"),
-                        trap_days=("trap_days", "first"))
-                   .reset_index())
-
-    features = []
-    for c_id in robust_cluster_metrics['cluster_id'].unique():
-        c_deps = deps_unique[deps_unique["cluster_id"] == c_id]
-        if len(c_deps) == 0:
-            continue
-        points = list(zip(c_deps["lon"], c_deps["lat"]))
-
-        # Calculate MCP and buffer by 0.05 degrees (approx 5.5 km)
-        mp = MultiPoint(points)
-        hull = mp.convex_hull
-        # If there are fewer than 3 unique points, convex_hull might return a Point or LineString,
-        # but buffer(0.05) works perfectly on all shapely geometries to yield a Polygon.
-        buffered = hull.buffer(0.05)
-
-        # Get properties from robust_cluster_metrics for this cluster
-        c_info = robust_cluster_metrics[robust_cluster_metrics['cluster_id'] == c_id].iloc[0]
-
-        properties = {
-            "cluster_id": str(c_id),
-            "region": str(c_info["region"]),
-            "trap_days": float(c_info["trap_days"]),
-            "n_species": int(c_info["n_species"]),
-            "B_H_index": float(c_info["B_H_index"]),
-            "M_H_index": float(c_info["M_H_index"]),
-            "B_H_gt50": float(c_info["B_H_gt50"]),
-            "B_H_gt100": float(c_info["B_H_gt100"]),
-            "B_H_gt1000": float(c_info["B_H_gt1000"]),
-            "megafauna_fraction": float(c_info["megafauna_fraction"])
-        }
-
-        # Convert geometry to GeoJSON dict
-        geom_dict = mapping(buffered)
-
-        feature = {
-            "type": "Feature",
-            "geometry": geom_dict,
-            "properties": properties
-        }
-        features.append(feature)
-
-    geojson = {
-        "type": "FeatureCollection",
-        "features": features
-    }
-
+    print("Loading pre-computed spatial cluster geometries from GeoJSON...")
     geojson_path = OUTPUT_DIR / "camera_traps_robust_buffered_mcps.geojson"
-    with open(geojson_path, "w") as f:
-        json.dump(geojson, f, indent=2)
-    print(f"Saved robust cluster buffered MCPs to {geojson_path}")
+    if not geojson_path.exists():
+        raise FileNotFoundError(
+            f"Pre-processed GeoJSON is missing: {geojson_path}. Please run code/process_camera_traps.py first."
+        )
+    with open(geojson_path, "w" if False else "r") as f:
+        geojson_data = json.load(f)
+    
+    geojson_features = []
+    for feat in geojson_data["features"]:
+        geojson_features.append({
+            "cluster_id": feat["properties"]["cluster_id"],
+            "region": feat["properties"]["region"],
+            "geometry": shape(feat["geometry"]),
+            "trap_days": feat["properties"]["trap_days"]
+        })
 
-    # Map deployments in det to filter det to only keep deployments in robust clusters
-    det_copy = det.copy()
-    det_copy['cluster_id'] = det_copy.apply(
-        lambda r: cluster_map.get((r['region'], r['longitude'], r['latitude']), ""),
-        axis=1
-    )
-    robust_det = det_copy[det_copy['cluster_id'].isin(robust_cluster_metrics['cluster_id'])].copy()
-    robust_det = robust_det.drop(columns=['cluster_id'])
+    # Load config file for min_trap_days
+    config_path = Path(__file__).resolve().parent / "config.json"
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        min_trap_days = config.get("clustering", {}).get("min_trap_days", 10)
+    else:
+        min_trap_days = 10
 
-    print(f"\nTotal clusters: {len(cluster_metrics)} | Robust clusters (>100 trap-days): {len(robust_cluster_metrics)}")
+    print(f"\nTotal GEDI-valid clusters: {len(cluster_metrics)} | Robust clusters (>= {min_trap_days} trap-days): {len(robust_cluster_metrics)}")
 
-    print("\nGenerating Figure 1: Detections & Diversity Comparison (with Buffered MCPs) [Robust Filtered]...")
-    make_figure1(robust_det, robust_cluster_metrics, cluster_map, args.fig_dir)
+    print("\nGenerating Figure 1: Detections & Diversity Comparison (with Buffered MCPs)...")
+    make_figure1(robust_det, robust_cluster_metrics, geojson_features, args.fig_dir)
 
-    print("\nGenerating Figure 2: Biophysical Scaling & Energetics Comparison [Robust Filtered]...")
+    print("\nGenerating Figure 2: Biophysical Scaling & Energetics Comparison...")
     make_figure2(robust_cluster_metrics, args.fig_dir)
 
-    print("\nGenerating Figure 3: Vertebrate Body Size & Megafauna Comparison [Robust Filtered]...")
-    make_figure3(robust_det, robust_cluster_metrics, cluster_map, args.fig_dir)
+    print("\nGenerating Figure 3: Vertebrate Body Size & Megafauna Comparison...")
+    make_figure3(robust_det, robust_cluster_metrics, geojson_features, args.fig_dir)
 
-    print("\nGenerating Figure 4: Effort-Bias Diagnostics Comparison [Full Dataset with Threshold]...")
+    print("\nGenerating Figure 4: Effort-Bias Diagnostics Comparison...")
     make_figure4(cluster_metrics, args.fig_dir)
 
     print(f"\nAll cluster-level PNAS camera trap figures successfully generated and saved to {args.fig_dir}/")

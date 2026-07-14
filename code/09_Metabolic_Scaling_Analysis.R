@@ -22,6 +22,7 @@ library(readr)
 # --- 1. Load Custom Calibration Helpers & Core Data --------------------------
 source("code/functions/theme_pnas.R")
 source("code/functions/calibration_helpers.R")
+source("code/functions/model_convergence.R")
 
 cat("=====================================================================\n")
 cat("=== code/09_Metabolic_Scaling_Analysis.R                          ===\n")
@@ -82,51 +83,56 @@ f1_templates <- list(
 )
 
 run_f1_selection <- function(index_name) {
-  best_aic <- Inf
+  best_aicc <- Inf
   best_name <- ""
   best_formula <- NULL
+  n_obs <- nrow(joined_data)
   
   for (n in names(f1_templates)) {
     f_str <- gsub("\\{Index\\}", index_name, f1_templates[[n]])
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm)
+      m <- gam(f, data = joined_data, family = betar(link = "logit"), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m, paste("F1", index_name, n))
+      m
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
-      a <- AIC(fit)
+      aic_val <- AIC(fit)
+      k <- attr(logLik(fit), "df")
+      aicc_val <- aic_val + (2 * k * (k + 1)) / (n_obs - k - 1)
       dev_expl <- summary(fit)$dev.expl
       
       # Record all model fits for complete tracking
       comparison_records[[length(comparison_records) + 1]] <<- list(
         Framework = "Framework 1",
-        Metric = "AIC & DevExpl",
+        Metric = "AICc & DevExpl",
         ModelLabel = n,
         IndexUsed = index_name,
         Formula = f_str,
-        FullAIC = a,
+        FullAICc = aicc_val,
         DevianceExplained = dev_expl,
         OOS_MAE = NA
       )
       
-      if (a < best_aic) {
-        best_aic <- a
+      if (aicc_val < best_aicc) {
+        best_aicc <- aicc_val
         best_name <- n
         best_formula <- f_str
       }
     }
   }
-  return(list(name = best_name, formula = best_formula, aic = best_aic))
+  return(list(name = best_name, formula = best_formula, aicc = best_aicc))
 }
 
 sel_f1_biomass <- run_f1_selection("B_H_index")
 sel_f1_metabolism <- run_f1_selection("M_H_index")
 
-cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f1_biomass$name, sel_f1_biomass$aic, sel_f1_biomass$formula))
-cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f1_metabolism$name, sel_f1_metabolism$aic, sel_f1_metabolism$formula))
+cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f1_biomass$name, sel_f1_biomass$aicc, sel_f1_biomass$formula))
+cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f1_metabolism$name, sel_f1_metabolism$aicc, sel_f1_metabolism$formula))
 
 # -----------------------------------------------------------------------------
 # 3. Framework 2: Tweedie GLMs
@@ -164,112 +170,179 @@ f2_templates <- list(
   "UOI * ElephantStrict + Forest"        = "{Index} ~ uoi * elephant_present_strict + forest_fraction"
 )
 
-# A. Standard AIC Selection Pathway (Full Sample Fit)
+# A. Standard AICc Selection Pathway (Full Sample Fit)
 run_f2_aic_selection <- function(index_name) {
-  best_aic <- Inf
+  best_aicc <- Inf
   best_name <- ""
   best_formula <- NULL
+  n_obs <- nrow(joined_data)
   
   for (n in names(f2_templates)) {
     f_str <- gsub("\\{Index\\}", index_name, f2_templates[[n]])
     f <- as.formula(f_str)
     
     fit <- tryCatch({
-      gam(f, data = joined_data, family = tw(), weights = w_combined_norm)
+      m <- gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m, paste("F2 AICc", index_name, n))
+      m
     }, error = function(e) NULL)
     
     if (!is.null(fit)) {
-      a <- AIC(fit)
+      aic_val <- AIC(fit)
+      k <- attr(logLik(fit), "df")
+      aicc_val <- aic_val + (2 * k * (k + 1)) / (n_obs - k - 1)
       dev_expl <- summary(fit)$dev.expl
       
       comparison_records[[length(comparison_records) + 1]] <<- list(
-        Framework = "Framework 2 AIC",
-        Metric = "AIC & DevExpl",
+        Framework = "Framework 2 AICc",
+        Metric = "AICc & DevExpl",
         ModelLabel = n,
         IndexUsed = index_name,
         Formula = f_str,
-        FullAIC = a,
+        FullAICc = aicc_val,
         DevianceExplained = dev_expl,
         OOS_MAE = NA
       )
       
-      if (a < best_aic) {
-        best_aic <- a
+      if (aicc_val < best_aicc) {
+        best_aicc <- aicc_val
         best_name <- n
         best_formula <- f_str
       }
     }
   }
-  return(list(name = best_name, formula = best_formula, aic = best_aic))
+  return(list(name = best_name, formula = best_formula, aicc = best_aicc))
 }
 
 sel_f2_aic_biomass <- run_f2_aic_selection("B_H_index")
 sel_f2_aic_metabolism <- run_f2_aic_selection("M_H_index")
 
-cat("A. Standard AIC Selection Pathway (Full Sample Fit):\n")
-cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f2_aic_biomass$name, sel_f2_aic_biomass$aic, sel_f2_aic_biomass$formula))
-cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AIC = %.2f)\n  Formula: %s\n\n", 
-            sel_f2_aic_metabolism$name, sel_f2_aic_metabolism$aic, sel_f2_aic_metabolism$formula))
+cat("A. Standard AICc Selection Pathway (Full Sample Fit):\n")
+cat(sprintf("  ★ Best Biomass Model:    \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f2_aic_biomass$name, sel_f2_aic_biomass$aicc, sel_f2_aic_biomass$formula))
+cat(sprintf("  ★ Best Metabolism Model: \"%s\" (AICc = %.2f)\n  Formula: %s\n\n", 
+            sel_f2_aic_metabolism$name, sel_f2_aic_metabolism$aicc, sel_f2_aic_metabolism$formula))
 
 # B. LORO-CV Generalizability Selection Pathway (Out-of-Sample CV MAE)
 run_f2_lobo_selection <- function(index_name) {
   basins <- unique(joined_data$basin)
   
-  results <- list()
-  
+  valid_templates <- list()
   for (n in names(f2_templates)) {
     f_str <- gsub("\\{Index\\}", index_name, f2_templates[[n]])
     if (grepl("basin", f_str)) next # Skip basin terms due to LOBO folding
-    
+    valid_templates[[n]] <- f_str
+  }
+  
+  num_models <- length(valid_templates)
+  model_names <- names(valid_templates)
+  
+  oos_predictions <- matrix(NA, nrow = nrow(joined_data), ncol = num_models)
+  colnames(oos_predictions) <- model_names
+  
+  full_edf <- numeric(num_models)
+  full_aicc <- numeric(num_models)
+  full_devexpl <- numeric(num_models)
+  
+  for (m_idx in 1:num_models) {
+    n <- model_names[m_idx]
+    f_str <- valid_templates[[n]]
     f <- as.formula(f_str)
-    errors <- c()
     
+    # 1. LOBO cross-validation
     for (b in basins) {
-      train <- joined_data %>% filter(basin != b)
-      test <- joined_data %>% filter(basin == b)
+      train_idx <- which(joined_data$basin != b)
+      test_idx  <- which(joined_data$basin == b)
       
-      if (nrow(train) == 0 || nrow(test) == 0) next
+      if (length(train_idx) == 0 || length(test_idx) == 0) next
       
-      fit <- tryCatch({
-        gam(f, data = train, family = tw(), weights = w_combined_norm)
+      fit_fold <- tryCatch({
+        train_data <- joined_data[train_idx, ]
+        # Re-normalize weights within training fold (matches 04_Framework2_Analysis.R L137)
+        train_data$w_combined_norm <- train_data$w_combined / mean(train_data$w_combined)
+        m_fold <- gam(f, data = train_data, family = tw(), weights = w_combined_norm, method = "ML")
+        check_model_convergence(m_fold, paste("F2 LORO-CV", index_name, n, "fold", b), raise_warning = FALSE)
+        m_fold
       }, error = function(e) NULL)
       
-      if (!is.null(fit)) {
-        pred <- predict(fit, newdata = test, type = "response")
-        errors <- c(errors, mean(abs(log1p(test[[index_name]]) - log1p(pred))))
+      if (!is.null(fit_fold)) {
+        pred <- predict(fit_fold, newdata = joined_data[test_idx, ], type = "response")
+        oos_predictions[test_idx, m_idx] <- pred
       }
     }
     
-    if (length(errors) > 0) {
-      avg_mae <- mean(errors)
-      results[[n]] <- avg_mae
+    # 2. Fit full model to get EDF, AICc and Deviance Explained
+    fit_full <- tryCatch({
+      m_full <- gam(f, data = joined_data, family = tw(), weights = w_combined_norm, method = "ML")
+      check_model_convergence(m_full, paste("F2 LORO-CV Full", index_name, n))
+      m_full
+    }, error = function(e) NULL)
+    
+    if (!is.null(fit_full)) {
+      full_edf[m_idx] <- sum(fit_full$edf)
+      full_devexpl[m_idx] <- summary(fit_full)$dev.expl
       
-      # Also fit full model to get DevExpl
-      fit_full <- tryCatch({
-        gam(f, data = joined_data, family = tw(), weights = w_combined_norm)
-      }, error = function(e) NULL)
-      dev_expl <- if (!is.null(fit_full)) summary(fit_full)$dev.expl else NA
-      full_aic <- if (!is.null(fit_full)) AIC(fit_full) else NA
-      
-      comparison_records[[length(comparison_records) + 1]] <<- list(
-        Framework = "Framework 2 LORO-CV",
-        Metric = "LORO-CV MAE",
-        ModelLabel = n,
-        IndexUsed = index_name,
-        Formula = f_str,
-        FullAIC = full_aic,
-        DevianceExplained = dev_expl,
-        OOS_MAE = avg_mae
-      )
+      aic_val <- AIC(fit_full)
+      k <- attr(logLik(fit_full), "df")
+      full_aicc[m_idx] <- aic_val + (2 * k * (k + 1)) / (nrow(joined_data) - k - 1)
+    } else {
+      full_edf[m_idx] <- NA
+      full_devexpl[m_idx] <- NA
+      full_aicc[m_idx] <- NA
     }
   }
   
-  best_name <- names(results)[which.min(unlist(results))]
-  best_mae <- results[[best_name]]
-  best_formula <- gsub("\\{Index\\}", index_name, f2_templates[[best_name]])
+  # 3. Calculate micro-averaged OOS MAE and SE
+  log_y_obs <- log1p(joined_data[[index_name]])
+  oos_MAE_log <- sapply(1:num_models, function(m_idx) {
+    abs_err <- abs(log_y_obs - log1p(oos_predictions[, m_idx]))
+    if (all(is.na(abs_err))) return(NA)
+    mean(abs_err, na.rm = TRUE)
+  })
   
-  return(list(name = best_name, formula = best_formula, mae = best_mae))
+  oos_MAE_log_SE <- sapply(1:num_models, function(m_idx) {
+    abs_err <- abs(log_y_obs - log1p(oos_predictions[, m_idx]))
+    if (all(is.na(abs_err))) return(NA)
+    sd(abs_err, na.rm = TRUE) / sqrt(sum(!is.na(abs_err)))
+  })
+  
+  # 4. Apply 1-SE parsimony rule
+  valid_idx <- which(!is.na(oos_MAE_log))
+  if (length(valid_idx) > 0) {
+    raw_best_idx <- valid_idx[which.min(oos_MAE_log[valid_idx])]
+    best_mae <- oos_MAE_log[raw_best_idx]
+    best_se <- oos_MAE_log_SE[raw_best_idx]
+    threshold_1se <- best_mae + best_se
+    
+    compliant_indices <- valid_idx[which(oos_MAE_log[valid_idx] <= threshold_1se)]
+    min_edf <- min(full_edf[compliant_indices], na.rm = TRUE)
+    best_parsimonious_indices <- compliant_indices[which(full_edf[compliant_indices] == min_edf)]
+    selected_idx <- best_parsimonious_indices[which.min(oos_MAE_log[best_parsimonious_indices])]
+    
+    best_name <- model_names[selected_idx]
+    best_mae_val <- oos_MAE_log[selected_idx]
+  } else {
+    best_name <- model_names[1]
+    best_mae_val <- NA
+  }
+  
+  # Record the comparison logs
+  for (m_idx in 1:num_models) {
+    n <- model_names[m_idx]
+    comparison_records[[length(comparison_records) + 1]] <<- list(
+      Framework = "Framework 2 LORO-CV",
+      Metric = "LORO-CV MAE",
+      ModelLabel = n,
+      IndexUsed = index_name,
+      Formula = valid_templates[[n]],
+      FullAICc = full_aicc[m_idx],
+      DevianceExplained = full_devexpl[m_idx],
+      OOS_MAE = oos_MAE_log[m_idx]
+    )
+  }
+  
+  best_formula <- gsub("\\{Index\\}", index_name, f2_templates[[best_name]])
+  return(list(name = best_name, formula = best_formula, mae = best_mae_val))
 }
 
 sel_f2_lobo_biomass <- run_f2_lobo_selection("B_H_index")

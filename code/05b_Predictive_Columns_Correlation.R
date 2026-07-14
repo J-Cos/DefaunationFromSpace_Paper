@@ -20,6 +20,8 @@ library(ggplot2)
 library(dplyr)
 library(readr)
 
+source("code/functions/theme_pnas.R")
+
 # 1. Load models
 outputs_dir <- "outputs"
 m_best <- readRDS(file.path(outputs_dir, "framework2_best_model.RDS"))
@@ -56,11 +58,7 @@ rename_stack <- function(r) {
 load_and_aggregate_real <- function(basin_name) {
   r_5000_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_5000_%s.tif", basin_name))
   if (!file.exists(r_5000_path)) {
-    warning(sprintf("Real 5,000m stack for %s missing, trying synthetic fallback...", basin_name))
-    r_synth_path <- file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_%s.tif", scale_m, basin_name))
-    if (!file.exists(r_synth_path)) return(NULL)
-    r <- rast(r_synth_path)
-    return(rename_stack(r))
+    stop(sprintf("Real 5,000m stack for %s is missing in outputs/EOdata.", basin_name))
   }
   
   cat(sprintf("Loading real 5,000m stack for %s...\n", basin_name))
@@ -128,17 +126,19 @@ seasia_df <- if (!is.null(r_seasia)) predict_basin_df(r_seasia, "SE_Asia") else 
 all_data <- bind_rows(congo_df, amazon_df, seasia_df)
 
 # Calculate correlations (Pearson and Spearman)
-r_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "pearson", use = "complete.obs")
+# NOTE: use cor_* / rho_* prefixes to avoid shadowing the SpatRaster objects
+# r_congo, r_amazon, r_seasia defined above (L75-77).
+cor_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "pearson", use = "complete.obs")
 rho_overall <- cor(all_data$z_lobo, all_data$z_aic, method = "spearman", use = "complete.obs")
 
-r_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "pearson", use = "complete.obs")
+cor_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "pearson", use = "complete.obs")
 rho_amazon <- cor(all_data$z_lobo[all_data$basin == "Amazon"], all_data$z_aic[all_data$basin == "Amazon"], method = "spearman", use = "complete.obs")
 
-r_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "pearson", use = "complete.obs")
+cor_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "pearson", use = "complete.obs")
 rho_congo <- cor(all_data$z_lobo[all_data$basin == "Congo"], all_data$z_aic[all_data$basin == "Congo"], method = "spearman", use = "complete.obs")
 
 has_seasia <- !is.null(seasia_df) && nrow(seasia_df) > 0
-r_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "pearson", use = "complete.obs") else NA
+cor_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "pearson", use = "complete.obs") else NA
 rho_seasia <- if (has_seasia) cor(all_data$z_lobo[all_data$basin == "SE_Asia"], all_data$z_aic[all_data$basin == "SE_Asia"], method = "spearman", use = "complete.obs") else NA
 
 # Create annotation data frame for regional correlations (placed in top-left corner)
@@ -147,9 +147,9 @@ anno_df <- data.frame(
   z_lobo = c(-2.3, -2.3, -2.3),
   z_aic = c(2.3, 2.3, 2.3),
   label = c(
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", r_congo, rho_congo),
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", r_amazon, rho_amazon),
-    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", if (is.na(r_seasia)) 0.0 else r_seasia, if (is.na(rho_seasia)) 0.0 else rho_seasia)
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", cor_congo, rho_congo),
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", cor_amazon, rho_amazon),
+    sprintf("Pearson r = %.2f\nSpearman rho = %.2f", if (is.na(cor_seasia)) 0.0 else cor_seasia, if (is.na(rho_seasia)) 0.0 else rho_seasia)
   )
 )
 if (!has_seasia) {
@@ -170,21 +170,20 @@ p <- ggplot(all_data, aes(x = z_lobo, y = z_aic, color = basin)) +
     fontface = "bold",
     size = 2.8
   ) +
-  scale_color_manual(values = c("Amazon" = "#E65100", "Congo" = "#1B5E20", "SE_Asia" = "#0D47A1")) +
+  scale_color_manual(values = pal_region) +
   facet_wrap(~ basin, ncol = 3) +
   labs(
-    title = "Correlation Between Biophysical Template & Basin-Calibrated Models",
-    subtitle = sprintf("Z-score Standing Mammal Biomass predictions (at %d m predictive scale) | Overall: Pearson r = %.2f, Spearman rho = %.2f", scale_m, r_overall, rho_overall),
+    title = "Correlation Between Biophysical Template & Region-Calibrated Models",
+    subtitle = sprintf("Z-score Standing Mammal Biomass predictions (at %d m predictive scale) | Overall: Pearson r = %.2f, Spearman rho = %.2f", scale_m, cor_overall, rho_overall),
     x = "Column 1: Biophysical Template (Z-score)",
-    y = "Column 2: Basin-Calibrated Model (Z-score)"
+    y = "Column 2: Region-Calibrated Model (Z-score)"
   ) +
-  theme_minimal(base_size = 9) +
+  theme_pnas(base_size = 7.5) +
   theme(
-    plot.title = element_text(face = "bold", size = 10),
-    plot.subtitle = element_text(size = 8, color = "grey40"),
-    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 8.5),
+    plot.subtitle = element_text(size = 6.5, color = "grey40"),
     panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
-    strip.text = element_text(face = "bold", size = 9),
+    strip.text = element_text(face = "bold", size = 7.5),
     legend.position = "none"
   )
 
@@ -194,10 +193,4 @@ ggsave("figures/figureS4.png", plot = p, width = 18, height = 8, units = "cm", d
 ggsave("figures/figureS4.pdf", plot = p, width = 18, height = 8, units = "cm", dpi = 600, bg = "white")
 cat("✓ Successfully saved supplementary figure to figures/figureS4.png and .pdf\n")
 
-# Copy to brain folder
-brain_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
-if (dir.exists(brain_dir)) {
-  file.copy("figures/figureS4.png", file.path(brain_dir, "figureS4.png"), overwrite = TRUE)
-  file.copy("figures/figureS4.pdf", file.path(brain_dir, "figureS4.pdf"), overwrite = TRUE)
-  cat("✓ Copied supplementary figure to brain folder.\n")
-}
+

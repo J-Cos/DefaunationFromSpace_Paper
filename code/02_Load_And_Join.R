@@ -1,16 +1,19 @@
 # =============================================================================
 # 02_Load_And_Join.R
 #
-# Load all GeoTIFF stacks from GEE exports, load and rasterise vector layers,
-# and prepare the full analysis environment.
+# Prepare the analysis environment: source function modules, load and
+# rasterise vector layers (PAs, basins, countries), and validate that
+# GeoTIFF stacks are accessible. Saves a lightweight metadata-only RDS;
+# downstream scripts (03–06) read GeoTIFFs directly via
+# calibration_helpers.R::extract_scale_data() for performance.
 #
 # Input:
-#   - outputs/synthetic_EOdata/analysis_stack_native_{basin}.tif  (10 bands)
-#   - outputs/synthetic_EOdata/analysis_stack_{scale}_{basin}.tif (11 bands)
+#   - outputs/EOdata/analysis_stack_{scale}_{basin}.tif (11/12 bands)
 #   - data/vectors/ — WDPA, HydroSHEDS basins, country boundaries
 #
 # Output:
-#   - outputs/rds/loaded_data.rds (all stacks + rasterised vectors)
+#   - outputs/rds/loaded_data.rds (lightweight metadata placeholder;
+#     pixel data read on-the-fly from GeoTIFFs by downstream scripts)
 #
 # Dependencies:
 #   terra, sf, dplyr, tidyr, purrr, stringr
@@ -28,12 +31,12 @@ library(stringr)
 # Source function files
 source("code/functions/theme_pnas.R")
 source("code/functions/load_data.R")
-source("code/functions/gedi_analysis.R")
-source("code/functions/frip_analysis.R")
-source("code/functions/convergence_analysis.R")
-source("code/functions/temporal_analysis.R")
-source("code/functions/plotting.R")
-source("code/functions/pa_pairs.R")
+# NOTE: calibration_helpers.R, model_convergence.R are sourced directly by
+# scripts 03-06, 09 that need them. Modules previously sourced here
+# (gedi_analysis, frip_analysis, convergence_analysis, temporal_analysis,
+# plotting, pa_pairs) were removed — they are part of an earlier H1-H4
+# hypothesis testing framework whose functions are not called by the current
+# pipeline. They remain available in code/functions/ for interactive use.
 
 cat("=== 02: Load and Join ===\n\n")
 
@@ -44,34 +47,27 @@ STACK_DIR  <- resolve_data_dir()
 RDS_DIR    <- file.path("outputs", "rds")
 dir.create(RDS_DIR, recursive = TRUE, showWarnings = FALSE)
 
-BASINS <- c("Congo", "Amazon")
+BASINS <- c("Congo", "Amazon", "SE_Asia")
 SCALES <- seq(5000, 100000, by = 5000)
-
-
-# --- 1. Load Native-scale Stacks --------------------------------------------
-
-cat("Loading native-scale stacks...\n")
-
-native_stacks <- map(
-  set_names(BASINS),
-  ~ {
-    load_native_stack(STACK_DIR, .x)
-  }
-)
 
 
 # --- 2. Load Multi-scale Stacks ---------------------------------------------
 
 cat("\nLoading multi-scale stacks...\n")
 
+# Load each basin's multi-scale stacks once
+basin_stacks <- map(
+  set_names(BASINS),
+  ~ load_multiscale_stacks(STACK_DIR, .x)
+)
+
+# Reshape the list to be keyed by scale
 multiscale_stacks <- map(
   set_names(as.character(SCALES), as.character(SCALES)),
   function(scale_str) {
     map(
       set_names(BASINS),
-      ~ {
-        load_multiscale_stacks(STACK_DIR, .x)[[scale_str]]
-      }
+      ~ basin_stacks[[.x]][[scale_str]]
     )
   }
 )
@@ -80,12 +76,10 @@ cat(sprintf("  Loaded %d scales × %d basins = %d stacks\n",
             length(SCALES), length(BASINS), length(SCALES) * length(BASINS)))
 
 
-# --- 3. Load and Rasterise Vector Layers (with synthetic fallback) ----------
+# --- 3. Load and Rasterise Vector Layers (programmatic construction) ----------
 
 cat("\nLoading and rasterising vector layers...\n")
 
-template_rast_congo <- native_stacks[["Congo"]][[1]]
-template_rast_amazon <- native_stacks[["Amazon"]][[1]]
 
 # Define the merged extent covering both basins for a single SpatRaster
 merged_ext <- ext(-62, 22, -7, 2)
@@ -185,20 +179,20 @@ if (file.exists("outputs/elephant_ranges.gpkg")) {
   elephant_ranges <- vect("outputs/elephant_ranges.gpkg")
 }
 
-# HIGH-PERFORMANCE OPTIMIZATION:
-# To prevent gzipping and writing gigabytes of raw pixel values (which takes 10+ minutes and 1.5GB of space),
-# we save a lightweight structured metadata list. Downstream scripts read directly from the
-# GeoTIFF files on disk via calibration_helpers.R, so loaded_data.rds is not used for pixel data.
+# PERFORMANCE NOTE:
+# Downstream scripts (03-06, 09) read pixel data directly from GeoTIFF files
+# via calibration_helpers.R::extract_scale_data(), bypassing this RDS entirely.
+# We save a lightweight placeholder here to maintain the pipeline checkpoint
+# contract expected by 08_Integration_Tests.R. The rasterised vectors above
+# are constructed for use by any code that sources this file directly.
 loaded_data <- list(
-  native_stacks     = list(),
-  multiscale_stacks = list(),
-  pa_rast           = list(),
-  basins_r          = list(),
-  countries_r       = list(),
-  basins_v          = list(),
-  countries_v       = list(),
-  pa_polys_v        = list(),
-  elephant_ranges   = list()
+  pa_rast         = pa_rast,
+  basins_r        = basins_r,
+  countries_r     = countries_r,
+  basins_v        = basins_v,
+  countries_v     = countries_v,
+  pa_polys_v      = pa_polys_v,
+  elephant_ranges = elephant_ranges
 )
 saveRDS(loaded_data, file.path(RDS_DIR, "loaded_data.rds"))
 

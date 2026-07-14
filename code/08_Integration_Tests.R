@@ -7,6 +7,7 @@
 #   Step 2: Vector loading and joining (02_Load_And_Join.R)
 #   Step 3: Framework 1 analysis and model selection (03_Framework1_Analysis.R)
 #   Step 4: Framework 2 analysis and model selection (04_Framework2_Analysis.R)
+#   Step 4b: Framework Figures (04b_Framework_Figures.R)
 #   Step 5: Predictive biomass mapping (05_Predictive_Biomass_Maps.R)
 #   Step 6: Pipeline Visualization (06_Pipeline_Visualization.R)
 #
@@ -45,10 +46,6 @@ unlink("figures/figureS1.png")
 unlink("figures/figureS1.pdf")
 unlink("figures/figure3.png")
 unlink("figures/figure3.pdf")
-unlink("figures/figureS2.png")
-unlink("figures/figureS2.pdf")
-unlink("figures/figureS2_alternate_aic_full.png")
-unlink("figures/figureS2_alternate_aic_full.pdf")
 unlink("figures/figureS3.png")
 unlink("figures/figureS3.pdf")
 unlink("figures/figure5.png")
@@ -57,6 +54,7 @@ unlink("figures/figureS4.png")
 unlink("figures/figureS4.pdf")
 unlink("figures/figure1_gedi_pipeline.png")
 unlink("figures/figure2_camera_trap_pipeline.png")
+unlink("outputs/results_statistics.csv")
 cat("  Old files cleaned successfully.\n\n")
 
 # =============================================================================
@@ -83,12 +81,17 @@ cat("--- Step 4: Running Framework 2 Tweedie GLMs (04_Framework2_Analysis.R) ---
 source("code/04_Framework2_Analysis.R")
 cat("Step 4 Completed successfully.\n\n")
 
+# Step 4b: Framework Figures
+cat("--- Step 4b: Generating Framework Figures (04b_Framework_Figures.R) ---\n")
+source("code/04b_Framework_Figures.R")
+cat("Step 4b Completed successfully.\n\n")
+
 # Step 5: Predictive biomass mapping
 cat("--- Step 5: Running Predictive Biomass Mapping (05_Predictive_Biomass_Maps.R) ---\n")
 source("code/05_Predictive_Biomass_Maps.R")
 cat("Step 5 Completed successfully.\n\n")
 
-# Step 5b: Predictive columns correlation plotting (Supplementary Figure S6)
+# Step 5b: Predictive columns correlation plotting (Supplementary Figure S4)
 cat("--- Step 5b: Running Model Predictions Correlation Plotting (05b_Predictive_Columns_Correlation.R) ---\n")
 source("code/05b_Predictive_Columns_Correlation.R")
 cat("Step 5b Completed successfully.\n\n")
@@ -97,6 +100,11 @@ cat("Step 5b Completed successfully.\n\n")
 cat("--- Step 6: Running Pipeline Visualization (06_Pipeline_Visualization.R) ---\n")
 source("code/06_Pipeline_Visualization.R")
 cat("Step 6 Completed successfully.\n\n")
+
+# Step 7: Results Statistics Collection
+cat("--- Step 7: Running Results Statistics Collection (10_Collect_Results_Stats.R) ---\n")
+source("code/10_Collect_Results_Stats.R")
+cat("Step 7 Completed successfully.\n\n")
 
 # =============================================================================
 # DELIVERABLE VERIFICATION & INTEGRITY CHECKS
@@ -119,13 +127,15 @@ checks <- c(
   # Figure deliverables
   verify_file("figures/figureS1.png", "Manuscript Figure S1 (Bounding Boxes)"),
   verify_file("figures/figure3.png", "Manuscript Figure 3 (F1)"),
-  verify_file("figures/figureS2.png", "Manuscript Figure S2 (F2 / Supp S2)"),
-  verify_file("figures/figureS2_alternate_aic_full.png", "Manuscript Figure S2 Alternate (AIC-selected)"),
+  verify_file("figures/figure4.png", "Manuscript Figure 4 (F2 Synthesis)"),
   verify_file("figures/figureS3.png", "Predicted Biomass Map (5km, Fig S3)"),
   verify_file("figures/figure5.png", "Predicted Biomass Map (20km, Fig 5)"),
   verify_file("figures/figureS4.png", "Predictive Columns Correlation Plot (Fig S4)"),
+  verify_file("outputs/framework1_full_models.RDS", "Framework 1 full models list"),
+  verify_file("outputs/framework2_full_models.RDS", "Framework 2 full models list"),
   verify_file("figures/figure1_gedi_pipeline.png", "Manuscript Figure 1 (GEDI Pipeline)"),
-  verify_file("figures/figure2_camera_trap_pipeline.png", "Manuscript Figure 2 (Camera Trap Pipeline)")
+  verify_file("figures/figure2_camera_trap_pipeline.png", "Manuscript Figure 2 (Camera Trap Pipeline)"),
+  verify_file("outputs/results_statistics.csv", "Results Statistics Harvester CSV")
 )
 
 # =============================================================================

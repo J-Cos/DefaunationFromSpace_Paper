@@ -57,6 +57,15 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   # Load country outlines
   countries_v <- terra::vect("data/world-administrative-boundaries")
   
+  # ───────────────────────────────────────────────────────────────────────────
+  # RATIONALE FOR DUAL MODEL COMPARISON (HI-7):
+  # We project and map both models side-by-side to compare:
+  # 1. LOBO-selected model (Column 1): Represents the generalizable, universal 
+  #    biophysical baseline (UOI only).
+  # 2. AIC-selected model (Column 2): Represents the local, basin-calibrated 
+  #    biogeographic shift (incorporating regional covariates and elephant presence).
+  # ───────────────────────────────────────────────────────────────────────────
+
   # Load Saved Best Framework 2 Model (LOBO selected)
   model_path <- file.path(outputs_dir, "framework2_best_model.RDS")
   if (!file.exists(model_path)) {
@@ -88,6 +97,16 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
   OOS_MAE_log <- best_row$OOS_MAE_log[1]
   cat(sprintf("OOS MAE (log1p scale) = %.4f\n", OOS_MAE_log))
   
+  # ───────────────────────────────────────────────────────────────────────────
+  # RATIONALE FOR USING COMMON OOS MAE (HI-7):
+  # To compare the spatial predictions of the universal baseline model (LOBO, M2.1)
+  # and the local calibrated model (AIC) on a mathematically identical scale,
+  # both prediction maps are standard-scaled (z-scores) using the exact same
+  # denominator: the Out-of-Sample MAE of the universal baseline model (M2.1).
+  # This ensures that both columns of the map are measured relative to the 
+  # same baseline prediction uncertainty unit.
+  # ───────────────────────────────────────────────────────────────────────────
+  
   # Extract calibrated scale data to get full-sample mean of log1p(biomass)
   source("code/functions/calibration_helpers.R")
   joined_data <- extract_scale_data(5000)
@@ -110,12 +129,12 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     cat(sprintf("--- Generating map at scale: %d m ---\n", scale_m))
     
     # Load specific scale TIFF stacks
+    # Load specific scale TIFF stacks
     r_congo_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))
     r_amazon_path <- file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m))
     
     # Dynamic aggregation fallback from 5000m real stack if target scale real file is missing
-    is_real_file_missing <- !file.exists(file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))) ||
-                            !file.exists(file.path(outputs_dir, "EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m)))
+    is_real_file_missing <- !file.exists(r_congo_path) || !file.exists(r_amazon_path)
     
     r_congo_5000_path <- file.path(outputs_dir, "EOdata", "analysis_stack_5000_Congo.tif")
     r_amazon_5000_path <- file.path(outputs_dir, "EOdata", "analysis_stack_5000_Amazon.tif")
@@ -125,21 +144,10 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
       cat(sprintf("  ✓ Dynamically aggregating real 5,000m stack by factor of %d to %d m...\n", fact, scale_m))
       r_congo <- terra::aggregate(rast(r_congo_5000_path), fact = fact, fun = "mean", na.rm = TRUE)
       r_amazon <- terra::aggregate(rast(r_amazon_5000_path), fact = fact, fun = "mean", na.rm = TRUE)
-      
-      # Bypass file loading
-      r_congo_path <- "dynamic_aggregated"
-      r_amazon_path <- "dynamic_aggregated"
-    }
-    
-    if (r_congo_path != "dynamic_aggregated") {
-      # Fallback to synthetic if needed
-      if (!file.exists(r_congo_path)) r_congo_path = file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_Congo.tif", scale_m))
-      if (!file.exists(r_amazon_path)) r_amazon_path = file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_Amazon.tif", scale_m))
-      
+    } else {
       if (!file.exists(r_congo_path) || !file.exists(r_amazon_path)) {
-        stop(sprintf("GeoTIFF stacks for scale %d m are missing.", scale_m))
+        stop(sprintf("GeoTIFF stacks for scale %d m are missing in outputs/EOdata.", scale_m))
       }
-      
       r_congo <- rast(r_congo_path)
       r_amazon <- rast(r_amazon_path)
     }
@@ -156,12 +164,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     } else if (file.exists(r_seasia_path)) {
       r_seasia <- rast(r_seasia_path)
     } else {
-      r_seasia_synth <- file.path(outputs_dir, "synthetic_EOdata", sprintf("analysis_stack_%d_SE_Asia.tif", scale_m))
-      if (file.exists(r_seasia_synth)) {
-        r_seasia <- rast(r_seasia_synth)
-      } else {
-        r_seasia <- NULL
-      }
+      r_seasia <- NULL
     }
     
     aggregate_names <- c("frip", "frip_mk_tau", "uoi", "uoi_sd", "rh98", "gedi_n",
@@ -336,15 +339,11 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
         plot.background = element_rect(fill = "white", color = NA)
       )
     
-    # Symmetrical highly-discriminative multi-hue colorblind-safe scale centered at 0.0 (Light Grey)
-    fill_scale <- scale_fill_gradientn(
-      colors = c("#b2182b", "#fdae61", "#dcdcdc", "#abdda4", "#2b5c8f"),
-      name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
+    fill_scale <- scale_fill_biomass(
       limits = c(-2.5, 2.5),
+      name = "Predicted Biomass Deviation from Global Mean (in units of OOS log-scale MAE)",
       breaks = c(-2.0, -1.0, 0, 1.0, 2.0),
       labels = c("-2.0 MAE\n(Low Biomass)", "-1.0 MAE", "0.0\n(Mean Biomass)", "+1.0 MAE", "+2.0 MAE\n(High Biomass)"),
-      oob = scales::squish,
-      na.value = "transparent",
       guide = guide_colorbar(
         title.position = "top",
         title.hjust = 0.5,
@@ -534,13 +533,7 @@ run_predictive_biomass_mapping <- function(scales = c(5000, 20000), outputs_dir 
     ggsave(filename = png_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
     ggsave(filename = pdf_file, plot = fig_final, width = 17.8, height = 18.0, units = "cm", dpi = 600, bg = "white")
     
-    # Mirror to active brain artifacts folder
-    brain_artifacts_dir <- "/home/j/.gemini/antigravity/brain/8f51df52-4604-48e0-9ce8-1c52d1cb241c"
-    if (file.exists(brain_artifacts_dir)) {
-      file.copy(png_file, file.path(brain_artifacts_dir, sprintf("%s.png", output_base_name)), overwrite = TRUE)
-      file.copy(pdf_file, file.path(brain_artifacts_dir, sprintf("%s.pdf", output_base_name)), overwrite = TRUE)
-      cat(sprintf("✓ Copied %s.png and .pdf to brain artifacts folder.\n", output_base_name))
-    }
+
     
     cat(sprintf("✓ Successfully saved map figure to: %s\n\n", png_file))
     
