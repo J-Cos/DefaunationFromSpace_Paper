@@ -165,18 +165,18 @@ run_test("run_framework1_analysis exists", quote({
 }))
 
 run_test("run_framework1_analysis signature check", quote({
-  check_signature("run_framework1_analysis", c("scale_m", "outputs_dir", "figures_dir"))
+  check_signature("run_framework1_analysis", c("scale_m", "outputs_dir"))
 }))
 
 run_test("run_framework1_analysis execution and returns list of data + fitted model", quote({
-  res <- run_framework1_analysis(scale_m = 5000, outputs_dir = temp_out_dir, figures_dir = temp_fig_dir)
+  res <- run_framework1_analysis(scale_m = 5000, outputs_dir = temp_out_dir)
   
   is.list(res) &&
     is.data.frame(res$results_df) &&
     inherits(res$best_model, "gam") &&
     grepl("Beta regression", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework1_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "figure3.png"))
+    file.exists(file.path(temp_out_dir, "framework1_full_models.RDS"))
 }))
 
 # =============================================================================
@@ -190,18 +190,18 @@ run_test("run_framework2_analysis exists", quote({
 }))
 
 run_test("run_framework2_analysis signature check", quote({
-  check_signature("run_framework2_analysis", c("scale_m", "outputs_dir", "figures_dir"))
+  check_signature("run_framework2_analysis", c("scale_m", "outputs_dir"))
 }))
 
 run_test("run_framework2_analysis execution and returns list of data + fitted Tweedie GLM", quote({
-  res <- run_framework2_analysis(scale_m = 5000, outputs_dir = temp_out_dir, figures_dir = temp_fig_dir)
+  res <- run_framework2_analysis(scale_m = 5000, outputs_dir = temp_out_dir)
   
   is.list(res) &&
     is.data.frame(res$results_df) &&
     inherits(res$best_model, "gam") &&
     grepl("Tweedie", res$best_model$family$family) &&
     file.exists(file.path(temp_out_dir, "framework2_covariate_model_selection.csv")) &&
-    file.exists(file.path(temp_fig_dir, "figure4.png"))
+    file.exists(file.path(temp_out_dir, "framework2_full_models.RDS"))
 }))
 
 # =============================================================================
